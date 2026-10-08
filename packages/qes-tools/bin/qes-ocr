@@ -1,0 +1,386 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# qes-ocr — Оптичне розпізнавання тексту (OCR) для підсистеми «Електронний суд»
+# Підтримка української та англійської мов (ukr, eng, ukr+eng), автовирівнювання,
+# лінеаризація (Fast Web View) та перевірка сумісності (ліміт 50 МБ).
+# 100% Offline-First | Захист конфіденційності та адвокатської таємниці.
+# ==============================================================================
+set -euo pipefail
+
+CLR_RESET="\033[0m"
+CLR_BOLD="\033[1m"
+CLR_GREEN="\033[32m"
+CLR_RED="\033[31m"
+CLR_YELLOW="\033[33m"
+CLR_CYAN="\033[36m"
+CLR_GRAY="\033[90m"
+
+show_help() {
+    echo -e "${CLR_BOLD}${CLR_CYAN}================================================================================${CLR_RESET}"
+    echo -e "${CLR_BOLD}${CLR_CYAN}  qes-ocr — автономне розпізнавання тексту OCR для «Електронного суду»${CLR_RESET}"
+    echo -e "${CLR_BOLD}${CLR_CYAN}  Створення Searchable PDF з вирівнюванням, компресією та перевіркою 50 МБ${CLR_RESET}"
+    echo -e "${CLR_BOLD}${CLR_CYAN}================================================================================${CLR_RESET}"
+    echo ""
+    echo -e "${CLR_BOLD}ОПИС:${CLR_RESET}"
+    echo -e "  Перетворює скановані документи (PDF) та зображення (JPG, PNG, TIFF) у повнотекстові"
+    echo -e "  документи PDF з можливістю пошуку, копіювання та цитування тексту судом:"
+    echo -e "  1. Підтримує вибір мов розпізнавання: українська, англійська або двомовне (ukr+eng)."
+    echo -e "  2. Автоматично вирівнює перекошені скани (--deskew) та повертає сторінки (--rotate)."
+    echo -e "  3. Виконує лінеаризацію Fast Web View для миттєвого відкриття суддею в браузері."
+    echo -e "  4. Перевіряє жорстке технічне обмеження розміру підсистеми «Електронний суд» (до 50 МБ)."
+    echo -e "  5. 100% локальна обробка на вашому ПК (жоден байт не надсилається в інтернет)."
+    echo ""
+    echo -e "${CLR_BOLD}ВИКОРИСТАННЯ:${CLR_RESET}"
+    echo -e "  qes-ocr [ОПЦІЇ] <файл1.pdf|зображення> [файл2 ...]"
+    echo ""
+    echo -e "${CLR_BOLD}ОПЦІЇ:${CLR_RESET}"
+    echo -e "  ${CLR_GREEN}-l, --lang <мова>${CLR_RESET}     Мова розпізнавання: ${CLR_BOLD}ukr+eng${CLR_RESET} (за замовч.), ${CLR_BOLD}ukr${CLR_RESET}, ${CLR_BOLD}eng${CLR_RESET}"
+    echo -e "  ${CLR_GREEN}-e, --eng, --en${CLR_RESET}       ${CLR_BOLD}Чиста Англійська мова${CLR_RESET} (швидкий прапорець для англомовних документів)"
+    echo -e "  ${CLR_GREEN}-u, --ukr, --ua${CLR_RESET}       ${CLR_BOLD}Чиста Українська мова${CLR_RESET} (швидкий прапорець для україномовних документів)"
+    echo -e "  ${CLR_GREEN}-b, --bilingual${CLR_RESET}       ${CLR_BOLD}Двомовний режим${CLR_RESET} (українська + англійська: ukr+eng)"
+    echo -e "  ${CLR_GREEN}-o, --output <шлях>${CLR_RESET}   Шлях вихідного файлу (якщо обробляється один документ)"
+    echo -e "  ${CLR_GREEN}-t, --sidecar${CLR_RESET}         Зберегти розпізнаний чистий текст також у .txt файл поруч"
+    echo -e "  ${CLR_GREEN}-d, --deskew${CLR_RESET}          Автоматичне вирівнювання перекошених сторінок (увімкнено)"
+    echo -e "  ${CLR_GREEN}--no-deskew${CLR_RESET}           Вимкнути автовирівнювання сторінок"
+    echo -e "  ${CLR_GREEN}-r, --rotate${CLR_RESET}          Автоматичний поворот перевернутих сторінок (увімкнено)"
+    echo -e "  ${CLR_GREEN}--no-rotate${CLR_RESET}           Вимкнути автоповорот сторінок"
+    echo -e "  ${CLR_GREEN}-c, --clean${CLR_RESET}           Очищення сторінок від сміття та сканерних крапок (unpaper)"
+    echo -e "  ${CLR_GREEN}--redo-ocr${CLR_RESET}            Примусово перерозпізнати сторінки, навіть якщо текст уже є"
+    echo -e "  ${CLR_GREEN}--pdfa${CLR_RESET}                Зберегти в архівному стандарті PDF/A"
+    echo -e "  ${CLR_GREEN}--gui${CLR_RESET}                 Інтерактивний майстер GNOME (вибір мови та прогрес-бар)"
+    echo -e "  ${CLR_GREEN}-h, --help${CLR_RESET}            Показати цю довідку"
+    echo ""
+    echo -e "${CLR_BOLD}ПРИКЛАДИ КОМАНД:${CLR_RESET}"
+    echo -e "  ${CLR_BOLD}1. Розпізнавання чистої англійської мови (контракти, міжнародні угоди):${CLR_RESET}"
+    echo -e "     $ qes-ocr --eng master_services_agreement.pdf"
+    echo -e "     $ qes-ocr -e foreign_invoice.pdf"
+    echo ""
+    echo -e "  ${CLR_BOLD}2. Розпізнавання судового додатка (українська + англійська за замовчуванням):${CLR_RESET}"
+    echo -e "     $ qes-ocr contract_scan.pdf"
+    echo -e "     ${CLR_GRAY}-> Створює contract_scan_ocr.pdf з текстовим шаром, готовим для Е-Суду.${CLR_RESET}"
+    echo ""
+    echo -e "  ${CLR_BOLD}3. Розпізнавання виключно українського тексту з витягом у текстовий файл:${CLR_RESET}"
+    echo -e "     $ qes-ocr --ukr --sidecar petition_scan.pdf"
+    echo ""
+    echo -e "  ${CLR_BOLD}4. Розпізнавання фотокопії або скану паспорта/чека (PNG/JPG ➔ PDF):${CLR_RESET}"
+    echo -e "     $ qes-ocr --eng passport_photo.jpg -o passport_searchable.pdf"
+    echo ""
+    echo -e "  ${CLR_BOLD}5. Зручний графічний інтерфейс GNOME:${CLR_RESET}"
+    echo -e "     $ qes-ocr --gui court_evidence.pdf"
+    echo -e "${CLR_CYAN}================================================================================${CLR_RESET}"
+    exit 0
+}
+
+USE_GUI=false
+OCR_LANG="ukr+eng"
+LANG_SPECIFIED=false
+OUTPUT_PATH=""
+DO_SIDECAR=false
+DO_DESKEW=true
+DO_ROTATE=true
+DO_CLEAN=false
+REDO_OCR=false
+USE_PDFA=false
+FILES=()
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -h|--help)
+            show_help
+            ;;
+        --gui)
+            USE_GUI=true
+            shift
+            ;;
+        -l|--lang)
+            OCR_LANG="$2"
+            LANG_SPECIFIED=true
+            shift 2
+            ;;
+        -e|--en|--eng|--english)
+            OCR_LANG="eng"
+            LANG_SPECIFIED=true
+            shift
+            ;;
+        -u|--ua|--ukr|--ukrainian)
+            OCR_LANG="ukr"
+            LANG_SPECIFIED=true
+            shift
+            ;;
+        -b|--bi|--bilingual)
+            OCR_LANG="ukr+eng"
+            LANG_SPECIFIED=true
+            shift
+            ;;
+        -o|--output)
+            OUTPUT_PATH="$2"
+            shift 2
+            ;;
+        -t|--sidecar)
+            DO_SIDECAR=true
+            shift
+            ;;
+        -d|--deskew)
+            DO_DESKEW=true
+            shift
+            ;;
+        --no-deskew)
+            DO_DESKEW=false
+            shift
+            ;;
+        -r|--rotate)
+            DO_ROTATE=true
+            shift
+            ;;
+        --no-rotate)
+            DO_ROTATE=false
+            shift
+            ;;
+        -c|--clean)
+            DO_CLEAN=true
+            shift
+            ;;
+        --redo-ocr)
+            REDO_OCR=true
+            shift
+            ;;
+        --pdfa)
+            USE_PDFA=true
+            shift
+            ;;
+        -*)
+            echo -e "${CLR_RED}Невідомий параметр: $1${CLR_RESET}" >&2
+            exit 1
+            ;;
+        *)
+            FILES+=("$1")
+            shift
+            ;;
+    esac
+done
+
+if [[ ${#FILES[@]} -eq 0 ]]; then
+    if [[ "$USE_GUI" = true ]]; then
+        CHOSEN=$(zenity --file-selection \
+            --title="Оберіть скан-копію або PDF для розпізнавання OCR" \
+            --file-filter="PDF та зображення (*.pdf *.png *.jpg *.jpeg *.tiff) | *.pdf *.png *.jpg *.jpeg *.tif *.tiff *.bmp *.webp" \
+            --file-filter="Усі файли (*.*) | *.*" 2>/dev/null || true)
+        if [[ -z "$CHOSEN" ]]; then
+            exit 0
+        fi
+        FILES+=("$CHOSEN")
+    else
+        echo -e "${CLR_RED}Помилка: не вказано файли для оптичного розпізнавання.${CLR_RESET}" >&2
+        exit 1
+    fi
+fi
+
+# Check system dependencies
+if ! command -v ocrmypdf >/dev/null 2>&1; then
+    err_msg="Утиліту 'ocrmypdf' не знайдено. Встановіть через 'sudo apt install ocrmypdf tesseract-ocr-ukr tesseract-ocr-eng'."
+    echo -e "${CLR_RED}Помилка: ${err_msg}${CLR_RESET}" >&2
+    if [[ "$USE_GUI" = true ]]; then
+        zenity --error --title="Помилка OCR" --text="$err_msg"
+    fi
+    exit 1
+fi
+
+show_ocr_help_dialog() {
+    local help_pango="<span size='x-large' weight='bold' color='#1a5fb4'>📖 Довідка: Оптичне розпізнавання тексту OCR</span>
+<span size='small' color='#666666'>Підготовка судових та юридичних документів для «Електронного суду»</span>
+
+<b>1. РЕЖИМИ ТА МОВИ РОЗПІЗНАВАННЯ:</b>
+• <b>🇬🇧 Чиста Англійська мова (eng):</b> найкраща якість для міжнародних контрактів, рахунків-фактур, інвойсів та апостилів. Виключає помилкові спроби підбору кириличних літер.
+• <b>🇺🇦 Чиста Українська мова (ukr):</b> оптимізовано для процесуальних документів (позови, клопотання, договори, судові рішення).
+• <b>🇺🇦🇬🇧 Двомовне (ukr+eng):</b> для змішаних документів, зовнішньоекономічних контрактів з паралельним перекладом або митних декларацій.
+
+<b>2. СУДОВІ СТАНДАРТИ ТА АВТОМАТИЗАЦІЯ:</b>
+• <b>Автовирівнювання (--deskew):</b> вирівнює перекошені скани сторінок.
+• <b>Лінеаризація (Fast Web View):</b> судова система миттєво відкриває документ без тривалого завантаження.
+• <b>Контроль ліміту 50 МБ:</b> попереджає, якщо розмір перевищує максимальний ліміт «Електронного суду».
+
+<b>3. КОМАНДИ ТЕРМІНАЛА:</b>
+• <code>qes-ocr --eng contract.pdf</code> — чиста англійська мова (швидкий запуск)
+• <code>qes-ocr --ukr petition.pdf</code> — чиста українська мова
+• <code>qes-ocr --sidecar file.pdf</code> — зберегти також розпізнаний текст у .txt поруч
+• <code>qes-ocr scan.png -o document.pdf</code> — перетворення зображення у PDF"
+
+    zenity --info \
+        --title="Довідка — qes-ocr" \
+        --text="$help_pango" \
+        --ok-label="Зрозуміло" \
+        --width=640 2>/dev/null || true
+}
+
+# Interactive language selection in GUI mode if not provided via CLI
+if [[ "$USE_GUI" = true && "$LANG_SPECIFIED" = false ]]; then
+    while true; do
+        LANG_CHOICE=$(zenity --list --radiolist \
+            --title="Оптичне розпізнавання тексту OCR (Е-Суд & LegalTech)" \
+            --text="<b>Виберіть мову документа для розпізнавання OCR:</b>\n<i>(Для англомовних документів та міжнародних контрактів оберіть чисту англійську)</i>" \
+            --column="Вибір" --column="Код" --column="Мова та призначення" \
+            FALSE "eng" "🇬🇧 Чиста Англійська мова (Pure English / eng — контракти, інвойси, міжнародні угоди)" \
+            FALSE "ukr" "🇺🇦 Чиста Українська мова (Ukrainian / ukr — позовні заяви, рішення, скарги)" \
+            TRUE "ukr+eng" "🇺🇦🇬🇧 Двомовне (Українська + Англійська / ukr+eng — змішані договори, митниця)" \
+            --hide-column=2 --print-column=2 \
+            --extra-button="📖 Довідка / Help" \
+            --width=680 --height=290 2>/dev/null || true)
+
+        if [[ "$LANG_CHOICE" == *"Довідка"* ]]; then
+            show_ocr_help_dialog
+            continue
+        fi
+
+        if [[ -z "$LANG_CHOICE" ]]; then
+            echo -e "${CLR_YELLOW}Розпізнавання скасовано користувачем.${CLR_RESET}"
+            exit 0
+        fi
+        OCR_LANG="$LANG_CHOICE"
+        break
+    done
+fi
+
+COURT_LIMIT_BYTES=$((50 * 1024 * 1024)) # 50 MB
+SUCCESS_COUNT=0
+
+for file in "${FILES[@]}"; do
+    if [[ ! -f "$file" ]]; then
+        echo -e "${CLR_RED}Помилка: файл '$file' не знайдено.${CLR_RESET}" >&2
+        continue
+    fi
+
+    dir_name="$(dirname "$file")"
+    base_name="$(basename "$file")"
+    stem="${base_name%.*}"
+    ext="${base_name##*.}"
+    ext_lower="${ext,,}"
+
+    # Determine target output path
+    if [[ ${#FILES[@]} -eq 1 && -n "$OUTPUT_PATH" ]]; then
+        target_out="$OUTPUT_PATH"
+    else
+        target_out="${dir_name}/${stem}_ocr.pdf"
+    fi
+
+    orig_size=$(stat -c%s "$file")
+
+    case "$OCR_LANG" in
+        eng)
+            lang_label="🇬🇧 Чиста Англійська (eng)"
+            ;;
+        ukr)
+            lang_label="🇺🇦 Чиста Українська (ukr)"
+            ;;
+        ukr+eng|eng+ukr)
+            lang_label="🇺🇦🇬🇧 Двомовне (ukr+eng)"
+            ;;
+        *)
+            lang_label="$OCR_LANG"
+            ;;
+    esac
+
+    echo -e "${CLR_BOLD}${CLR_CYAN}╔═══════════════════════════════════════════════════════════════════════════════════════╗${CLR_RESET}"
+    echo -e "${CLR_BOLD}${CLR_CYAN}║ РОЗПІЗНАВАННЯ ТЕКСТУ OCR («Електронний суд»)${CLR_RESET}"
+    echo -e "${CLR_CYAN}║ Документ: ${base_name} ($(numfmt --to=iec-i --suffix=B "$orig_size"))${CLR_RESET}"
+    echo -e "${CLR_CYAN}║ Мова:     ${lang_label}${CLR_RESET}"
+    echo -e "${CLR_CYAN}║ Вихід:    $(basename "$target_out")${CLR_RESET}"
+    echo -e "${CLR_BOLD}${CLR_CYAN}╚═══════════════════════════════════════════════════════════════════════════════════════╝${CLR_RESET}"
+
+    # Build ocrmypdf options
+    CMD=(ocrmypdf)
+    CMD+=(-l "$OCR_LANG")
+    CMD+=(--jobs "$(nproc || echo 2)")
+    CMD+=(--fast-web-view 0) # Fast Web View / Linearization
+
+    if [[ "$REDO_OCR" = true ]]; then
+        CMD+=(--redo-ocr)
+    else
+        CMD+=(--skip-text) # Preserve existing vector/digital text if present
+    fi
+
+    if [[ "$DO_DESKEW" = true ]]; then
+        CMD+=(--deskew)
+    fi
+
+    if [[ "$DO_ROTATE" = true ]]; then
+        CMD+=(--rotate-pages)
+    fi
+
+    if [[ "$DO_CLEAN" = true ]]; then
+        CMD+=(--clean)
+    fi
+
+    if [[ "$USE_PDFA" = true ]]; then
+        CMD+=(--output-type pdfa)
+    else
+        CMD+=(--output-type pdf)
+    fi
+
+    if [[ "$DO_SIDECAR" = true ]]; then
+        sidecar_path="${target_out%.*}.txt"
+        CMD+=(--sidecar "$sidecar_path")
+    fi
+
+    # Handle image inputs (PNG, JPG, TIFF)
+    if [[ "$ext_lower" == "png" || "$ext_lower" == "jpg" || "$ext_lower" == "jpeg" || "$ext_lower" == "tif" || "$ext_lower" == "tiff" || "$ext_lower" == "bmp" || "$ext_lower" == "webp" ]]; then
+        CMD+=(--image-dpi 300)
+    fi
+
+    CMD+=("$file" "$target_out")
+
+    # Run OCR with progress indicator
+    if [[ "$USE_GUI" = true ]]; then
+        (
+            "${CMD[@]}" 2>&1
+        ) | zenity --progress --pulsate --auto-close \
+            --title="OCR Розпізнавання: ${base_name}" \
+            --text="Виконується оптичне розпізнавання тексту (мова: ${lang_label})...\n• Вирівнювання та очищення сторінок\n• Формування пошукового PDF для Е-Суду\n<i>Зачекайте, будь ласка...</i>" \
+            --width=540 2>/dev/null || true
+    else
+        echo -e "${CLR_GRAY}⏳ Запуск рушія розпізнавання Tesseract (${lang_label})...${CLR_RESET}"
+        "${CMD[@]}"
+    fi
+
+    if [[ ! -f "$target_out" ]]; then
+        echo -e "${CLR_RED}❌ Помилка: не вдалося створити вихідний PDF.${CLR_RESET}" >&2
+        if [[ "$USE_GUI" = true ]]; then
+            zenity --error --title="Помилка OCR" --text="Не вдалося розпізнати документ '${base_name}'."
+        fi
+        continue
+    fi
+
+    SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
+    new_size=$(stat -c%s "$target_out")
+
+    echo -e "${CLR_GREEN}✅ Успішно створено: ${target_out}${CLR_RESET}"
+    echo -e "   Розмір: $(numfmt --to=iec-i --suffix=B "$new_size")"
+
+    if [[ "$DO_SIDECAR" = true && -f "${target_out%.*}.txt" ]]; then
+        echo -e "${CLR_GREEN}   Текстовий файл: ${target_out%.*}.txt ($(stat -c%s "${target_out%.*}.txt") байт)${CLR_RESET}"
+    fi
+
+    # Court compliance validation
+    if [[ "$new_size" -gt "$COURT_LIMIT_BYTES" ]]; then
+        warn_msg="⚠️ УВАГА: Розмір файлу (${new_size} байт) перевищує 50 МБ! Підсистема «Електронний суд» відхилить такий додаток. Розбийте документ на частини."
+        echo -e "${CLR_YELLOW}${warn_msg}${CLR_RESET}\n"
+        if [[ "$USE_GUI" = true ]]; then
+            zenity --warning --title="Електронний суд: Ліміт 50 МБ" --text="Документ розпізнано, але його розмір склав <b>$(numfmt --to=iec-i --suffix=B "$new_size")</b>, що перевищує ліміт 50 МБ!"
+        fi
+    else
+        echo -e "${CLR_GREEN}   [Сумісність]: Повністю відповідає вимогам підсистеми «Електронний суд» (ліміт < 50 МБ, Fast Web View).${CLR_RESET}\n"
+        if [[ "$USE_GUI" = true ]]; then
+            notif_text="Файл: $(basename "$target_out")\nМова: ${lang_label} | Розмір: $(numfmt --to=iec-i --suffix=B "$new_size")\nЛіміт суду (< 50 МБ) дотримано."
+            if command -v notify-send >/dev/null 2>&1; then
+                notify-send -a "QES Tools" -i "document-search" "✅ Текст розпізнано (OCR)" "$notif_text" || true
+            elif command -v zenity >/dev/null 2>&1; then
+                zenity --notification --text="✅ Текст розпізнано (OCR): $(basename "$target_out") (${lang_label})" || true
+            fi
+        fi
+    fi
+done
+
+if [[ "$SUCCESS_COUNT" -gt 0 ]]; then
+    exit 0
+else
+    exit 1
+fi

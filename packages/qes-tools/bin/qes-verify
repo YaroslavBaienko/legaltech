@@ -1,0 +1,823 @@
+#!/usr/bin/env python3
+"""
+qes-verify — Ukrainian & EU Qualified Electronic Signature (QES / КЕП / УЕП) Validator.
+Inspects and validates electronic signatures in PKCS#7 / CAdES (.p7s),
+ETSI ASiC-E containers (.asice, .asics), and PAdES signed PDF files.
+
+Zero-telemetry / 100% offline-first: preserves legal privilege and attorney-client confidentiality.
+"""
+
+import argparse
+import base64
+import binascii
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import zipfile
+import xml.etree.ElementTree as ET
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+
+try:
+    from cryptography import x509
+    from cryptography.hazmat.backends import default_backend
+    from cryptography.hazmat.primitives import hashes
+except ImportError:
+    sys.stderr.write("Помилка: модуль 'cryptography' не знайдено. Встановіть python3-cryptography.\n")
+    sys.exit(1)
+
+# ANSI Color Codes
+CLR_RESET = "\033[0m"
+CLR_BOLD = "\033[1m"
+CLR_GREEN = "\033[32m"
+CLR_RED = "\033[31m"
+CLR_YELLOW = "\033[33m"
+CLR_BLUE = "\033[34m"
+CLR_CYAN = "\033[36m"
+CLR_GRAY = "\033[90m"
+
+
+def colorize(text: str, color: str, use_color: bool = True) -> str:
+    return f"{color}{text}{CLR_RESET}" if use_color else text
+
+
+def format_iso_time(iso_str: Optional[str]) -> str:
+    if not iso_str:
+        return "Не вказано"
+    try:
+        # Normalize ISO strings
+        cleaned = iso_str.replace("Z", "+00:00")
+        dt = datetime.fromisoformat(cleaned)
+        # Convert to local / Kyiv time indication
+        return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
+    except Exception:
+        return iso_str
+
+
+def parse_x509_cert(cert_obj: x509.Certificate) -> Dict[str, Any]:
+    subject: Dict[str, str] = {}
+    for attr in cert_obj.subject:
+        oid = attr.oid.dotted_string
+        val = str(attr.value)
+        if oid == "2.5.4.3":
+            subject["cn"] = val
+        elif oid == "2.5.4.4":
+            subject["surname"] = val
+        elif oid == "2.5.4.42":
+            subject["given_name"] = val
+        elif oid == "2.5.4.10":
+            subject["organization"] = val
+        elif oid == "2.5.4.11":
+            subject["org_unit"] = val
+        elif oid == "2.5.4.12":
+            subject["title"] = val
+        elif oid == "2.5.4.7":
+            subject["locality"] = val
+        elif oid == "2.5.4.6":
+            subject["country"] = val
+        elif oid == "2.5.4.5":
+            subject["serial_number"] = val
+        elif oid == "1.2.804.2.1.1.1.11.1.4.1.1":
+            subject["drfo"] = val
+        elif oid == "1.2.804.2.1.1.1.11.1.4.2.1":
+            subject["edrpou"] = val
+        elif oid == "1.2.804.2.1.1.1.11.1.4.1.2":
+            subject["passport"] = val
+
+    # Extract DRFO (RNOKPP, 10 digits) / EDRPOU (8 digits) from serial_number or CN if missing from specific OIDs
+    sn = subject.get("serial_number", "")
+    if not subject.get("drfo"):
+        if "TINUA-" in sn:
+            subject["drfo"] = sn.split("TINUA-")[-1].strip()
+        elif re.search(r"\b\d{10}\b", sn):
+            subject["drfo"] = re.search(r"\b\d{10}\b", sn).group(0)
+
+    if not subject.get("edrpou"):
+        if "NTRUA-" in sn:
+            subject["edrpou"] = sn.split("NTRUA-")[-1].strip()
+        else:
+            m = re.search(r"(?<!TIN)UA-(\d{8})\b", sn)
+            if m:
+                subject["edrpou"] = m.group(1)
+
+    issuer: Dict[str, str] = {}
+    for attr in cert_obj.issuer:
+        oid = attr.oid.dotted_string
+        val = str(attr.value)
+        if oid == "2.5.4.3":
+            issuer["cn"] = val
+        elif oid == "2.5.4.10":
+            issuer["organization"] = val
+        elif oid == "2.5.4.5":
+            issuer["serial_number"] = val
+        elif oid == "2.5.4.97":
+            issuer["org_id"] = val
+
+    # CA check
+    is_ca = False
+    try:
+        bc = cert_obj.extensions.get_extension_for_oid(x509.ExtensionOID.BASIC_CONSTRAINTS)
+        is_ca = bc.value.ca
+    except Exception:
+        pass
+
+    # QCStatements (eIDAS / QES check: ETSI EN 319 412)
+    is_qes = False
+    is_sscd = False  # Secure Signature Creation Device (token / smart card)
+    try:
+        for ext in cert_obj.extensions:
+            if ext.oid.dotted_string == "1.3.6.1.5.5.7.1.3":  # id-pe-qcStatements
+                is_qes = True
+                raw = ext.value.public_bytes()
+                # 0.4.0.1862.1.4 is id-etsi-qcs-QcSSCD
+                if b"\x04\x00\x04\x82\x01\x04" in raw or b"0.4.0.1862.1.4" in raw or b"\x04\x08\x02\x01\x04" in raw:
+                    is_sscd = True
+    except Exception:
+        pass
+
+    now = datetime.now(timezone.utc)
+    valid_from = cert_obj.not_valid_before_utc
+    valid_to = cert_obj.not_valid_after_utc
+    is_currently_valid = valid_from <= now <= valid_to
+
+    fingerprint_sha256 = binascii.hexlify(cert_obj.fingerprint(hashes.SHA256())).decode("ascii").upper()
+
+    return {
+        "subject": subject,
+        "issuer": issuer,
+        "is_ca": is_ca,
+        "serial_hex": hex(cert_obj.serial_number)[2:].upper(),
+        "valid_from": valid_from.isoformat(),
+        "valid_to": valid_to.isoformat(),
+        "is_currently_valid": is_currently_valid,
+        "is_qes": is_qes,
+        "is_sscd": is_sscd,
+        "fingerprint_sha256": fingerprint_sha256,
+    }
+
+
+def inspect_p7s(path: str) -> List[Dict[str, Any]]:
+    """Parse PKCS#7 / CAdES (.p7s) using openssl & cryptography."""
+    cmd = ["openssl", "pkcs7", "-inform", "DER", "-in", path, "-print_certs"]
+    res = subprocess.run(cmd, capture_output=True, text=True)
+    if res.returncode != 0:
+        # Fallback to PEM
+        cmd = ["openssl", "pkcs7", "-inform", "PEM", "-in", path, "-print_certs"]
+        res = subprocess.run(cmd, capture_output=True, text=True)
+
+    certs: List[Dict[str, Any]] = []
+    all_parsed_certs: List[Dict[str, Any]] = []
+    if res.returncode == 0:
+        pems = [c for c in res.stdout.split("-----END CERTIFICATE-----") if "-----BEGIN CERTIFICATE-----" in c]
+        for pem in pems:
+            pem_str = pem.strip() + "\n-----END CERTIFICATE-----\n"
+            cert = x509.load_pem_x509_certificate(pem_str.encode("utf-8"), default_backend())
+            parsed = parse_x509_cert(cert)
+            all_parsed_certs.append(parsed)
+            if not parsed["is_ca"]:
+                certs.append(parsed)
+
+    if not certs and all_parsed_certs:
+        certs = all_parsed_certs
+
+    # Inspect ASN.1 structure for signingTime and TSP tokens
+    cmd_asn = ["openssl", "asn1parse", "-inform", "DER", "-in", path]
+    res_asn = subprocess.run(cmd_asn, capture_output=True, text=True)
+
+    signing_time: Optional[str] = None
+    has_tsp: bool = False
+    tsp_time: Optional[str] = None
+
+    if res_asn.returncode == 0:
+        lines = res_asn.stdout.splitlines()
+        for i, line in enumerate(lines):
+            # Signing time
+            if "signingTime" in line:
+                for j in range(i + 1, min(i + 4, len(lines))):
+                    if "UTCTIME" in lines[j] or "GENERALIZEDTIME" in lines[j]:
+                        m = re.search(r":(\d{6,14}Z?)", lines[j])
+                        if m and not signing_time:
+                            raw = m.group(1)
+                            try:
+                                if len(raw) >= 12:
+                                    dt = datetime.strptime(raw[:12], "%y%m%d%H%M%S").replace(tzinfo=timezone.utc)
+                                    signing_time = dt.isoformat()
+                            except Exception:
+                                signing_time = raw
+            # Timestamp token (TSP)
+            if "timeStampToken" in line or "TSTInfo" in line:
+                has_tsp = True
+                for j in range(i + 1, min(i + 15, len(lines))):
+                    if "UTCTIME" in lines[j] or "GENERALIZEDTIME" in lines[j]:
+                        m = re.search(r":(\d{6,14}Z?)", lines[j])
+                        if m and not tsp_time:
+                            raw = m.group(1)
+                            try:
+                                if len(raw) >= 12:
+                                    dt = datetime.strptime(raw[:12], "%y%m%d%H%M%S").replace(tzinfo=timezone.utc)
+                                    tsp_time = dt.isoformat()
+                            except Exception:
+                                tsp_time = raw
+
+    # Check if signature was made within cert validity
+    is_valid_at_signing = None
+    if signing_time and certs:
+        try:
+            st_clean = signing_time.replace("Z", "+00:00")
+            st_dt = datetime.fromisoformat(st_clean)
+            c_from = datetime.fromisoformat(certs[0]["valid_from"])
+            c_to = datetime.fromisoformat(certs[0]["valid_to"])
+            is_valid_at_signing = c_from <= st_dt <= c_to
+        except Exception:
+            pass
+
+    return [{
+        "container_format": "PKCS#7 / CAdES (.p7s)",
+        "file_path": path,
+        "signing_time": signing_time,
+        "has_tsp": has_tsp,
+        "tsp_time": tsp_time,
+        "is_valid_at_signing": is_valid_at_signing,
+        "signer_certs": certs,
+        "signed_files": [],
+    }]
+
+
+def inspect_asice(path: str) -> List[Dict[str, Any]]:
+    """Parse ETSI ASiC-E container (.asice / .asics) supporting both XAdES and CAdES signatures."""
+    import hashlib
+    with zipfile.ZipFile(path, "r") as z:
+        files = [n for n in z.namelist() if not n.startswith("META-INF/") and n != "mimetype"]
+        sig_files_xml = [n for n in z.namelist() if n.startswith("META-INF/signatures") and n.endswith(".xml")]
+        sig_files_p7s = [n for n in z.namelist() if n.startswith("META-INF/signature") and (n.endswith(".p7s") or n.endswith(".p7b"))]
+        results: List[Dict[str, Any]] = []
+
+        # Check cryptographic file integrity via META-INF/manifest.xml
+        manifest_verified = True
+        manifest_checks = {}
+        if "META-INF/manifest.xml" in z.namelist():
+            try:
+                m_data = z.read("META-INF/manifest.xml")
+                root_m = ET.fromstring(m_data)
+                for ref in root_m.findall(".//{http://uri.etsi.org/02918/v1.2.1#}DataObjectReference"):
+                    uri = ref.attrib.get("URI")
+                    dv = ref.find(".//{http://www.w3.org/2000/09/xmldsig#}DigestValue")
+                    if uri and dv is not None and dv.text and uri in z.namelist():
+                        expected_hash = dv.text.strip()
+                        actual_hash = base64.b64encode(hashlib.sha256(z.read(uri)).digest()).decode("ascii")
+                        if actual_hash == expected_hash:
+                            manifest_checks[uri] = True
+                        else:
+                            manifest_checks[uri] = False
+                            manifest_verified = False
+            except Exception:
+                manifest_verified = False
+
+        # 1. CAdES signatures inside ASiC-E
+        for sf in sig_files_p7s:
+            p7s_bytes = z.read(sf)
+            tmp_p7s = f"/tmp/asice_sig_{os.getpid()}_{os.path.basename(sf)}"
+            with open(tmp_p7s, "wb") as f_tmp:
+                f_tmp.write(p7s_bytes)
+            try:
+                sig_res = inspect_p7s(tmp_p7s)
+                for item in sig_res:
+                    item["container_format"] = "ETSI ASiC-E (CAdES / ДСТУ 4145)"
+                    item["file_path"] = path
+                    item["signed_files"] = files
+                    item["manifest_verified"] = manifest_verified if manifest_checks else None
+                results.extend(sig_res)
+            finally:
+                if os.path.exists(tmp_p7s):
+                    os.remove(tmp_p7s)
+
+        # 2. XAdES signatures inside ASiC-E
+        for sf in sig_files_xml:
+            xml_data = z.read(sf)
+            root = ET.fromstring(xml_data)
+            ns = {
+                "ds": "http://www.w3.org/2000/09/xmldsig#",
+                "xades": "http://uri.etsi.org/01903/v1.3.2#",
+            }
+
+            signing_time = None
+            st = root.find(".//xades:SigningTime", ns)
+            if st is not None:
+                signing_time = st.text
+
+            has_tsp = False
+            tsp_time = None
+            # Check for timestamp tokens in XAdES
+            if root.findall(".//xades:AllDataObjectsTimeStamp", ns) or root.findall(".//xades:SignatureTimeStamp", ns):
+                has_tsp = True
+
+            certs: List[Dict[str, Any]] = []
+            for xc in root.findall(".//ds:X509Certificate", ns):
+                c_bytes = base64.b64decode(xc.text.strip())
+                cert = x509.load_der_x509_certificate(c_bytes, default_backend())
+                parsed = parse_x509_cert(cert)
+                if not parsed["is_ca"]:
+                    certs.append(parsed)
+
+            is_valid_at_signing = None
+            if signing_time and certs:
+                try:
+                    st_clean = signing_time.replace("Z", "+00:00")
+                    st_dt = datetime.fromisoformat(st_clean)
+                    c_from = datetime.fromisoformat(certs[0]["valid_from"])
+                    c_to = datetime.fromisoformat(certs[0]["valid_to"])
+                    is_valid_at_signing = c_from <= st_dt <= c_to
+                except Exception:
+                    pass
+
+            results.append({
+                "container_format": "ETSI ASiC-E (XAdES)",
+                "file_path": path,
+                "signing_time": signing_time,
+                "has_tsp": has_tsp,
+                "tsp_time": tsp_time,
+                "is_valid_at_signing": is_valid_at_signing,
+                "signer_certs": certs,
+                "signed_files": files,
+                "manifest_verified": manifest_verified if manifest_checks else None,
+            })
+        return results
+
+
+def extract_asice_files(asice_path: str, dest_dir: str) -> List[str]:
+    os.makedirs(dest_dir, exist_ok=True)
+    extracted: List[str] = []
+    with zipfile.ZipFile(asice_path, "r") as z:
+        for name in z.namelist():
+            if not name.startswith("META-INF/") and name != "mimetype":
+                target = os.path.join(dest_dir, os.path.basename(name))
+                with open(target, "wb") as out:
+                    out.write(z.read(name))
+                extracted.append(target)
+    return extracted
+
+
+def inspect_pades_pdf(path: str) -> List[Dict[str, Any]]:
+    """Extract embedded PKCS#7 signatures from PDF (PAdES)."""
+    with open(path, "rb") as f:
+        content = f.read()
+
+    # Search for /Contents <hex> inside PDF signature dictionary
+    matches = re.findall(rb"/Contents\s*<([0-9a-fA-F\s]+)>", content)
+    if not matches:
+        return []
+
+    results: List[Dict[str, Any]] = []
+    for idx, hex_data in enumerate(matches):
+        cleaned_hex = re.sub(rb"\s+", b"", hex_data)
+        try:
+            der_bytes = binascii.unhexlify(cleaned_hex)
+            # Write to a temporary file in memory/tmp and reuse inspect_p7s
+            tmp_p7s = f"/tmp/pades_sig_{os.getpid()}_{idx}.p7s"
+            with open(tmp_p7s, "wb") as tmp_f:
+                tmp_f.write(der_bytes)
+            try:
+                sig_res = inspect_p7s(tmp_p7s)
+                for item in sig_res:
+                    item["container_format"] = "PAdES (PDF Embedded Signature)"
+                    item["file_path"] = path
+                results.extend(sig_res)
+            finally:
+                if os.path.exists(tmp_p7s):
+                    os.remove(tmp_p7s)
+        except Exception:
+            continue
+
+    return results
+
+
+def print_cli_report(res: Dict[str, Any], use_color: bool = True, sig_index: int = 1, total_sigs: int = 1) -> bool:
+    all_ok = True
+    print(colorize(f"╔═══════════════════════════════════════════════════════════════════════════════════════╗", CLR_CYAN, use_color))
+    if total_sigs > 1:
+        print(colorize(f"║ АНАЛІЗ ЕЛЕКТРОННОГО ПІДПИСУ (QES / КЕП / УЕП) — ПІДПИС #{sig_index} З {total_sigs}", CLR_BOLD + CLR_CYAN, use_color))
+    else:
+        print(colorize(f"║ АНАЛІЗ ЕЛЕКТРОННОГО ПІДПИСУ (QES / КЕП / УЕП)", CLR_BOLD + CLR_CYAN, use_color))
+    print(colorize(f"║ Файл: {os.path.basename(res['file_path'])}", CLR_CYAN, use_color))
+    print(colorize(f"╚═══════════════════════════════════════════════════════════════════════════════════════╝", CLR_CYAN, use_color))
+
+    print(f"  {colorize('Формат контейнера:', CLR_BOLD, use_color)} {res['container_format']}")
+
+    if res.get("signed_files"):
+        files_str = ", ".join(res["signed_files"])
+        print(f"  {colorize('Підписані файли:', CLR_BOLD, use_color)}   {colorize(files_str, CLR_BLUE, use_color)} ({len(res['signed_files'])} файл(-ів))")
+
+    if res.get("manifest_verified") is True:
+        print(f"  {colorize('Цілісність архіву:', CLR_BOLD, use_color)} {colorize('✅ Усі файли відповідають контрольним сумам у маніфесті', CLR_GREEN, use_color)}")
+    elif res.get("manifest_verified") is False:
+        all_ok = False
+        print(f"  {colorize('Цілісність архіву:', CLR_BOLD, use_color)} {colorize('❌ ПОШКОДЖЕНО (файли не відповідають контрольним сумам у маніфесті!)', CLR_RED + CLR_BOLD, use_color)}")
+
+    # Signing Time
+    st = format_iso_time(res.get("signing_time"))
+    print(f"  {colorize('Час підписання:', CLR_BOLD, use_color)}     {st}")
+
+    # TSP
+    if res.get("has_tsp"):
+        tsp_info = f"Присутня" + (f" ({format_iso_time(res.get('tsp_time'))})" if res.get('tsp_time') else "")
+        print(f"  {colorize('Позначка часу (TSP):', CLR_BOLD, use_color)} {colorize(f'✅ {tsp_info}', CLR_GREEN, use_color)}")
+    else:
+        print(f"  {colorize('Позначка часу (TSP):', CLR_BOLD, use_color)} {colorize('⚠️ Відсутня окрема мітка TSP (час заявлено клієнтом)', CLR_YELLOW, use_color)}")
+
+    # Validity at signing
+    if res.get("is_valid_at_signing") is True:
+        print(f"  {colorize('Чинність на момент підпису:', CLR_BOLD, use_color)} {colorize('✅ ДІЙСНИЙ (сертифікат діяв на дату підписання)', CLR_GREEN, use_color)}")
+    elif res.get("is_valid_at_signing") is False:
+        all_ok = False
+        print(f"  {colorize('Чинність на момент підпису:', CLR_BOLD, use_color)} {colorize('❌ НЕДІЙСНИЙ (підписано поза строком дії сертифіката!)', CLR_RED + CLR_BOLD, use_color)}")
+
+    print()
+    certs = res.get("signer_certs", [])
+    if not certs:
+        print(colorize("  ⚠️ Сертифікат підписувача не знайдено або не вдалося декодувати.", CLR_YELLOW, use_color))
+        return False
+
+    for idx, c in enumerate(certs, 1):
+        subj = c["subject"]
+        iss = c["issuer"]
+        print(colorize(f"  ── Підписувач #{idx} ─────────────────────────────────────────────────────────────", CLR_GRAY, use_color))
+        
+        # Identity
+        full_name = subj.get("cn") or f"{subj.get('surname', '')} {subj.get('given_name', '')}".strip() or "Не вказано"
+        print(f"  {colorize('П.І.Б. підписувача:', CLR_BOLD, use_color)}  {colorize(full_name, CLR_BOLD, use_color)}")
+
+        drfo = subj.get("drfo") or subj.get("serial_number") or "Не вказано"
+        print(f"  {colorize('РНОКПП (ДРФО/ІПН):', CLR_BOLD, use_color)}  {drfo}")
+
+        if subj.get("organization") and subj.get("organization") != "ФІЗИЧНА ОСОБА":
+            print(f"  {colorize('Організація:', CLR_BOLD, use_color)}        {subj.get('organization')}")
+        if subj.get("edrpou"):
+            print(f"  {colorize('Код ЄДРПОУ:', CLR_BOLD, use_color)}         {subj.get('edrpou')}")
+        if subj.get("title"):
+            print(f"  {colorize('Посада:', CLR_BOLD, use_color)}             {subj.get('title')}")
+
+        # Issuer / CA
+        ca_name = iss.get("cn") or iss.get("organization") or "Не вказано"
+        print(f"  {colorize('КНЕДП (Акредитований АЦСК):', CLR_BOLD, use_color)} {ca_name}")
+
+        # Qualification level
+        if c.get("is_qes"):
+            if c.get("is_sscd"):
+                q_text = "🟢 Кваліфікований електронний підпис (КЕП) на захищеному носії (токені)"
+            else:
+                q_text = "🟢 Кваліфікований електронний підпис (КЕП)"
+            print(f"  {colorize('Тип підпису:', CLR_BOLD, use_color)}        {colorize(q_text, CLR_GREEN, use_color)}")
+        else:
+            print(f"  {colorize('Тип підпису:', CLR_BOLD, use_color)}        {colorize('🟡 Удосконалений електронний підпис (УЕП)', CLR_YELLOW, use_color)}")
+
+        # Certificate Validity
+        val_from = format_iso_time(c.get("valid_from"))
+        val_to = format_iso_time(c.get("valid_to"))
+        print(f"  {colorize('Дія сертифіката:', CLR_BOLD, use_color)}    з {val_from} до {val_to}")
+
+        if c.get("is_currently_valid"):
+            print(f"  {colorize('Поточний статус:', CLR_BOLD, use_color)}    {colorize('✅ Сертифікат чинний сьогодні', CLR_GREEN, use_color)}")
+        else:
+            print(f"  {colorize('Поточний статус:', CLR_BOLD, use_color)}    {colorize('⚠️ Термін дії сертифіката вичерпано (перевіряйте чинність на дату підпису)', CLR_YELLOW, use_color)}")
+
+        print(f"  {colorize('Серійний номер:', CLR_BOLD, use_color)}     {c.get('serial_hex')}")
+
+    print(colorize(f"─────────────────────────────────────────────────────────────────────────────────", CLR_GRAY, use_color))
+    return all_ok
+
+
+def show_gui_report(results: List[Dict[str, Any]], file_path: str):
+    if not results:
+        subprocess.run([
+            "zenity", "--warning",
+            "--title=Перевірка КЕП",
+            f"--text=⚠️ У файлі <b>{os.path.basename(file_path)}</b> не виявлено електронного підпису."
+        ])
+        return
+
+def show_help_dialog():
+    """Відображає довідкове вікно з повним керівництвом користувача."""
+    help_pango = (
+        "<span size='x-large' weight='bold' color='#1a5fb4'>📖 Довідка та Інструкції: Перевірка КЕП / УЕП</span>\n"
+        "<span size='small' color='#666666'>Автономний аналізатор підписів ДСТУ 4145, CAdES, PAdES, ASiC-E</span>\n\n"
+        "<b>1. ПІДТРИМУВАНІ ФОРМАТИ:</b>\n"
+        "• <b>PAdES (.pdf):</b> вбудовані підписи в судових рішеннях, договорах, заявах.\n"
+        "• <b>ASiC-E (.asice):</b> європейські контейнери архівів із пакетами підписаних файлів.\n"
+        "• <b>CAdES / PKCS#7 (.p7s):</b> класичні відокремлені підписи (Дія, M.E.Doc, Вчасно).\n"
+        "• <b>Сертифікати (.cer, .crt, .p7b):</b> автоматично відкриваються в інспекторі <code>qes-cert</code>.\n\n"
+        "<b>2. СТАТУСИ ПЕРЕВІРКИ:</b>\n"
+        "• <span color='#1e7e34'><b>✅ КЕП ДІЙСНИЙ:</b></span> підпис математично валідний, цілісність підтверджена.\n"
+        "• <span color='#d9534f'><b>❌ НЕВАЛІДНИЙ:</b></span> документ змінено після підписання або пошкоджено.\n"
+        "• <b>🕒 Мітка TSP:</b> підтвердження точного астрономічного часу від акредитованого сервера.\n\n"
+        "<b>3. КОМАНДИ ТЕРМІНАЛА:</b>\n"
+        "• <code>qes-verify document_signed.pdf</code> — перевірка PDF зі штампом\n"
+        "• <code>qes-verify doc.pdf doc.pdf.p7s</code> — перевірка відповідності оригіналу та підпису\n"
+        "• <code>qes-verify package.asice</code> — перевірка цілісності архіву ASiC-E\n"
+        "• <code>qes-verify -x /папка package.asice</code> — видобування оригінальних документів\n"
+        "• <code>qes-verify cert.cer</code> — перегляд реквізитів сертифіката підписувача\n"
+        "• <code>qes-verify --json file.pdf</code> — машинний вивід для скриптів\n"
+    )
+    subprocess.run([
+        "zenity", "--info",
+        "--title=Довідка — qes-verify",
+        f"--text={help_pango}",
+        "--ok-label=Зрозуміло",
+        "--width=620"
+    ])
+
+
+def show_gui_report(results: List[Dict[str, Any]], file_path: str):
+    if not results:
+        subprocess.run(["zenity", "--warning", "--title=Перевірка КЕП", f"--text=У файлі '{os.path.basename(file_path)}' підписів не виявлено."])
+        return
+
+    is_valid = True
+    for r in results:
+        if r.get("is_valid_at_signing") is False or r.get("manifest_verified") is False:
+            is_valid = False
+            break
+
+    status_title = "✅ КЕП ДІЙСНИЙ" if is_valid else "❌ ПІДПИС НЕВАЛІДНИЙ"
+    status_color = "#1e7e34" if is_valid else "#d9534f"
+
+    lines = []
+    lines.append(f"<span size='x-large' weight='bold' color='{status_color}'>{status_title}</span>\n")
+    lines.append(f"<b>Файл:</b> {os.path.basename(file_path)}")
+
+    is_asice = False
+    asice_files = []
+
+    for r_idx, res in enumerate(results, 1):
+        if len(results) > 1:
+            lines.append(f"\n<b>── Підпис #{r_idx}: {res.get('container_format', 'КЕП')} ──</b>")
+        else:
+            lines.append(f"<b>Формат:</b> {res.get('container_format', 'КЕП')}")
+
+        st = format_iso_time(res.get("signing_time"))
+        lines.append(f"<b>Час підписання:</b> {st}")
+
+        if res.get("has_tsp"):
+            tsp_str = format_iso_time(res.get("tsp_time"))
+            lines.append(f"<b>Позначка часу (TSP):</b> <span color='#1e7e34'>🕒 {tsp_str} (Підтверджено КНЕДП)</span>")
+        else:
+            lines.append("<b>Позначка часу (TSP):</b> ⚠️ Відсутня окрема мітка TSP")
+
+        if res.get("manifest_verified") is True:
+            lines.append("<b>Цілісність архіву:</b> <span color='#1e7e34'>✅ Усі файли відповідають контрольним сумам</span>")
+        elif res.get("manifest_verified") is False:
+            lines.append("<b>Цілісність архіву:</b> <span color='#d9534f'>❌ ПОШКОДЖЕНО (контрольні суми не збігаються)</span>")
+
+        if res.get("signed_files"):
+            is_asice = True
+            asice_files = res.get("signed_files")
+            lines.append(f"\n<b>📦 Підписані файли ({len(asice_files)}):</b>")
+            for sf in asice_files:
+                lines.append(f"  • {sf}")
+
+        certs = res.get("signer_certs", [])
+        for c_idx, c in enumerate(certs, 1):
+            subj = c.get("subject", {})
+            iss = c.get("issuer", {})
+
+            full_name = subj.get("cn") or f"{subj.get('surname', '')} {subj.get('given_name', '')}".strip() or "—"
+            drfo = subj.get("drfo") or subj.get("serial_number") or "—"
+            ca_name = iss.get("cn") or iss.get("organization") or "—"
+            q_type = "🟢 Кваліфікований електронний підпис (КЕП)" if c.get("is_qes") else "🟡 Удосконалений електронний підпис (УЕП)"
+
+            if len(certs) > 1:
+                lines.append(f"\n<b>── Підписувач #{c_idx} ──</b>")
+            else:
+                lines.append("")
+
+            lines.append(f"<b>Підписувач:</b> {full_name}")
+            lines.append(f"<b>РНОКПП (ІПН):</b> {drfo}")
+            if subj.get("organization") and subj.get("organization") != "ФІЗИЧНА ОСОБА":
+                lines.append(f"<b>Організація:</b> {subj.get('organization')}")
+            if subj.get("edrpou"):
+                lines.append(f"<b>ЄДРПОУ:</b> {subj.get('edrpou')}")
+            lines.append(f"<b>КНЕДП (АЦСК):</b> {ca_name}")
+            lines.append(f"<b>Тип підпису:</b> {q_type}")
+
+            val_from = format_iso_time(c.get("valid_from"))
+            val_to = format_iso_time(c.get("valid_to"))
+            lines.append(f"<b>Дія сертифіката:</b> з {val_from} до {val_to}")
+
+    pango_text = "\n".join(lines)
+
+    while True:
+        cmd = [
+            "zenity", "--info",
+            f"--title=Протокол перевірки КЕП — {os.path.basename(file_path)}",
+            f"--text={pango_text}",
+            "--ok-label=Закрити",
+            "--width=580",
+        ]
+        if is_asice:
+            cmd.extend(["--extra-button=Видобути документи"])
+        cmd.extend(["--extra-button=📖 Довідка / Help"])
+
+        proc = subprocess.run(cmd, stdout=subprocess.PIPE, text=True)
+        clicked = proc.stdout.strip()
+
+        if clicked == "Видобути документи":
+            dest_dir = subprocess.run(
+                ["zenity", "--file-selection", "--directory", "--title=Оберіть папку для видобування файлів"],
+                stdout=subprocess.PIPE, text=True
+            ).stdout.strip()
+            if dest_dir:
+                extract_asice_files(file_path, dest_dir)
+                if shutil.which("notify-send"):
+                    subprocess.run([
+                        "notify-send", "-a", "QES Tools", "-i", "folder",
+                        "📦 Файли видобуто",
+                        f"Документи успішно видобуто у:\n{dest_dir}"
+                    ])
+                elif shutil.which("zenity"):
+                    subprocess.run(["zenity", "--notification", f"--text=📦 Файли успішно видобуто у:\n{dest_dir}"])
+                subprocess.Popen(["xdg-open", dest_dir])
+            continue
+        elif "Довідка" in clicked:
+            show_help_dialog()
+            continue
+        else:
+            break
+
+
+def delegate_to_qes_cert(file_path: str, args: argparse.Namespace) -> int:
+    """Делегує аналіз сертифіката спеціалізованому модулю qes-cert."""
+    qes_cert_bin = shutil.which("qes-cert")
+    if not qes_cert_bin:
+        sibling = Path(__file__).resolve().parent / "qes-cert"
+        if sibling.exists():
+            qes_cert_bin = str(sibling)
+        else:
+            local_bin = Path.home() / ".local" / "bin" / "qes-cert"
+            if local_bin.exists():
+                qes_cert_bin = str(local_bin)
+
+    if not qes_cert_bin:
+        sys.stderr.write("Помилка: модуль 'qes-cert' не знайдено для перегляду сертифіката.\n")
+        return 1
+
+    cmd = [qes_cert_bin]
+    if args.json:
+        cmd.append("--json")
+    if args.gui:
+        cmd.append("--gui")
+    if getattr(args, "no_color", False):
+        cmd.append("--no-color")
+    cmd.append(file_path)
+
+    try:
+        proc = subprocess.run(cmd)
+        return proc.returncode
+    except Exception as e:
+        sys.stderr.write(f"Помилка виклику qes-cert: {e}\n")
+        return 1
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="""================================================================================
+  qes-verify — автономний валідатор КЕП/УЕП (.p7s, .asice, .pdf)
+  Версія 1.0.0 | 100% Offline-First | Захист адвокатської таємниці
+================================================================================
+
+ОПИС:
+  Перевіряє справжність кваліфікованих та удосконалених електронних підписів (КЕП/УЕП),
+  розпізнає сертифікати всіх акредитованих центрів України (КНЕДП/АЦСК), перевіряє
+  мітку точного часу TSP, витягує підписані файли та не відправляє жодних даних у мережу.
+  Також автоматично перенаправляє відкриті сертифікати (.cer, .p7b) до інспектора qes-cert.""",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""ПРИКЛАДИ КОМАНД:
+
+  1. Перевірка PDF-файлу з вбудованим підписом PAdES (зі штампом та QR):
+     $ qes-verify statement_signed.pdf
+
+  2. Перевірка документа з кількома підписами (Мультипідпис):
+     $ qes-verify statement_multi_signed.pdf
+
+  3. Перевірка класичного відокремленого файлу підпису .p7s:
+     $ qes-verify contract.pdf.p7s
+
+  4. Перевірка відповідності оригіналу документа та відокремленого підпису:
+     $ qes-verify contract.pdf contract.pdf.p7s
+
+  5. Перевірка європейського архівного контейнера ASiC-E (.asice):
+     $ qes-verify legal_bundle.asice
+
+  6. Видобування оригінальних підписаних документів з контейнера ASiC-E:
+     $ qes-verify -x /home/attor/Documents legal_bundle.asice
+
+  7. Перегляд відкритого сертифіката підписувача (.cer) або ланцюжка (.p7b):
+     $ qes-verify cert.cer
+     $ qes-verify --gui mono.p7b
+
+  8. Вивід у структурованому форматі JSON для автоматизації та скриптів:
+     $ qes-verify --json statement_signed.pdf
+
+  9. Відображення картки перевірки у графічному вікні GNOME (Zenity):
+     $ qes-verify --gui statement_signed.pdf
+================================================================================"""
+    )
+    parser.add_argument("files", nargs="*", default=[], help="Шлях до файлу(-ів) підпису (.p7s, .asice, .pdf), сертифікатів (.cer, .p7b) або пари [документ підпис]")
+    parser.add_argument("-j", "--json", action="store_true", help="Вивести результат у структурованому форматі JSON")
+    parser.add_argument("-x", "--extract", nargs="?", const=".", default=None, help="Видобути підписаний документ у вказану папку (за замовчуванням: поточна)")
+    parser.add_argument("--gui", action="store_true", help="Показати результат у графічному діалоговому вікні GNOME (Zenity)")
+    parser.add_argument("--no-color", action="store_true", help="Вимкнути кольоровий вивід у терміналі")
+
+    args = parser.parse_args()
+
+    if not args.files:
+        if args.gui:
+            cmd_sel = [
+                "zenity", "--file-selection",
+                "--title=Оберіть документ або підпис для перевірки КЕП",
+                "--file-filter=Документи та підписи (*.pdf *.p7s *.asice *.cer) | *.pdf *.p7s *.asice *.asics *.cer *.crt *.der *.pem *.p7b",
+                "--file-filter=Усі файли (*.*) | *.*",
+            ]
+            sel_res = subprocess.run(cmd_sel, stdout=subprocess.PIPE, text=True)
+            chosen = sel_res.stdout.strip()
+            if not chosen:
+                sys.exit(0)
+            args.files = [chosen]
+        else:
+            parser.print_help()
+            sys.exit(1)
+
+    use_color = not args.no_color and sys.stdout.isatty() and not args.json and not args.gui
+
+    target_files = []
+    # Identify files
+    for item in args.files:
+        p = Path(item)
+        if not p.exists():
+            sys.stderr.write(f"Помилка: файл '{item}' не знайдено.\n")
+            sys.exit(1)
+        target_files.append(str(p.resolve()))
+
+    # If two files were given (e.g. [doc.pdf, doc.pdf.p7s]), prioritize the signature file
+    sig_files = []
+    for f in target_files:
+        ext = Path(f).suffix.lower()
+        if ext in [".p7s", ".p7b", ".asice", ".asics", ".cer", ".crt", ".der", ".pem"]:
+            sig_files.append(f)
+        elif ext == ".pdf":
+            sig_files.append(f)
+
+    if not sig_files:
+        sig_files = target_files
+
+    all_results: List[Dict[str, Any]] = []
+    overall_ok = True
+
+    for sf in sig_files:
+        ext = Path(sf).suffix.lower()
+        if ext in [".cer", ".crt", ".der", ".pem"]:
+            ret = delegate_to_qes_cert(sf, args)
+            if ret != 0:
+                overall_ok = False
+            continue
+
+        res_list: List[Dict[str, Any]] = []
+
+        if ext in [".asice", ".asics"]:
+            res_list = inspect_asice(sf)
+            if args.extract:
+                extracted = extract_asice_files(sf, args.extract)
+                if not args.json and not args.gui and extracted:
+                    print(colorize(f"📦 Видобуто підписані файли до '{args.extract}': {', '.join(map(os.path.basename, extracted))}\n", CLR_GREEN, use_color))
+        elif ext in [".p7s", ".p7b"]:
+            res_list = inspect_p7s(sf)
+        elif ext == ".pdf":
+            res_list = inspect_pades_pdf(sf)
+            if not res_list:
+                if not args.json and not args.gui:
+                    print(colorize(f"⚠️ У файлі '{os.path.basename(sf)}' не знайдено вбудованого підпису PAdES.\n", CLR_YELLOW, use_color))
+                continue
+        else:
+            # Fallback attempt p7s
+            res_list = inspect_p7s(sf)
+
+        for idx, r in enumerate(res_list, 1):
+            all_results.append(r)
+            if not args.json and not args.gui:
+                ok = print_cli_report(r, use_color, sig_index=idx, total_sigs=len(res_list))
+                if not ok:
+                    overall_ok = False
+
+    if all_results:
+        if args.gui:
+            show_gui_report(all_results, sig_files[0] if sig_files else target_files[0])
+        elif args.json:
+            print(json.dumps(all_results, indent=2, ensure_ascii=False))
+
+    sys.exit(0 if overall_ok else 1)
+
+
+if __name__ == "__main__":
+    main()

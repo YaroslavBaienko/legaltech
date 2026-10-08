@@ -1,0 +1,28 @@
+# Build artifacts
+dist/
+build/
+*.deb
+*.tar.xz
+*.tar.gz
+SHA256SUMS.txt
+
+# Dependencies
+node_modules/
+.npm/
+
+# OS & Editors
+.DS_Store
+Thumbs.db
+*~
+*.swp
+.vscode/
+.idea/
+
+# Local caches & logs
+*.log
+npm-debug.log*
+tmp/
+.cache/
+
+# Large binaries (downloaded during build if needed)
+**/bin/typst

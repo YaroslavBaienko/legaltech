@@ -1,0 +1,13 @@
+#!/bin/sh
+# debian/prerm — скрипт перед видаленням пакета
+set -e
+
+if [ "$1" = "remove" ] || [ "$1" = "purge" ]; then
+    # Зупинка служб за потреби
+    # if [ -x "/bin/systemctl" ]; then
+    #     systemctl stop {{PACKAGE_NAME}} >/dev/null 2>&1 || true
+    # fi
+    true
+fi
+
+exit 0

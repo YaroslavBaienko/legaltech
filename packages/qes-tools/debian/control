@@ -1,0 +1,15 @@
+Package: qes-tools
+Version: 1.0.2
+Section: utils
+Priority: optional
+Architecture: amd64
+Maintainer: Yaroslav Baienko <zerhug@gmail.com>
+Depends: nodejs (>= 18), python3 (>= 3.10), python3-cryptography, openssl, zenity, libnotify-bin, qpdf, fonts-liberation, ocrmypdf, tesseract-ocr, tesseract-ocr-ukr, tesseract-ocr-eng, unpaper, xdg-utils
+Recommends: wl-clipboard | xclip
+Homepage: https://github.com/YaroslavBaienko/ai-debian-admin
+Description: Ukrainian Qualified Electronic Signature & Encryption LegalTech Suite
+ Offline-first CLI & GUI toolkit for signing, verifying, and encrypting documents
+ conforming to Ukrainian DSTU 4145-2002, GOST 28147:89, PKCS#7/CAdES,
+ ETSI ASiC-E containers, PAdES (embedded PDF signatures with official visual stamps),
+ and asymmetric cryptographic envelopes (qes-encrypt, qes-decrypt).
+ Preserves attorney-client privilege with 100% offline cryptographic operations.

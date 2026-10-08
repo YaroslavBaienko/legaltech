@@ -1,0 +1,20 @@
+#!/bin/sh
+# debian/postinst — скрипт після встановлення пакета
+set -e
+
+if [ "$1" = "configure" ]; then
+    # Нормалізація прав доступу до бінарників
+    chmod 0755 /usr/bin/{{PACKAGE_NAME}} 2>/dev/null || true
+
+    # Якщо присутній сервіс systemd, перезавантажити його:
+    # if [ -x "/bin/systemctl" ]; then
+    #     systemctl daemon-reload >/dev/null 2>&1 || true
+    # fi
+
+    echo "================================================================================"
+    echo " ✅ Встановлено пакет {{PACKAGE_NAME}} v{{VERSION}}"
+    echo " Використання: {{PACKAGE_NAME}} --help"
+    echo "================================================================================"
+fi
+
+exit 0

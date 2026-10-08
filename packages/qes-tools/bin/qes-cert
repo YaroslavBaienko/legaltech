@@ -1,0 +1,916 @@
+#!/usr/bin/env python3
+"""
+qes-cert — Автономний інспектор сертифікатів КНЕДП / АЦСК (X.509, ДСТУ 4145, RSA, ECDSA).
+Zero-Telemetry | 100% Offline-First | Захист адвокатської таємниці та персональних даних.
+
+Підтримує формати:
+  - Бінарні сертифікати X.509 DER (.cer, .crt, .der)
+  - Текстові сертифікати PEM (.pem, .crt)
+  - Пакети ланцюжків сертифікатів PKCS#7 (.p7b, .p7c)
+"""
+
+import argparse
+import binascii
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+
+try:
+    from cryptography import x509
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.serialization import pkcs7, Encoding
+except ImportError:
+    sys.stderr.write("Помилка: бібліотеку 'cryptography' не знайдено. Встановіть python3-cryptography.\n")
+    sys.exit(1)
+
+# ANSI кольори для термінала
+CLR_RESET = "\033[0m"
+CLR_BOLD = "\033[1m"
+CLR_GREEN = "\033[32m"
+CLR_RED = "\033[31m"
+CLR_YELLOW = "\033[33m"
+CLR_BLUE = "\033[34m"
+CLR_CYAN = "\033[36m"
+CLR_GRAY = "\033[90m"
+CLR_MAGENTA = "\033[35m"
+
+# Відомі OID криптографічних алгоритмів
+ALGO_NAMES = {
+    "1.2.804.2.1.1.1.1.3.1.1": "ДСТУ 4145-2002 (ГОСТ 34.311-95)",
+    "1.2.804.2.1.1.1.1.3.1": "ДСТУ 4145-2002",
+    "1.2.804.2.1.1.1.1.3.1.1.1": "ДСТУ 4145-2002 (прямий порядок)",
+    "1.2.804.2.1.1.1.1.3.1.1.2": "ДСТУ 4145-2002 (зворотний порядок)",
+    "1.2.804.2.1.1.1.1.1.2": "ДСТУ ГОСТ 28147:89",
+    "1.2.804.2.1.1.1.1.2.2": "ГОСТ 34.311-95 (гешування)",
+    "1.2.840.113549.1.1.11": "RSA-SHA256 (sha256WithRSAEncryption)",
+    "1.2.840.113549.1.1.12": "RSA-SHA384 (sha384WithRSAEncryption)",
+    "1.2.840.113549.1.1.13": "RSA-SHA512 (sha512WithRSAEncryption)",
+    "1.2.840.113549.1.1.5": "RSA-SHA1 (sha1WithRSAEncryption)",
+    "1.2.840.113549.1.1.1": "RSA",
+    "1.2.840.10045.4.3.2": "ECDSA-SHA256",
+    "1.2.840.10045.4.3.3": "ECDSA-SHA384",
+    "1.2.840.10045.4.3.4": "ECDSA-SHA512",
+    "1.2.840.10045.2.1": "ECDSA",
+    "1.3.36.3.3.1.2": "BrainpoolP256r1-SHA256",
+}
+
+# Відомі OID розширеного використання ключа (EKU)
+EKU_NAMES = {
+    "1.3.6.1.5.5.7.3.1": "Автентифікація сервера (serverAuth)",
+    "1.3.6.1.5.5.7.3.2": "Автентифікація клієнта (clientAuth)",
+    "1.3.6.1.5.5.7.3.3": "Підпис програмного коду (codeSigning)",
+    "1.3.6.1.5.5.7.3.4": "Захист електронної пошти (emailProtection)",
+    "1.3.6.1.5.5.7.3.8": "Штамп точного часу (timeStamping)",
+    "1.3.6.1.5.5.7.3.9": "Підпис відповідей OCSP (OCSPSigning)",
+}
+
+
+def colorize(text: str, color: str, use_color: bool = True) -> str:
+    return f"{color}{text}{CLR_RESET}" if use_color else text
+
+
+def format_iso_time(dt: datetime) -> str:
+    """Format UTC datetime into clean string."""
+    return dt.strftime("%Y-%m-%d %H:%M:%S UTC")
+
+
+def format_date_simple(dt: datetime) -> str:
+    """Format UTC datetime into readable local date DD.MM.YYYY."""
+    return dt.strftime("%d.%m.%Y")
+
+
+def extract_oids_from_der(data: bytes) -> List[str]:
+    """Видобуває всі OID з довільного бінарного блоку DER ASN.1."""
+    oids: List[str] = []
+    i = 0
+    while i < len(data) - 2:
+        if data[i] == 0x06:  # OID tag
+            length = data[i + 1]
+            if length < 128 and i + 2 + length <= len(data):
+                oid_bytes = data[i + 2 : i + 2 + length]
+                try:
+                    first = oid_bytes[0]
+                    components = [first // 40, first % 40]
+                    val = 0
+                    for b in oid_bytes[1:]:
+                        val = (val << 7) | (b & 0x7F)
+                        if not (b & 0x80):
+                            components.append(val)
+                            val = 0
+                    oids.append(".".join(str(c) for c in components))
+                    i += 2 + length
+                    continue
+                except Exception:
+                    pass
+        i += 1
+    return oids
+
+
+def copy_to_clipboard(text: str) -> bool:
+    """Копіює текст у системний буфер обміну (Wayland або X11)."""
+    for cmd in [["wl-copy"], ["xclip", "-selection", "clipboard"], ["xsel", "--clipboard", "--input"]]:
+        if shutil.which(cmd[0]):
+            try:
+                subprocess.run(cmd, input=text.encode("utf-8"), timeout=2, check=True)
+                return True
+            except Exception:
+                continue
+    return False
+
+
+def notify(title: str, msg: str):
+    """Показує спливаюче сповіщення GNOME."""
+    if shutil.which("notify-send"):
+        try:
+            subprocess.run(["notify-send", "-a", "QES Tools", "-i", "dialog-information", title, msg], timeout=2)
+            return
+        except Exception:
+            pass
+    if shutil.which("zenity"):
+        try:
+            subprocess.run(["zenity", "--notification", f"--text={title}: {msg}"], timeout=2)
+        except Exception:
+            pass
+
+
+def load_certificates_from_file(path_str: str) -> List[x509.Certificate]:
+    """Завантажує сертифікати з файлу будь-якого підтримуваного формату."""
+    p = Path(path_str)
+    if not p.exists():
+        raise FileNotFoundError(f"Файл '{path_str}' не знайдено.")
+
+    data = p.read_bytes()
+    if not data:
+        raise ValueError(f"Файл '{path_str}' порожній.")
+
+    certs: List[x509.Certificate] = []
+
+    # 1. Спроба завантажити як PEM сертифікат(и)
+    if b"-----BEGIN CERTIFICATE-----" in data:
+        try:
+            certs = x509.load_pem_x509_certificates(data)
+            if certs:
+                return certs
+        except Exception:
+            pass
+
+    # 2. Спроба завантажити як PEM PKCS#7
+    if b"-----BEGIN PKCS7-----" in data:
+        try:
+            certs = pkcs7.load_pem_pkcs7_certificates(data)
+            if certs:
+                return certs
+        except Exception:
+            pass
+
+    # 3. Спроба завантажити як бінарний DER PKCS#7 (.p7b)
+    try:
+        certs = pkcs7.load_der_pkcs7_certificates(data)
+        if certs:
+            return certs
+    except Exception:
+        pass
+
+    # 4. Спроба завантажити як бінарний DER X.509 (.cer / .crt)
+    try:
+        c = x509.load_der_x509_certificate(data)
+        return [c]
+    except Exception:
+        pass
+
+    raise ValueError(f"Не вдалося розпізнати сертифікат або ланцюжок у файлі: {os.path.basename(path_str)}")
+
+
+def inspect_certificate(cert: x509.Certificate, file_path: Optional[str] = None) -> Dict[str, Any]:
+    """Повний аналіз реквізитів сертифіката згідно українських та європейських стандартів."""
+    subject_raw: Dict[str, str] = {}
+    for attr in cert.subject:
+        oid = attr.oid.dotted_string
+        val = str(attr.value)
+        if oid == "2.5.4.3":
+            subject_raw["cn"] = val
+        elif oid == "2.5.4.4":
+            subject_raw["surname"] = val
+        elif oid == "2.5.4.42":
+            subject_raw["given_name"] = val
+        elif oid == "2.5.4.10":
+            subject_raw["organization"] = val
+        elif oid == "2.5.4.11":
+            subject_raw["org_unit"] = val
+        elif oid == "2.5.4.12":
+            subject_raw["title"] = val
+        elif oid == "2.5.4.7":
+            subject_raw["locality"] = val
+        elif oid == "2.5.4.8":
+            subject_raw["state"] = val
+        elif oid == "2.5.4.6":
+            subject_raw["country"] = val
+        elif oid == "2.5.4.5":
+            subject_raw["serial_number"] = val
+        elif oid == "2.5.4.97":
+            subject_raw["org_id"] = val
+        elif oid == "1.2.804.2.1.1.11.1.4.1.1":
+            subject_raw["drfo"] = val
+        elif oid == "1.2.804.2.1.1.11.1.4.2.1":
+            subject_raw["edrpou"] = val
+        elif oid == "1.2.804.2.1.1.11.1.4.1.2":
+            subject_raw["passport"] = val
+        elif oid == "1.2.840.113549.1.9.1":
+            subject_raw["email"] = val
+
+    # Інтелектуальний розбір РНОКПП (ДРФО) та ЄДРПОУ
+    sn = subject_raw.get("serial_number", "")
+    drfo = subject_raw.get("drfo")
+    if not drfo:
+        if "TINUA-" in sn:
+            drfo = sn.split("TINUA-")[-1].strip()
+        elif re.search(r"\b\d{10}\b", sn):
+            drfo = re.search(r"\b\d{10}\b", sn).group(0)
+
+    edrpou = subject_raw.get("edrpou")
+    if not edrpou:
+        org_id = subject_raw.get("org_id", "")
+        if "NTRUA-" in org_id:
+            edrpou = org_id.split("NTRUA-")[-1].strip()
+        elif "NTRUA-" in sn:
+            edrpou = sn.split("NTRUA-")[-1].strip()
+        elif re.search(r"(?<!TIN)UA-(\d{8})\b", sn):
+            edrpou = re.search(r"(?<!TIN)UA-(\d{8})\b", sn).group(1)
+        elif re.search(r"\b\d{8}\b", org_id):
+            edrpou = re.search(r"\b\d{8}\b", org_id).group(0)
+
+    # ПІБ
+    full_name = subject_raw.get("cn", "")
+    if not full_name and (subject_raw.get("surname") or subject_raw.get("given_name")):
+        full_name = f"{subject_raw.get('surname', '')} {subject_raw.get('given_name', '')}".strip()
+
+    # Дані видавця (КНЕДП / АЦСК)
+    issuer_raw: Dict[str, str] = {}
+    for attr in cert.issuer:
+        oid = attr.oid.dotted_string
+        val = str(attr.value)
+        if oid == "2.5.4.3":
+            issuer_raw["cn"] = val
+        elif oid == "2.5.4.10":
+            issuer_raw["organization"] = val
+        elif oid == "2.5.4.11":
+            issuer_raw["org_unit"] = val
+        elif oid == "2.5.4.7":
+            issuer_raw["locality"] = val
+        elif oid == "2.5.4.6":
+            issuer_raw["country"] = val
+        elif oid == "2.5.4.5":
+            issuer_raw["serial_number"] = val
+        elif oid == "2.5.4.97":
+            issuer_raw["org_id"] = val
+
+    issuer_name = issuer_raw.get("cn") or issuer_raw.get("organization") or "Невідомий КНЕДП"
+
+    # Чинність
+    now = datetime.now(timezone.utc)
+    vf = cert.not_valid_before_utc
+    vt = cert.not_valid_after_utc
+
+    if now < vf:
+        status_code = "NOT_YET_VALID"
+        status_ukr = "🟡 ЩЕ НЕ НАБУВ ЧИННОСТІ"
+        days_diff = (vf - now).days
+        days_text = f"набуде чинності через {days_diff} дн."
+    elif now > vt:
+        status_code = "EXPIRED"
+        status_ukr = "🔴 ПРОСТРОЧЕНИЙ"
+        days_diff = (now - vt).days
+        days_text = f"прострочено {days_diff} дн. тому"
+    else:
+        status_code = "VALID"
+        status_ukr = "🟢 ДІЙСНИЙ"
+        days_diff = (vt - now).days
+        days_text = f"залишилось {days_diff} дн."
+
+    # CA check
+    is_ca = False
+    try:
+        bc = cert.extensions.get_extension_for_oid(x509.ExtensionOID.BASIC_CONSTRAINTS).value
+        is_ca = bc.ca
+    except Exception:
+        pass
+
+    # QCStatements (eIDAS / ЗУ «Про електронні довірчі послуги»)
+    is_qes = False
+    is_sscd = False
+    is_seal = False
+    try:
+        ext_qc = cert.extensions.get_extension_for_oid(x509.ObjectIdentifier("1.3.6.1.5.5.7.1.3"))
+        raw_qc = ext_qc.value.public_bytes()
+        oids_qc = extract_oids_from_der(raw_qc)
+
+        # 0.4.0.1862.1.1 = id-etsi-qcs-QcCompliance
+        if "0.4.0.1862.1.1" in oids_qc or b"\x04\x00\x8e\x46\x01\x01" in raw_qc:
+            is_qes = True
+
+        # 0.4.0.1862.1.4 = id-etsi-qcs-QcSSCD (Захищений носій / токен / хмарний КЕП)
+        if "0.4.0.1862.1.4" in oids_qc or b"\x04\x00\x8e\x46\x01\x04" in raw_qc:
+            is_sscd = True
+
+        # 0.4.0.194121.1.2 = qcType eseal (електронна печатка)
+        if "0.4.0.194121.1.2" in oids_qc or b"\x04\x00\x8b\xec\x49\x01\x02" in raw_qc or "печатка" in full_name.lower():
+            is_seal = True
+    except Exception:
+        pass
+
+    if is_seal:
+        sig_type_ukr = "🏛️ Кваліфікована електронна печатка" if is_qes else "🏛️ Електронна печатка"
+    elif is_qes:
+        sig_type_ukr = "🟢 Кваліфікований електронний підпис (КЕП / QES)"
+    else:
+        sig_type_ukr = "🟡 Удосконалений електронний підпис (УЕП)"
+
+    token_ukr = "🔒 Захищений носій (Токен / Смарт-картка / Хмарний КЕП / QSCD)" if is_sscd else "💾 Файловий носій (Звичайний ключ)"
+    role_ukr = "Кореневий / Проміжний сертифікат АЦСК (CA)" if is_ca else "Особистий сертифікат користувача (End Entity)"
+
+    # Key Usage
+    key_usages: List[str] = []
+    try:
+        ku = cert.extensions.get_extension_for_oid(x509.ExtensionOID.KEY_USAGE).value
+        if ku.digital_signature:
+            key_usages.append("Цифровий підпис (digitalSignature)")
+        if ku.content_commitment:
+            key_usages.append("Неспростовність / Авторство (nonRepudiation)")
+        if ku.key_encipherment:
+            key_usages.append("Шифрування ключів (keyEncipherment)")
+        if ku.data_encipherment:
+            key_usages.append("Шифрування даних (dataEncipherment)")
+        if ku.key_agreement:
+            key_usages.append("Узгодження ключів (keyAgreement)")
+        if ku.key_cert_sign:
+            key_usages.append("Підпис сертифікатів (keyCertSign)")
+        if ku.crl_sign:
+            key_usages.append("Підпис списків відкликання (cRLSign)")
+    except Exception:
+        pass
+
+    # Extended Key Usage (EKU)
+    extended_key_usages: List[str] = []
+    try:
+        eku = cert.extensions.get_extension_for_oid(x509.ExtensionOID.EXTENDED_KEY_USAGE).value
+        for oid in eku:
+            name = EKU_NAMES.get(oid.dotted_string, oid.dotted_string)
+            extended_key_usages.append(name)
+    except Exception:
+        pass
+
+    # Криптографічні параметри
+    algo_oid = cert.signature_algorithm_oid.dotted_string
+    algo_name = ALGO_NAMES.get(algo_oid, f"OID {algo_oid}")
+
+    serial_hex = hex(cert.serial_number)[2:].upper()
+    serial_dec = str(cert.serial_number)
+
+    sha256_fp = cert.fingerprint(hashes.SHA256()).hex().upper()
+    sha1_fp = cert.fingerprint(hashes.SHA1()).hex().upper()
+
+    # Точки доступу до сервісів КНЕДП
+    ocsp_urls: List[str] = []
+    ca_issuer_urls: List[str] = []
+    try:
+        aia = cert.extensions.get_extension_for_oid(x509.ExtensionOID.AUTHORITY_INFORMATION_ACCESS).value
+        for ad in aia:
+            if ad.access_method.dotted_string == "1.3.6.1.5.5.7.48.1":
+                ocsp_urls.append(str(ad.access_location.value))
+            elif ad.access_method.dotted_string == "1.3.6.1.5.5.7.48.2":
+                ca_issuer_urls.append(str(ad.access_location.value))
+    except Exception:
+        pass
+
+    tsp_urls: List[str] = []
+    try:
+        sia = cert.extensions.get_extension_for_oid(x509.ObjectIdentifier("1.3.6.1.5.5.7.1.11")).value
+        for ad in sia:
+            if ad.access_method.dotted_string == "1.3.6.1.5.5.7.48.3":
+                tsp_urls.append(str(ad.access_location.value))
+    except Exception:
+        pass
+
+    crl_urls: List[str] = []
+    try:
+        cdp = cert.extensions.get_extension_for_oid(x509.ExtensionOID.CRL_DISTRIBUTION_POINTS).value
+        for dp in cdp:
+            if dp.full_name:
+                for name in dp.full_name:
+                    crl_urls.append(str(name.value))
+    except Exception:
+        pass
+
+    return {
+        "file_path": file_path,
+        "subject": {
+            "full_name": full_name,
+            "cn": subject_raw.get("cn"),
+            "surname": subject_raw.get("surname"),
+            "given_name": subject_raw.get("given_name"),
+            "drfo": drfo,
+            "edrpou": edrpou,
+            "passport": subject_raw.get("passport"),
+            "organization": subject_raw.get("organization"),
+            "org_unit": subject_raw.get("org_unit"),
+            "title": subject_raw.get("title"),
+            "locality": subject_raw.get("locality"),
+            "state": subject_raw.get("state"),
+            "country": subject_raw.get("country"),
+            "email": subject_raw.get("email"),
+            "serial_number_raw": sn,
+        },
+        "issuer": {
+            "name": issuer_name,
+            "cn": issuer_raw.get("cn"),
+            "organization": issuer_raw.get("organization"),
+            "org_unit": issuer_raw.get("org_unit"),
+            "org_id": issuer_raw.get("org_id"),
+            "serial_number": issuer_raw.get("serial_number"),
+            "locality": issuer_raw.get("locality"),
+            "country": issuer_raw.get("country"),
+        },
+        "validity": {
+            "not_before": vf.isoformat(),
+            "not_after": vt.isoformat(),
+            "status": status_code,
+            "status_ukr": status_ukr,
+            "days_diff": days_diff,
+            "days_text": days_text,
+        },
+        "classification": {
+            "is_ca": is_ca,
+            "role_ukr": role_ukr,
+            "is_qes": is_qes,
+            "is_sscd": is_sscd,
+            "is_seal": is_seal,
+            "sig_type_ukr": sig_type_ukr,
+            "token_ukr": token_ukr,
+        },
+        "key_usage": {
+            "usages": key_usages,
+            "extended_usages": extended_key_usages,
+        },
+        "crypto": {
+            "algorithm_oid": algo_oid,
+            "algorithm_name": algo_name,
+            "serial_number_hex": serial_hex,
+            "serial_number_dec": serial_dec,
+            "fingerprint_sha256": sha256_fp,
+            "fingerprint_sha1": sha1_fp,
+        },
+        "services": {
+            "ocsp_urls": ocsp_urls,
+            "tsp_urls": tsp_urls,
+            "crl_urls": crl_urls,
+            "ca_issuer_urls": ca_issuer_urls,
+        },
+    }
+
+
+def get_requisites_text(d: Dict[str, Any]) -> str:
+    """Генерує текстовий блок реквізитів для копіювання в судові чи юридичні документи."""
+    subj = d["subject"]
+    iss = d["issuer"]
+    val = d["validity"]
+    cr = d["crypto"]
+    cls = d["classification"]
+
+    lines = []
+    if subj["full_name"]:
+        lines.append(f"Підписувач: {subj['full_name']}")
+    if subj.get("drfo"):
+        lines.append(f"РНОКПП (ІПН): {subj['drfo']}")
+    if subj.get("organization") and subj["organization"] != "ФІЗИЧНА ОСОБА":
+        lines.append(f"Організація: {subj['organization']}")
+    if subj.get("edrpou"):
+        lines.append(f"Код ЄДРПОУ: {subj['edrpou']}")
+    if subj.get("title"):
+        lines.append(f"Посада: {subj['title']}")
+
+    lines.append(f"КНЕДП (АЦСК): {iss['name']}")
+    lines.append(f"Тип підпису: {cls['sig_type_ukr']}")
+    lines.append(f"Носій ключа: {cls['token_ukr']}")
+    lines.append(f"Серійний номер: {cr['serial_number_hex']}")
+
+    dt_from = datetime.fromisoformat(val["not_before"])
+    dt_to = datetime.fromisoformat(val["not_after"])
+    lines.append(f"Термін дії: з {format_date_simple(dt_from)} до {format_date_simple(dt_to)}")
+    lines.append(f"Статус: {val['status_ukr']} ({val['days_text']})")
+
+    return "\n".join(lines)
+
+
+def print_cli_card(d: Dict[str, Any], use_color: bool = True, index: int = 1, total: int = 1):
+    """Виводить презентаційну кольорову картку сертифіката в термінал."""
+    subj = d["subject"]
+    iss = d["issuer"]
+    val = d["validity"]
+    cr = d["crypto"]
+    cls = d["classification"]
+    srv = d["services"]
+
+    status_color = CLR_GREEN if val["status"] == "VALID" else (CLR_RED if val["status"] == "EXPIRED" else CLR_YELLOW)
+    idx_str = f" [{index}/{total}]" if total > 1 else ""
+    fname = os.path.basename(d["file_path"]) if d.get("file_path") else "X.509 Сертифікат"
+
+    print(colorize(f"╔═{'═' * 77}═╗", CLR_CYAN, use_color))
+    print(colorize(f"║ 📜 СЕРТИФІКАТ КНЕДП / АЦСК (X.509){idx_str}", CLR_BOLD + CLR_CYAN, use_color))
+    print(colorize(f"║ Файл: {fname}", CLR_CYAN, use_color))
+    print(colorize(f"╚═{'═' * 77}═╝", CLR_CYAN, use_color))
+
+    # Статус чинності
+    val_status_str = f"{val['status_ukr']} ({val['days_text']})"
+    print(f"  {colorize('Статус чинності:', CLR_BOLD, use_color)}    {colorize(val_status_str, status_color + CLR_BOLD, use_color)}")
+
+    dt_from = datetime.fromisoformat(val["not_before"])
+    dt_to = datetime.fromisoformat(val["not_after"])
+    print(f"  {colorize('Термін дії:', CLR_BOLD, use_color)}         з {format_iso_time(dt_from)} по {format_iso_time(dt_to)}")
+
+    # Власник
+    print(f"\n  {colorize('👤 ВЛАСНИК СЕРТИФІКАТА:', CLR_BOLD + CLR_BLUE, use_color)}")
+    print(f"  ПІБ / Назва:        {colorize(subj['full_name'] or '—', CLR_BOLD, use_color)}")
+    if subj.get("drfo"):
+        print(f"  РНОКПП (ІПН):       {colorize(subj['drfo'], CLR_GREEN, use_color)}")
+    if subj.get("organization") and subj["organization"] != "ФІЗИЧНА ОСОБА":
+        print(f"  Організація:        {subj['organization']}")
+    if subj.get("edrpou"):
+        print(f"  Код ЄДРПОУ:         {colorize(subj['edrpou'], CLR_GREEN, use_color)}")
+    if subj.get("title"):
+        print(f"  Посада:             {subj['title']}")
+    if subj.get("passport"):
+        print(f"  Паспорт:            {subj['passport']}")
+
+    loc_parts = [p for p in [subj.get("locality"), subj.get("state"), subj.get("country")] if p]
+    if loc_parts:
+        print(f"  Місцезнаходження:   {', '.join(loc_parts)}")
+    if subj.get("email"):
+        print(f"  Електронна пошта:   {subj['email']}")
+
+    # Видавець
+    print(f"\n  {colorize('🏛️ НАДАВАЧ (КНЕДП / АЦСК):', CLR_BOLD + CLR_BLUE, use_color)}")
+    print(f"  Назва надавача:     {colorize(iss['name'], CLR_BOLD, use_color)}")
+    if iss.get("organization") and iss["organization"] != iss["name"]:
+        print(f"  Юрособа надавача:   {iss['organization']}")
+    if iss.get("org_id"):
+        print(f"  Код надавача:       {iss['org_id']}")
+    loc_iss = [p for p in [iss.get("locality"), iss.get("country")] if p]
+    if loc_iss:
+        print(f"  Місто надавача:     {', '.join(loc_iss)}")
+
+    # Рівень безпеки
+    print(f"\n  {colorize('🛡️ РІВЕНЬ БЕЗПЕКИ ТА ПРИЗНАЧЕННЯ:', CLR_BOLD + CLR_BLUE, use_color)}")
+    print(f"  Тип підпису:        {cls['sig_type_ukr']}")
+    print(f"  Засіб створення:    {cls['token_ukr']}")
+    print(f"  Роль сертифіката:   {cls['role_ukr']}")
+
+    usages = d["key_usage"]["usages"]
+    if usages:
+        print("  Призначення ключа:")
+        for u in usages:
+            print(f"    • {u}")
+
+    ekus = d["key_usage"]["extended_usages"]
+    if ekus:
+        print("  Розширене використання:")
+        for e in ekus:
+            print(f"    • {e}")
+
+    # Криптографічні параметри
+    print(f"\n  {colorize('🔑 КРИПТОГРАФІЧНІ ПАРАМЕТРИ:', CLR_BOLD + CLR_BLUE, use_color)}")
+    print(f"  Алгоритм підпису:   {colorize(cr['algorithm_name'], CLR_CYAN, use_color)}")
+    print(f"  Серійний номер:     {colorize(cr['serial_number_hex'], CLR_GRAY, use_color)}")
+    print(f"  Відбиток SHA-256:   {colorize(cr['fingerprint_sha256'], CLR_GRAY, use_color)}")
+    print(f"  Відбиток SHA-1:     {colorize(cr['fingerprint_sha1'], CLR_GRAY, use_color)}")
+
+    # Точки перевірки
+    services_list = []
+    if srv["ocsp_urls"]:
+        services_list.append(("OCSP (онлайн-перевірка):", srv["ocsp_urls"][0]))
+    if srv["tsp_urls"]:
+        services_list.append(("TSP (мітка часу):", srv["tsp_urls"][0]))
+    if srv["crl_urls"]:
+        services_list.append(("CRL (список відкликання):", srv["crl_urls"][0]))
+
+    if services_list:
+        print(f"\n  {colorize('🌐 СЕРВІСИ ДОВІРИ (КНЕДП):', CLR_BOLD + CLR_BLUE, use_color)}")
+        for label, url in services_list:
+            print(f"  {label:<25} {url}")
+
+    print(colorize(f"═{'═' * 79}\n", CLR_CYAN, use_color))
+
+
+def print_compact_summary(d: Dict[str, Any], use_color: bool = True):
+    """Компактний однорядковий вивід для пакетної обробки файлів."""
+    subj = d["subject"]["full_name"] or "—"
+    drfo = d["subject"].get("drfo") or "—"
+    iss = d["issuer"]["name"]
+    val = d["validity"]["status_ukr"]
+    sn = d["crypto"]["serial_number_hex"]
+    fname = os.path.basename(d.get("file_path", ""))
+    print(f"{fname:<30} | {subj:<30} | ІПН: {drfo:<10} | {val} | {iss} ({sn[:10]}...)")
+
+
+def show_cert_help_dialog():
+    """Відображає довідкове вікно з поясненням реквізитів сертифікатів КНЕДП."""
+    help_pango = (
+        "<span size='x-large' weight='bold' color='#1a5fb4'>📖 Довідка: Інспектор сертифікатів КНЕДП</span>\n"
+        "<span size='small' color='#666666'>Автономний перегляд та перевірка сертифікатів X.509, ДСТУ 4145, RSA, ECDSA</span>\n\n"
+        "<b>1. ПРИЗНАЧЕННЯ СЕРТИФІКАТА:</b>\n"
+        "• <b>Відкритий сертифікат (.cer, .crt):</b> публічна частина ключа. Не містить секретів і може вільно передаватися клієнтам, судам чи контрагентам.\n"
+        "• <b>Ланцюжок / пакет сертифікатів (.p7b, .p7c):</b> містить сертифікат підписувача та сертифікати проміжних/кореневих ЦСК.\n\n"
+        "<b>2. РІВНІ БЕЗПЕКИ ПІДПИСУ:</b>\n"
+        "• <span color='#1e7e34'><b>КЕП (Кваліфікований):</b></span> найвищий рівень довіри згідно Регламенту eIDAS та Закону України «Про електронну ідентифікацію». Рівнозначний власноручному підпису.\n"
+        "• <b>УЕП (Удосконалений):</b> підпис на базі кваліфікованого сертифіката, але збережений у звичайному файлі без захищеного носія QSCD/токена.\n"
+        "• <b>Печатка юридичної особи:</b> сертифікат підприємства або держустанови для завірення звітів та довідок.\n\n"
+        "<b>3. РЕКВІЗИТИ ТА ІДЕНТИФІКАТОРИ:</b>\n"
+        "• <b>РНОКПП (ІПН):</b> 10-значний номер картки платника податків підписувача (TINUA / ДРФО).\n"
+        "• <b>Код ЄДРПОУ:</b> 8-значний код організації або установи (NTRUA).\n"
+        "• <b>Швидкі кнопки:</b> копіюють номер РНОКПП або готові текстові реквізити для вставки в процесуальні документи та договори в 1 клік.\n\n"
+        "<b>4. КОМАНДИ ТЕРМІНАЛА:</b>\n"
+        "• <code>qes-cert cert.cer</code> — детальний перегляд сертифіката в терміналі\n"
+        "• <code>qes-cert --gui cert.cer</code> — графічна картка GNOME з кнопками копіювання\n"
+        "• <code>qes-cert --json cert.cer</code> — структурований вивід JSON для автоматизації\n"
+        "• <code>qes-cert --raw cert.cer &gt; cert.pem</code> — конвертація у текстовий PEM\n"
+        "• <code>qes-cert bundle.p7b</code> — перегляд усього списку сертифікатів з архіву PKCS#7\n"
+    )
+    subprocess.run([
+        "zenity", "--info",
+        "--title=Довідка — qes-cert",
+        f"--text={help_pango}",
+        "--ok-label=Зрозуміло",
+        "--width=640"
+    ])
+
+
+def show_gui_dialog(certs_data: List[Dict[str, Any]], file_path: str):
+    """Відображає інтерактивну картку або список сертифікатів у вікні Zenity GNOME."""
+    if not certs_data:
+        return
+
+    # Якщо сертифікатів кілька (наприклад у .p7b бандлі), спершу показуємо меню вибору
+    if len(certs_data) > 1:
+        while True:
+            list_cmd = [
+                "zenity", "--list",
+                f"--title=Пакет сертифікатів КНЕДП ({len(certs_data)} шт.) — {os.path.basename(file_path)}",
+                "--text=Оберіть сертифікат для детального перегляду:",
+                "--column=#",
+                "--column=Тип",
+                "--column=Власник / Назва",
+                "--column=Надавач (КНЕДП)",
+                "--column=Дійсний до",
+                "--column=Статус",
+                "--width=860",
+                "--height=480",
+                "--ok-label=Переглянути картку",
+                "--cancel-label=Закрити",
+                "--extra-button=📖 Довідка / Help",
+            ]
+            for idx, c in enumerate(certs_data, 1):
+                c_type = "🏛️ Печатка" if c["classification"]["is_seal"] else ("CA" if c["classification"]["is_ca"] else ("КЕП" if c["classification"]["is_qes"] else "УЕП"))
+                dt_to = datetime.fromisoformat(c["validity"]["not_after"])
+                list_cmd.extend([
+                    str(idx),
+                    c_type,
+                    c["subject"]["full_name"] or c["subject"]["cn"] or "—",
+                    c["issuer"]["name"],
+                    format_date_simple(dt_to),
+                    c["validity"]["status_ukr"],
+                ])
+
+            res = subprocess.run(list_cmd, stdout=subprocess.PIPE, text=True)
+            chosen = res.stdout.strip()
+            if not chosen:
+                return  # Закриття вікна
+
+            if "Довідка" in chosen:
+                show_cert_help_dialog()
+                continue
+
+            try:
+                chosen_idx = int(chosen) - 1
+                if 0 <= chosen_idx < len(certs_data):
+                    # Відкриваємо деталі конкретного сертифіката
+                    back_to_list = show_single_cert_gui(certs_data[chosen_idx], file_path, allow_back=True)
+                    if not back_to_list:
+                        return
+            except ValueError:
+                return
+    else:
+        show_single_cert_gui(certs_data[0], file_path, allow_back=False)
+
+
+def show_single_cert_gui(d: Dict[str, Any], file_path: str, allow_back: bool = False) -> bool:
+    """Відображає картку одного сертифіката в Zenity з кнопками копіювання в буфер."""
+    subj = d["subject"]
+    iss = d["issuer"]
+    val = d["validity"]
+    cr = d["crypto"]
+    cls = d["classification"]
+
+    status_color = "#1e7e34" if val["status"] == "VALID" else ("#d9534f" if val["status"] == "EXPIRED" else "#f0ad4e")
+    dt_from = datetime.fromisoformat(val["not_before"])
+    dt_to = datetime.fromisoformat(val["not_after"])
+
+    lines = []
+    lines.append(f"<span size='x-large' weight='bold' color='{status_color}'>{val['status_ukr']}</span>")
+    lines.append(f"<span size='small' color='#666666'>Файл: {os.path.basename(file_path)}</span>\n")
+
+    lines.append("<b>── Власник сертифіката ──</b>")
+    lines.append(f"<b>ПІБ / Назва:</b> {subj['full_name'] or '—'}")
+    if subj.get("drfo"):
+        lines.append(f"<b>РНОКПП (ІПН):</b> <span color='#1e7e34'>{subj['drfo']}</span>")
+    if subj.get("organization") and subj["organization"] != "ФІЗИЧНА ОСОБА":
+        lines.append(f"<b>Організація:</b> {subj['organization']}")
+    if subj.get("edrpou"):
+        lines.append(f"<b>Код ЄДРПОУ:</b> <span color='#1e7e34'>{subj['edrpou']}</span>")
+    if subj.get("title"):
+        lines.append(f"<b>Посада:</b> {subj['title']}")
+
+    loc_parts = [p for p in [subj.get("locality"), subj.get("state"), subj.get("country")] if p]
+    if loc_parts:
+        lines.append(f"<b>Місцезнаходження:</b> {', '.join(loc_parts)}")
+    if subj.get("email"):
+        lines.append(f"<b>Електронна пошта:</b> {subj['email']}")
+
+    lines.append("\n<b>── Надавач (КНЕДП / АЦСК) ──</b>")
+    lines.append(f"<b>АЦСК:</b> {iss['name']}")
+    if iss.get("organization") and iss["organization"] != iss["name"]:
+        lines.append(f"<b>Організація:</b> {iss['organization']}")
+
+    lines.append("\n<b>── Чинність та рівень безпеки ──</b>")
+    lines.append(f"<b>Дія сертифіката:</b> з {format_date_simple(dt_from)} до {format_date_simple(dt_to)}")
+    lines.append(f"<b>Залишилось:</b> {val['days_text']}")
+    lines.append(f"<b>Тип підпису:</b> {cls['sig_type_ukr']}")
+    lines.append(f"<b>Носій ключа:</b> {cls['token_ukr']}")
+
+    if d["key_usage"]["usages"]:
+        lines.append(f"<b>Призначення:</b> {', '.join(d['key_usage']['usages'])}")
+
+    lines.append("\n<b>── Криптографічні параметри ──</b>")
+    lines.append(f"<b>Алгоритм:</b> {cr['algorithm_name']}")
+    lines.append(f"<b>Серійний номер:</b> <tt>{cr['serial_number_hex']}</tt>")
+    lines.append(f"<b>SHA-256 відбиток:</b> <tt>{cr['fingerprint_sha256']}</tt>")
+
+    pango_text = "\n".join(lines)
+    requisites = get_requisites_text(d)
+
+    while True:
+        cmd = [
+            "zenity", "--info",
+            f"--title=Сертифікат КНЕДП — {os.path.basename(file_path)}",
+            f"--text={pango_text}",
+            "--ok-label=Закрити",
+            "--width=620",
+        ]
+
+        if allow_back:
+            cmd.append("--extra-button=🔙 До списку сертифікатів")
+
+        if subj.get("drfo"):
+            cmd.append(f"--extra-button=📋 Скопіювати РНОКПП ({subj['drfo']})")
+        if subj.get("edrpou"):
+            cmd.append(f"--extra-button=📋 Скопіювати ЄДРПОУ ({subj['edrpou']})")
+        cmd.append("--extra-button=📋 Скопіювати повні реквізити")
+        cmd.append("--extra-button=📖 Довідка / Help")
+
+        proc = subprocess.run(cmd, stdout=subprocess.PIPE, text=True)
+        clicked = proc.stdout.strip()
+
+        if "🔙 До списку" in clicked:
+            return True
+        elif "Довідка" in clicked:
+            show_cert_help_dialog()
+            continue
+        elif "Скопіювати РНОКПП" in clicked and subj.get("drfo"):
+            copy_to_clipboard(subj["drfo"])
+            notify("КЕП Сертифікат", f"РНОКПП {subj['drfo']} скопійовано в буфер обміну")
+            continue
+        elif "Скопіювати ЄДРПОУ" in clicked and subj.get("edrpou"):
+            copy_to_clipboard(subj["edrpou"])
+            notify("КЕП Сертифікат", f"ЄДРПОУ {subj['edrpou']} скопійовано в буфер обміну")
+            continue
+        elif "Скопіювати повні реквізити" in clicked:
+            copy_to_clipboard(requisites)
+            notify("КЕП Сертифікат", "Реквізити підписувача скопійовано в буфер обміну")
+            continue
+        else:
+            return False
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="""================================================================================
+  qes-cert — швидкий інспектор сертифікатів КНЕДП / АЦСК (X.509, ДСТУ, RSA, ECDSA)
+  Версія 1.0.0 | 100% Offline-First | Захист адвокатської таємниці
+================================================================================
+
+ОПИС:
+  Переглядає та аналізує відкриті сертифікати кваліфікованих надавачів електронних
+  довірчих послуг України (КНЕДП monobank, Дія, ПриватБанк, ДПС, НАІС, Вчасно тощо).
+  Розпізнає ПІБ, РНОКПП (ІПН), ЄДРПОУ, посаду, термін дії, алгоритми ДСТУ 4145-2002,
+  рівень безпеки (КЕП / УЕП / QSCD токен), призначення ключів та точки OCSP/TSP/CRL.
+  Дозволяє за один клік скопіювати реквізити підписувача для договорів чи позовів.""",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""ПРИКЛАДИ КОМАНД:
+  1. Швидкий перегляд сертифіката в терміналі:
+     $ qes-cert my_cert.cer
+
+  2. Графічна картка в GNOME (з кнопками копіювання РНОКПП/реквізитів та довідкою):
+     $ qes-cert --gui my_cert.cer
+
+  3. Отримання структурованих даних у форматі JSON для скриптів:
+     $ qes-cert --json my_cert.cer
+
+  4. Перегляд пакета сертифікатів банку чи АЦСК (.p7b):
+     $ qes-cert --gui mono.p7b
+
+  5. Компактний однорядковий підсумок кількох сертифікатів:
+     $ qes-cert -q cert1.cer cert2.cer cert3.cer
+
+  6. Експорт відкритого сертифіката в чистий текстовий PEM формат:
+     $ qes-cert --raw my_cert.cer > cert.pem
+================================================================================"""
+    )
+    parser.add_argument("files", nargs="*", default=[], help="Шлях до файлу(-ів) сертифікатів (.cer, .crt, .der, .pem, .p7b)")
+    parser.add_argument("-j", "--json", action="store_true", help="Вивести результат у структурованому форматі JSON")
+    parser.add_argument("-g", "--gui", action="store_true", help="Показати картку в графічному вікні GNOME (Zenity)")
+    parser.add_argument("-r", "--raw", action="store_true", help="Вивести сертифікат(и) у відкритому текстовому форматі PEM")
+    parser.add_argument("-q", "--quiet", action="store_true", help="Компактний однорядковий підсумок по кожному сертифікату")
+    parser.add_argument("--no-color", action="store_true", help="Вимкнути ANSI кольори в терміналі")
+
+    args = parser.parse_args()
+
+    if not args.files:
+        if args.gui:
+            cmd_sel = [
+                "zenity", "--file-selection",
+                "--title=Оберіть відкритий сертифікат КНЕДП (.cer / .crt / .p7b)",
+                "--file-filter=Сертифікати (*.cer *.crt *.p7b *.pem *.der) | *.cer *.crt *.p7b *.pem *.der",
+                "--file-filter=Усі файли (*.*) | *.*",
+            ]
+            sel_res = subprocess.run(cmd_sel, stdout=subprocess.PIPE, text=True)
+            chosen = sel_res.stdout.strip()
+            if not chosen:
+                sys.exit(0)
+            args.files = [chosen]
+        else:
+            parser.print_help()
+            sys.exit(1)
+
+    use_color = not args.no_color and sys.stdout.isatty() and not args.json and not args.gui
+
+    all_certs_inspected: List[Dict[str, Any]] = []
+    overall_ok = True
+
+    for item in args.files:
+        p = Path(item)
+        if not p.exists():
+            sys.stderr.write(f"Помилка: файл '{item}' не знайдено.\n")
+            overall_ok = False
+            continue
+
+        try:
+            x509_objs = load_certificates_from_file(str(p.resolve()))
+        except Exception as e:
+            sys.stderr.write(f"Помилка завантаження '{item}': {e}\n")
+            overall_ok = False
+            continue
+
+        file_inspected = []
+        for c in x509_objs:
+            if args.raw:
+                print(c.public_bytes(Encoding.PEM).decode("utf-8").strip())
+                continue
+
+            info = inspect_certificate(c, str(p.resolve()))
+            file_inspected.append(info)
+            all_certs_inspected.append(info)
+
+        if args.raw:
+            continue
+
+        if args.gui:
+            show_gui_dialog(file_inspected, str(p.resolve()))
+        elif not args.json:
+            for idx, info in enumerate(file_inspected, 1):
+                if args.quiet:
+                    print_compact_summary(info, use_color)
+                else:
+                    print_cli_card(info, use_color, index=idx, total=len(file_inspected))
+
+    if args.json:
+        print(json.dumps(all_certs_inspected, indent=2, ensure_ascii=False))
+
+    sys.exit(0 if overall_ok else 1)
+
+
+if __name__ == "__main__":
+    main()

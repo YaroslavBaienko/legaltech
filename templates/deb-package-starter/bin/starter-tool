@@ -1,0 +1,3 @@
+#!/bin/sh
+# Лаунчер-обгортка для /usr/bin/{{PACKAGE_NAME}}
+exec /usr/lib/{{PACKAGE_NAME}}/main.sh "$@"

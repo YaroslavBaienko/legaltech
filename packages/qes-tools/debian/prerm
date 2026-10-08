@@ -1,0 +1,8 @@
+#!/bin/sh
+set -e
+
+if [ "$1" = "remove" ] || [ "$1" = "purge" ]; then
+    rm -f /usr/bin/qes-sign /usr/bin/qes-verify /usr/bin/qes-encrypt /usr/bin/qes-decrypt /usr/bin/qes-export-cert /usr/bin/qes-pdf-court 2>/dev/null || true
+fi
+
+exit 0

@@ -1,0 +1,17 @@
+#!/usr/bin/make -f
+# debian/rules — стандартний сценарій збірки для debhelper
+export DH_VERBOSE = 1
+
+%:
+	dh $@
+
+override_dh_auto_build:
+	# Команди компіляції або підготовки, якщо потрібні
+	@true
+
+override_dh_auto_install:
+	# Автоматичне встановлення файлів у каталоги системи
+	install -d debian/$(DEB_SOURCE)/usr/bin
+	install -d debian/$(DEB_SOURCE)/usr/lib/$(DEB_SOURCE)
+	install -m 0755 bin/* debian/$(DEB_SOURCE)/usr/bin/
+	cp -r src/* debian/$(DEB_SOURCE)/usr/lib/$(DEB_SOURCE)/ 2>/dev/null || true

@@ -1,0 +1,13 @@
+Package: {{PACKAGE_NAME}}
+Version: {{VERSION}}
+Section: utils
+Priority: optional
+Architecture: {{ARCH}}
+Maintainer: {{MAINTAINER_NAME}} <{{MAINTAINER_EMAIL}}>
+Depends: bash (>= 5.0)
+Recommends: libnotify-bin
+Homepage: {{HOMEPAGE}}
+Description: {{DESCRIPTION_SHORT}}
+ {{DESCRIPTION_LONG}}
+ .
+ Developed as part of open source Debian tooling.

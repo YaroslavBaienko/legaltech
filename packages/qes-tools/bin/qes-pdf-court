@@ -1,0 +1,196 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# qes-pdf-court — Оптимізація та підготовка PDF для системи «Електронний суд»
+# Лінеаризація (Fast Web View), стиснення потоків об'єктів та перевірка лімітів (50 МБ)
+# ==============================================================================
+set -euo pipefail
+
+CLR_RESET="\033[0m"
+CLR_BOLD="\033[1m"
+CLR_GREEN="\033[32m"
+CLR_RED="\033[31m"
+CLR_YELLOW="\033[33m"
+CLR_CYAN="\033[36m"
+CLR_GRAY="\033[90m"
+
+show_help() {
+    echo -e "${CLR_BOLD}${CLR_CYAN}================================================================================${CLR_RESET}"
+    echo -e "${CLR_BOLD}${CLR_CYAN}  qes-pdf-court — оптимізація PDF для підсистеми «Електронний суд»${CLR_RESET}"
+    echo -e "${CLR_BOLD}${CLR_CYAN}  Лінеаризація, компресія об'єктів та валідація сумісності (ліміт 50 МБ)${CLR_RESET}"
+    echo -e "${CLR_BOLD}${CLR_CYAN}================================================================================${CLR_RESET}"
+    echo ""
+    echo -e "${CLR_BOLD}ОПИС:${CLR_RESET}"
+    echo -e "  Готує PDF-документи до завантаження в підсистему «Електронний суд» України:"
+    echo -e "  1. Виконує лінеаризацію (Fast Web View / структурований вивід для миттєвого відкриття судом)."
+    echo -e "  2. Стискає внутрішні потоки об'єктів без втрати якості та читабельності тексту."
+    echo -e "  3. Перевіряє жорстке технічне обмеження розміру (до 50 МБ на один додаток)."
+    echo ""
+    echo -e "${CLR_BOLD}ВИКОРИСТАННЯ:${CLR_RESET}"
+    echo -e "  qes-pdf-court [ОПЦІЇ] <файл1.pdf> [файл2.pdf ...]"
+    echo ""
+    echo -e "${CLR_BOLD}ОПЦІЇ:${CLR_RESET}"
+    echo -e "  ${CLR_GREEN}--ocr${CLR_RESET}                 Виконати оптичне розпізнавання тексту (OCR) перед оптимізацією"
+    echo -e "  ${CLR_GREEN}-l, --lang <мова>${CLR_RESET}     Мова OCR: ukr+eng (за замовчуванням), ukr, eng"
+    echo -e "  ${CLR_GREEN}-e, --eng, --en${CLR_RESET}       ${CLR_BOLD}Чиста Англійська мова OCR${CLR_RESET} (для міжнародних контрактів, інвойсів)"
+    echo -e "  ${CLR_GREEN}-u, --ukr, --ua${CLR_RESET}       ${CLR_BOLD}Чиста Українська мова OCR${CLR_RESET} (для позовів, ухвал, скарг, протоколів)"
+    echo -e "  ${CLR_GREEN}-b, --bilingual${CLR_RESET}       ${CLR_BOLD}Двомовний режим OCR${CLR_RESET} (українська + англійська: ukr+eng)"
+    echo -e "  ${CLR_GREEN}-o, --output <шлях>${CLR_RESET}   Назва вихідного файлу (якщо обробляється один документ)"
+    echo -e "  ${CLR_GREEN}--gui${CLR_RESET}                 Показувати сповіщення та діалогові вікна GNOME"
+    echo -e "  ${CLR_GREEN}-h, --help${CLR_RESET}            Показати цю довідку"
+    echo ""
+    echo -e "${CLR_BOLD}ПРИКЛАДИ КОМАНД:${CLR_RESET}"
+    echo -e "  1. Підготовка позовної заяви для системи «Електронний суд» (лінеаризація, < 50 МБ):"
+    echo -e "     $ qes-pdf-court lawsuit_statement.pdf"
+    echo ""
+    echo -e "  2. Оптимізація скану англомовного контракту (чиста англійська OCR):"
+    echo -e "     $ qes-pdf-court --eng foreign_contract.pdf"
+    echo ""
+    echo -e "  3. Оптимізація скану українського документа (чиста українська OCR):"
+    echo -e "     $ qes-pdf-court --ukr petition_scan.pdf"
+    echo ""
+    echo -e "  4. Двомовний скан або скан за замовчуванням:"
+    echo -e "     $ qes-pdf-court --ocr contract_bilingual.pdf"
+    echo ""
+    echo -e "  5. Пакетна оптимізація кількох додатків до позову:"
+    echo -e "     $ qes-pdf-court annex1.pdf annex2.pdf annex3.pdf"
+    echo ""
+    echo -e "  6. Графічний режим GNOME:"
+    echo -e "     $ qes-pdf-court --gui lawsuit.pdf"
+    echo -e "${CLR_CYAN}================================================================================${CLR_RESET}"
+    exit 0
+}
+
+USE_GUI=false
+USE_OCR=false
+OCR_LANG="ukr+eng"
+OUTPUT_PATH=""
+FILES=()
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        -h|--help)
+            show_help
+            ;;
+        --gui)
+            USE_GUI=true
+            shift
+            ;;
+        --ocr)
+            USE_OCR=true
+            shift
+            ;;
+        -l|--lang)
+            OCR_LANG="$2"
+            shift 2
+            ;;
+        -e|--en|--eng|--english)
+            USE_OCR=true
+            OCR_LANG="eng"
+            shift
+            ;;
+        -u|--ua|--ukr|--ukrainian)
+            USE_OCR=true
+            OCR_LANG="ukr"
+            shift
+            ;;
+        -b|--bi|--bilingual)
+            USE_OCR=true
+            OCR_LANG="ukr+eng"
+            shift
+            ;;
+        -o|--output)
+            OUTPUT_PATH="$2"
+            shift 2
+            ;;
+        -*)
+            echo -e "${CLR_RED}Невідомий параметр: $1${CLR_RESET}" >&2
+            exit 1
+            ;;
+        *)
+            FILES+=("$1")
+            shift
+            ;;
+    esac
+done
+
+if [[ "$USE_OCR" = true ]]; then
+    SCRIPT_DIR="$(dirname "$(realpath "$0")")"
+    OCR_BIN="${SCRIPT_DIR}/qes-ocr"
+    if [[ ! -x "$OCR_BIN" ]]; then
+        OCR_BIN="qes-ocr"
+    fi
+    OCR_ARGS=()
+    [[ "$USE_GUI" = true ]] && OCR_ARGS+=(--gui)
+    [[ -n "$OCR_LANG" ]] && OCR_ARGS+=(-l "$OCR_LANG")
+    [[ -n "$OUTPUT_PATH" ]] && OCR_ARGS+=(-o "$OUTPUT_PATH")
+    OCR_ARGS+=("${FILES[@]}")
+    exec "$OCR_BIN" "${OCR_ARGS[@]}"
+fi
+
+if [[ ${#FILES[@]} -eq 0 ]]; then
+    if [[ "$USE_GUI" = true ]]; then
+        CHOSEN=$(zenity --file-selection \
+            --title="Оберіть PDF-документ для оптимізації (Електронний суд)" \
+            --file-filter="PDF Документи (*.pdf) | *.pdf" \
+            --file-filter="Усі файли (*.*) | *.*" 2>/dev/null || true)
+        if [[ -z "$CHOSEN" ]]; then
+            exit 0
+        fi
+        FILES+=("$CHOSEN")
+    else
+        echo -e "${CLR_RED}Помилка: не вказано PDF-файл(и) для оптимізації.${CLR_RESET}" >&2
+        exit 1
+    fi
+fi
+
+if ! command -v qpdf >/dev/null 2>&1; then
+    echo -e "${CLR_RED}Помилка: утиліту 'qpdf' не знайдено. Встановіть через 'sudo apt install qpdf'.${CLR_RESET}" >&2
+    if [[ "$USE_GUI" = true ]]; then
+        zenity --error --title="Помилка" --text="Утиліту qpdf не знайдено в системі."
+    fi
+    exit 1
+fi
+
+COURT_LIMIT_BYTES=$((50 * 1024 * 1024)) # 50 MB
+
+for file in "${FILES[@]}"; do
+    if [[ ! -f "$file" ]]; then
+        echo -e "${CLR_RED}Помилка: файл '$file' не знайдено.${CLR_RESET}" >&2
+        continue
+    fi
+
+    dir_name="$(dirname "$file")"
+    base_name="$(basename "$file")"
+    stem="${base_name%.*}"
+
+    if [[ ${#FILES[@]} -eq 1 && -n "$OUTPUT_PATH" ]]; then
+        target_out="$OUTPUT_PATH"
+    else
+        target_out="${dir_name}/${stem}_court.pdf"
+    fi
+
+    orig_size=$(stat -c%s "$file")
+
+    echo -e "${CLR_CYAN}⏳ Оптимізація: ${base_name} ($(numfmt --to=iec-i --suffix=B "$orig_size"))...${CLR_RESET}"
+
+    qpdf --linearize --compress-streams=y --object-streams=generate "$file" "$target_out"
+
+    new_size=$(stat -c%s "$target_out")
+    diff_percent=$(( 100 - (new_size * 100 / orig_size) ))
+
+    echo -e "${CLR_GREEN}✅ Створено: ${target_out}${CLR_RESET}"
+    echo -e "   Розмір: $(numfmt --to=iec-i --suffix=B "$new_size") (економія: ${diff_percent}%)"
+
+    if [[ "$new_size" -gt "$COURT_LIMIT_BYTES" ]]; then
+        warn_msg="⚠️ УВАГА: Розмір файлу перевищує 50 МБ! Підсистема «Електронний суд» відхилить такий додаток. Розбийте документ на частини."
+        echo -e "${CLR_YELLOW}${warn_msg}${CLR_RESET}\n"
+        if [[ "$USE_GUI" = true ]]; then
+            zenity --warning --title="Електронний суд: Ліміт перевищено" --text="Файл <b>${target_out}</b> має розмір $(numfmt --to=iec-i --suffix=B "$new_size"), що перевищує ліміт 50 МБ!"
+        fi
+    else
+        echo -e "${CLR_GREEN}   [Сумісність]: Відповідає вимогам підсистеми «Електронний суд» (ліміт < 50 МБ).${CLR_RESET}\n"
+        if [[ "$USE_GUI" = true ]]; then
+            notify-send -a "QES Tools" -i "document-send" "⚖️ Оптимізовано для Е-Суду" "Файл: $(basename "$target_out")\nРозмір: $(numfmt --to=iec-i --suffix=B "$new_size") (ліміт до 50 МБ дотримано)"
+        fi
+    fi
+done

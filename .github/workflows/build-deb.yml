@@ -1,0 +1,45 @@
+name: Build Debian Packages
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-qes-tools:
+    name: Build qes-tools .deb
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Build Tools & Lintian
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y dpkg-dev binutils lintian xz-utils
+
+      - name: Install Typst (Static Binary)
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          curl -sSL "https://github.com/typst/typst/releases/download/v0.12.0/typst-x86_64-unknown-linux-musl.tar.xz" | tar -xJ -C /tmp
+          mv /tmp/typst-*/typst "$HOME/.local/bin/typst"
+          chmod +x "$HOME/.local/bin/typst"
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Build qes-tools .deb
+        working-directory: packages/qes-tools
+        run: ./build.sh
+
+      - name: Upload Debian Package Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: qes-tools-deb
+          path: packages/qes-tools/dist/*.deb
+          if-no-files-found: error

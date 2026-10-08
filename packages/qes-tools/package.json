@@ -1,0 +1,36 @@
+{
+  "name": "qes-tools",
+  "version": "1.0.2",
+  "description": "Offline-first Ukrainian Qualified Electronic Signature (QES / КЕП) signer tool for DSTU 4145-2002 & PKCS#12 containers",
+  "main": "src/index.js",
+  "bin": {
+    "qes-sign": "bin/qes-sign.js",
+    "qes-agent": "bin/qes-agent.js",
+    "qes-encrypt": "bin/qes-encrypt.js",
+    "qes-decrypt": "bin/qes-decrypt.js",
+    "qes-export-cert": "bin/qes-export-cert.js"
+  },
+  "scripts": {
+    "test": "node --test tests/signer.test.js"
+  },
+  "keywords": [
+    "qes",
+    "kep",
+    "dstu4145",
+    "cades",
+    "ukraine",
+    "legaltech"
+  ],
+  "author": "Yaroslav Baienko / LegalTech Stack",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "@signpdf/placeholder-pdf-lib": "^3.3.0",
+    "@signpdf/signpdf": "^3.3.0",
+    "@signpdf/utils": "^3.3.0",
+    "dstucrypt-algos": "^1.0.1",
+    "gost89": "^0.1.12",
+    "jkurwa": "^1.22.9",
+    "pdf-lib": "npm:pdf-lib-incremental-save@^1.17.4",
+    "qrcode": "^1.5.4"
+  }
+}

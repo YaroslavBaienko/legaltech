@@ -1,0 +1,88 @@
+#!/bin/sh
+set -e
+
+if [ "$1" = "configure" ]; then
+    chmod 0755 /usr/bin/qes-sign 2>/dev/null || true
+    chmod 0755 /usr/bin/qes-verify 2>/dev/null || true
+    chmod 0755 /usr/bin/qes-cert 2>/dev/null || true
+    chmod 0755 /usr/bin/qes-encrypt 2>/dev/null || true
+    chmod 0755 /usr/bin/qes-decrypt 2>/dev/null || true
+    chmod 0755 /usr/bin/qes-export-cert 2>/dev/null || true
+    chmod 0755 /usr/bin/qes-pdf-court 2>/dev/null || true
+    chmod 0755 /usr/bin/qes-agent 2>/dev/null || true
+    chmod 0755 /usr/bin/qes-ocr 2>/dev/null || true
+    if [ -f /usr/lib/qes-tools/bin/typst ]; then
+        chmod 0755 /usr/lib/qes-tools/bin/typst 2>/dev/null || true
+    fi
+
+    # Повне видалення застарілих .desktop файлів (залишаємо виключно контекстне меню Nautilus)
+    rm -f /usr/share/applications/qes-*.desktop 2>/dev/null || true
+    for user_home in /home/*; do
+        if [ -d "$user_home" ]; then
+            rm -f "$user_home/.local/share/applications/qes-"*.desktop 2>/dev/null || true
+            rm -f "$user_home/Desktop/qes-"*.desktop 2>/dev/null || true
+            rm -f "$user_home/Стільниця/qes-"*.desktop 2>/dev/null || true
+        fi
+    done
+    if [ -n "${SUDO_USER:-}" ]; then
+        sudo_home=$(getent passwd "$SUDO_USER" | cut -d: -f6)
+        if [ -n "$sudo_home" ] && [ -d "$sudo_home" ]; then
+            rm -f "$sudo_home/.local/share/applications/qes-"*.desktop 2>/dev/null || true
+            rm -f "$sudo_home/Desktop/qes-"*.desktop 2>/dev/null || true
+            rm -f "$sudo_home/Стільниця/qes-"*.desktop 2>/dev/null || true
+        fi
+    fi
+    update-desktop-database /usr/share/applications 2>/dev/null || true
+
+    # Розгортання скриптів Nautilus у домашні каталоги
+    if [ -d /usr/share/nautilus-scripts ]; then
+        mkdir -p /etc/skel/.local/share/nautilus/scripts/
+        rm -rf "/etc/skel/.local/share/nautilus/scripts/🔐 КЕП та Безпека"
+        cp -r "/usr/share/nautilus-scripts/🔐 КЕП та Безпека" /etc/skel/.local/share/nautilus/scripts/ 2>/dev/null || true
+
+        for user_home in /home/*; do
+            if [ -d "$user_home" ]; then
+                u=$(basename "$user_home")
+                if id "$u" >/dev/null 2>&1; then
+                    user_scripts="$user_home/.local/share/nautilus/scripts"
+                    mkdir -p "$user_scripts"
+                    rm -rf "$user_scripts/🔐 КЕП та Безпека"
+                    cp -r "/usr/share/nautilus-scripts/🔐 КЕП та Безпека" "$user_scripts/" 2>/dev/null || true
+                    chmod -R 0755 "$user_scripts/🔐 КЕП та Безпека" 2>/dev/null || true
+                    chown -R "$u:" "$user_scripts/🔐 КЕП та Безпека" 2>/dev/null || true
+                fi
+            fi
+        done
+
+        if [ -n "${SUDO_USER:-}" ] && id "$SUDO_USER" >/dev/null 2>&1; then
+            sudo_home=$(getent passwd "$SUDO_USER" | cut -d: -f6)
+            if [ -n "$sudo_home" ] && [ -d "$sudo_home" ]; then
+                sudo_scripts="$sudo_home/.local/share/nautilus/scripts"
+                mkdir -p "$sudo_scripts"
+                rm -rf "$sudo_scripts/🔐 КЕП та Безпека"
+                cp -r "/usr/share/nautilus-scripts/🔐 КЕП та Безпека" "$sudo_scripts/" 2>/dev/null || true
+                chmod -R 0755 "$sudo_scripts/🔐 КЕП та Безпека" 2>/dev/null || true
+                chown -R "$SUDO_USER:" "$sudo_scripts/🔐 КЕП та Безпека" 2>/dev/null || true
+            fi
+        fi
+
+        # Перезавантаження процесів Nautilus для миттєвого оновлення меню
+        pkill -x nautilus 2>/dev/null || true
+    fi
+
+    echo "================================================================================"
+    echo " 🇺🇦 Встановлено комплекс електронного підпису та шифрування qes-tools v1.0.2"
+    echo " • qes-sign        — підписання (CAdES .p7s, PAdES .pdf, ASiC-E .asice, мультипідпис)"
+    echo " • qes-verify      — перевірка підписів (.p7s, .pdf, .asice) та сертифікатів"
+    echo " • qes-cert        — швидкий інспектор сертифікатів КНЕДП / АЦСК (X.509, ДСТУ 4145)"
+    echo " • qes-ocr         — розпізнавання тексту OCR для «Е-Суду» (чиста англійська, українська)"
+    echo " • qes-pdf-court   — оптимізація PDF для «Електронного суду» (лінеаризація, 50 МБ)"
+    echo " • qes-encrypt     — шифрування (ДСТУ 4145 / ГОСТ 28147:89 .enc/.p7e)"
+    echo " • qes-decrypt     — розшифрування особистим КЕП"
+    echo " • qes-export-cert — експорт відкритого сертифіката (.cer)"
+    echo " • qes-agent       — менеджер пам'яті паролів сесії (Session TTL)"
+    echo " 🖱️ Інтегровано у файловий менеджер GNOME (правий клік -> Скрипти -> 🔐 КЕП та Безпека)"
+    echo "================================================================================"
+fi
+
+exit 0
