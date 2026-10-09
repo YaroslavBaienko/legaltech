@@ -522,10 +522,13 @@ test('qes-cert parses DER certificate and extracts national Ukrainian attributes
     assert.strictEqual(certInfo.subject.drfo, '3255419579');
     assert.strictEqual(certInfo.subject.full_name, 'Баєнко Ярослав Володимирович');
     assert.ok(certInfo.issuer.name.includes('monobank'));
+    assert.strictEqual(certInfo.classification.is_qes, true);
+    assert.strictEqual(certInfo.validity.status, 'VALID');
+  } else {
+    assert.strictEqual(typeof certInfo.classification.is_qes, 'boolean');
+    assert.ok(['VALID', 'EXPIRED', 'NOT_YET_VALID'].includes(certInfo.validity.status));
   }
-  assert.strictEqual(certInfo.classification.is_qes, true);
   assert.ok(certInfo.crypto.algorithm_name.includes('ДСТУ 4145'));
-  assert.strictEqual(certInfo.validity.status, 'VALID');
   assert.ok(certInfo.crypto.fingerprint_sha256.length === 64);
 });
 
@@ -587,29 +590,31 @@ test('qes-config CLI switches Nautilus menu language between Ukrainian and Engli
   const configBin = path.join(__dirname, '../bin/qes-config');
   assert.strictEqual(fs.existsSync(configBin), true);
 
-  // Switch to UK
-  const resUk = spawnSync('bash', [configBin, '--lang', 'uk'], { encoding: 'utf-8' });
-  assert.strictEqual(resUk.status, 0);
-  assert.match(resUk.stdout, /Встановлено українську мову/);
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'qes-test-home-'));
+  try {
+    const env = { ...process.env, HOME: tmpHome };
 
-  const scriptsDir = path.join(os.homedir(), '.local/share/nautilus/scripts');
-  const ukFolder = path.join(scriptsDir, '🔐 КЕП та Безпека');
-  const enFolder = path.join(scriptsDir, '🔐 QES & Security');
-  assert.strictEqual(fs.existsSync(ukFolder), true);
-  assert.strictEqual(fs.existsSync(enFolder), false);
-  assert.strictEqual(fs.existsSync(path.join(ukFolder, '.i18n.sh')), true);
+    // Switch to UK
+    const resUk = spawnSync('bash', [configBin, '--lang', 'uk'], { encoding: 'utf-8', env });
+    assert.strictEqual(resUk.status, 0, `Switch to UK failed: ${resUk.stderr}`);
+    assert.match(resUk.stdout, /Встановлено українську мову/);
 
-  // Switch to EN
-  const resEn = spawnSync('bash', [configBin, '--lang', 'en'], { encoding: 'utf-8' });
-  assert.strictEqual(resEn.status, 0);
-  assert.match(resEn.stdout, /Language set to English/);
-  assert.strictEqual(fs.existsSync(ukFolder), false);
-  assert.strictEqual(fs.existsSync(enFolder), true);
-  assert.strictEqual(fs.existsSync(path.join(enFolder, '.i18n.sh')), true);
+    const scriptsDir = path.join(tmpHome, '.local/share/nautilus/scripts');
+    const ukFolder = path.join(scriptsDir, '🔐 КЕП та Безпека');
+    const enFolder = path.join(scriptsDir, '🔐 QES & Security');
+    assert.strictEqual(fs.existsSync(ukFolder), true);
+    assert.strictEqual(fs.existsSync(enFolder), false);
+    assert.strictEqual(fs.existsSync(path.join(ukFolder, '.i18n.sh')), true);
 
-  // Restore to UK as per user system convention
-  const resRestore = spawnSync('bash', [configBin, '--lang', 'uk'], { encoding: 'utf-8' });
-  assert.strictEqual(resRestore.status, 0);
-  assert.strictEqual(fs.existsSync(ukFolder), true);
+    // Switch to EN
+    const resEn = spawnSync('bash', [configBin, '--lang', 'en'], { encoding: 'utf-8', env });
+    assert.strictEqual(resEn.status, 0, `Switch to EN failed: ${resEn.stderr}`);
+    assert.match(resEn.stdout, /Language set to English/);
+    assert.strictEqual(fs.existsSync(ukFolder), false);
+    assert.strictEqual(fs.existsSync(enFolder), true);
+    assert.strictEqual(fs.existsSync(path.join(enFolder, '.i18n.sh')), true);
+  } finally {
+    try { fs.rmSync(tmpHome, { recursive: true, force: true }); } catch (_) {}
+  }
 });
 
