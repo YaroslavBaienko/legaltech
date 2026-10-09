@@ -1,98 +1,130 @@
-# 🌐 Як налаштувати власний APT-репозиторій на GitHub Pages
+# 🌐 Посібник з розгортання та адміністрування APT-репозиторію на GitHub Pages
 
-Налаштування власного репозиторію дозволяє користувачам встановлювати ваші пакети через `sudo apt install <пакет>` та отримувати автоматичні оновлення через `sudo apt upgrade`.
-
----
-
-## 🏗️ Архітектура статичного APT-репозиторію
-
-APT працює через звичайні статичні HTTP(S) файли:
-- `dists/stable/main/binary-amd64/Packages.gz` — індекс доступних пакетів та їх хешів.
-- `dists/stable/Release` та `dists/stable/Release.gpg` — підписаний GPG-ключем маніфест.
-- `pool/main/q/qes-tools/*.deb` — самі бінарні пакети.
-
-Завдяки цьому, GitHub Pages або Cloudflare Pages можуть працювати як повноцінний, безкоштовний, наднадійний APT-репозиторій.
+Цей посібник описує архітектуру, налаштування та щоденне обслуговування власного статичного **APT-репозиторію** для Debian та Ubuntu на базі **GitHub Pages** та **GitHub Actions** в екосистемі **LegalTech**.
 
 ---
 
-## 🚀 Покроковий план розгортання через GitHub Action
+## 🏗️ 1. Архітектура статичного APT-репозиторію
 
-### Крок 1. Генерація GPG-ключа для репозиторію
-Для підпису репозиторію потрібен окремий GPG-ключ:
-```bash
-gpg --batch --gen-key <<EOF
-Key-Type: RSA
-Key-Length: 4096
-Subkey-Type: RSA
-Subkey-Length: 4096
-Name-Real: Yaroslav Baienko (LegalTech APT Repo)
-Name-Email: zerhug@gmail.com
-Expire-Date: 0
-%no-protection
-%commit
-EOF
+Менеджер пакетів `APT` не вимагає складного бекенду або бази даних. Він працює через звичайні статичні HTTP/HTTPS файли стандартизованої структури:
+
+```text
+https://yaroslavbaienko.github.io/legaltech/
+│
+├── .nojekyll                                  # Запобігає обробці Jekyll на GitHub Pages
+├── index.html                                 # Веб-вітрина репозиторію з інструкціями
+├── public.gpg / KEY.gpg                       # Відкритий GPG-ключ для верифікації
+│
+├── pool/                                      # Каталог бінарних deb-пакетів
+│   └── main/
+│       ├── qes-tools_1.0.2_amd64.deb
+│       └── qes-tools_1.0.3_amd64.deb
+│
+└── dists/                                     # Метадані та індекси дистрибутивів
+    └── stable/
+        ├── InRelease                          # Маніфест з вбудованим цифровим GPG-підписом
+        ├── Release                            # Текстовий маніфест з контрольними сумами
+        ├── Release.gpg                        # Відокремлений цифровий GPG-підпис
+        └── main/
+            └── binary-amd64/
+                ├── Packages                   # Текстовий список доступних пакетів та версій
+                └── Packages.gz                # Стиснутий індекс для швидкого завантаження APT
 ```
 
-Експортуйте відкритий ключ у файл:
-```bash
-gpg --armor --export "zerhug@gmail.com" > public-key.gpg
-```
-
-Експортуйте закритий ключ у форматі ASCII armor:
-```bash
-gpg --armor --export-secret-keys "zerhug@gmail.com" > secret-key.gpg
-```
-
-### Крок 2. Додавання секретів у GitHub
-У репозиторії GitHub перейдіть у **Settings ➔ Secrets and variables ➔ Actions** та додайте:
-- `GPG_PRIVATE_KEY` — вміст `secret-key.gpg`
-- `GPG_PASSPHRASE` — пароль (якщо встановлено)
-
-### Крок 3. Автоматизація через action-apt-repo
-Додайте workflow `.github/workflows/apt-repo.yml`:
-```yaml
-name: Update APT Repository
-
-on:
-  release:
-    types: [ published ]
-  workflow_dispatch:
-
-jobs:
-  apt-repo:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Build Debian Packages
-        run: |
-          cd packages/qes-tools && ./build.sh
-
-      - name: Deploy to GitHub Pages APT Repo
-        uses: anton-yurchenko/action-apt-repo@v1
-        with:
-          repo-name: legaltech
-          gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
-          gpg-passphrase: ${{ secrets.GPG_PASSPHRASE }}
-          file: packages/qes-tools/dist/*.deb
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-```
+Завдяки цьому **GitHub Pages** працює як безкоштовний, відмовостійкий, глобально розподілений (CDN) APT-репозиторій із підтримкою HTTPS.
 
 ---
 
-## 💻 Як користувачі підключають ваш репозиторій
+## 🔐 2. Безпека та криптографічний підпис (GPG)
 
-Після публікації репозиторію користувачеві достатньо виконати 3 команди у своєму терміналі:
+Кожен реліз репозиторію підписується цифровим підписом.
+
+### Ізоляція ключів:
+- Особисті GPG-ключі розробника **не використовуються**.
+- Створено окрему 4096-бітну RSA пару ключів:
+  `LegalTech APT Repository <zerhug@gmail.com>` (ID: `C7E35514B6251C8B4E58A28BF8F3BF5DBA24A05A`).
+- **Закритий ключ** зберігається виключно в зашифрованих секретах GitHub Actions:
+  `Settings ➔ Secrets and variables ➔ Actions ➔ GPG_PRIVATE_KEY`.
+- Локальні копії приватного ключа безпечно видалені (`shred`).
+- **Відкритий ключ** зберігається у файлі `keys/public.gpg` та автоматично публікується на GitHub Pages як `public.gpg`.
+
+---
+
+## 🛠️ 3. Локальна генерація репозиторію (`build-apt-repo.sh`)
+
+У каталозі `tools/` створено автономний скрипт [`build-apt-repo.sh`](../tools/build-apt-repo.sh), який дозволяє зібрати та протестувати репозиторій локально або в CI/CD:
 
 ```bash
-# 1. Завантажити публічний GPG-ключ
-curl -fsSL https://yaroslavbaienko.github.io/legaltech/public-key.gpg | sudo gpg --dearmor -o /etc/apt/keyrings/legaltech.gpg
-
-# 2. Додати джерело репозиторію в APT
-echo "deb [signed-by=/etc/apt/keyrings/legaltech.gpg] https://yaroslavbaienko.github.io/legaltech stable main" | sudo tee /etc/apt/sources.list.d/legaltech.list
-
-# 3. Оновити індекси та встановити пакет
-sudo apt update
-sudo apt install qes-tools
+# Запуск генератора (за замовчуванням створює дерево в dist-apt/)
+./tools/build-apt-repo.sh /шлях/до/папки/призначення
 ```
+
+### Що робить скрипт:
+1. Знаходить усі зібрані `.deb` файли в `packages/*/dist/` та копіює їх у `pool/main/`.
+2. Запускає утиліту `apt-ftparchive packages` для генерації `Packages` та `Packages.gz`.
+3. Запускає `apt-ftparchive release` для формування маніфесту `Release` з усіма контрольними сумами (MD5, SHA1, SHA256, SHA512).
+4. Якщо доступний GPG-ключ (змінна оточення `GPG_PRIVATE_KEY`), генерує цифрові підписи `Release.gpg` та `InRelease`.
+5. Створює файл `.nojekyll` та стильну веб-сторінку `index.html`.
+
+---
+
+## 🤖 4. Автоматизація CI/CD в GitHub Actions
+
+Процес розгортання повністю автоматизовано у файлі [`.github/workflows/apt-repo.yml`](../.github/workflows/apt-repo.yml).
+
+### Тригери запуску:
+1. **Створення релізного тегу**: `git push origin v1.0.4`
+2. **Публікація GitHub Release**: створення релізу в інтерфейсі GitHub.
+3. **Ручний запуск (Manual Dispatch)**: кнопка **Run workflow** у вкладці Actions або команда:
+   ```bash
+   gh workflow run "Update APT Repository"
+   ```
+
+### Робочий процес GitHub Actions:
+1. Створює віртуальну машину `ubuntu-latest`.
+2. Встановлює системні утиліти пакування: `dpkg-dev`, `apt-utils`, `binutils`, `lintian`, `typst`.
+3. Збирає найновіші deb-пакети через `./packages/<пакет>/build.sh`.
+4. Підтягує попередні версії пакетів із гілки `gh-pages` (щоб старі версії не зникали з архіву).
+5. Викликає `./tools/build-apt-repo.sh`.
+6. Підписує репозиторій закритим ключем із секрету `GPG_PRIVATE_KEY`.
+7. Публікує результат у гілку **`gh-pages`**, після чого GitHub Pages миттєво оновлює сайт.
+
+---
+
+## 🚀 5. Як випустити оновлення пакета (Крок за кроком)
+
+Коли ви внесли зміни в код пакета (наприклад, `qes-tools`):
+
+### Крок 1. Підняти версію
+1. Оновіть `PKG_VERSION="1.0.4"` у `packages/qes-tools/build.sh`.
+2. Оновіть версію в `packages/qes-tools/debian/control`: `Version: 1.0.4`.
+3. Оновіть версію в `packages/qes-tools/package.json`: `"version": "1.0.4"`.
+
+### Крок 2. Зробити коміт та створити Git-тег
+```bash
+git commit -am "chore(release): bump version to v1.0.4"
+git tag v1.0.4
+git push origin main --tags
+```
+
+### Крок 3. Все решта — автоматично!
+- GitHub Actions запустить workflow `Update APT Repository`.
+- Новий файл `qes-tools_1.0.4_amd64.deb` потрапить у `pool/main/`.
+- Індекси `Packages.gz` та `InRelease` буде підписано та оновлено на GitHub Pages.
+
+---
+
+## 👥 6. Як користувачам підключити ваш репозиторій
+
+Для кінцевих користувачів усе зводиться до 1 команди:
+
+```bash
+sudo mkdir -p /etc/apt/keyrings && \
+curl -fsSL https://yaroslavbaienko.github.io/legaltech/public.gpg | gpg --dearmor | sudo tee /etc/apt/keyrings/legaltech.gpg > /dev/null && \
+sudo chmod 644 /etc/apt/keyrings/legaltech.gpg && \
+echo "deb [signed-by=/etc/apt/keyrings/legaltech.gpg] https://yaroslavbaienko.github.io/legaltech stable main" | sudo tee /etc/apt/sources.list.d/legaltech.list > /dev/null && \
+sudo apt update && \
+sudo apt install -y qes-tools
+```
+
+Детальнішу інформацію для користувачів дивіться у файлі [docs/INSTALLATION_GUIDE.md](INSTALLATION_GUIDE.md).

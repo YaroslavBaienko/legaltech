@@ -49,7 +49,7 @@ sudo apt install ./packages/qes-tools/dist/qes-tools_1.0.3_amd64.deb
 ```
 
 Менеджер пакетів `apt` автоматично розв'яже всі системні залежності. Після встановлення всі функції доступні:
-- **У файловому менеджері GNOME (Nautilus)**: правий клік на будь-який файл ➔ **Скрипти** ➔ **`🔐 КЕП та Безпека`** (15 зручних сценаріїв).
+- **У файловому менеджері GNOME (Nautilus)**: правий клік на будь-який файл ➔ **Скрипти** ➔ **`🔐 КЕП та Безпека`** (16 зручних сценаріїв).
 - **У терміналі**: `qes-sign`, `qes-verify`, `qes-cert`, `qes-ocr`, `qes-pdf-court`, `qes-encrypt`, `qes-decrypt`, `qes-export-cert`, `qes-agent`.
 
 ---
@@ -78,9 +78,10 @@ sudo apt install ./packages/qes-tools/dist/qes-tools_1.0.3_amd64.deb
 
 ## 📚 Документація
 
+- [📦 Посібник зі встановлення та оновлення пакетів](docs/INSTALLATION_GUIDE.md) — як користувачу підключити APT-репозиторій, встановити та оновлювати пакети через `sudo apt upgrade`.
 - [📖 Практичний посібник з розробки Debian-пакетів](docs/DEB_PACKAGING_GUIDE.md) — анатомія `.deb`, FHS стандарти, правила `control`, робота з `lintian`.
-- [🌐 Налаштування власного APT-репозиторію](docs/APT_REPOSITORY_GUIDE.md) — як зробити репозиторій на GitHub Pages для оновлення через `sudo apt upgrade`.
-- [🔐 Документація QES Tools](packages/qes-tools/README.md) — повний мануал по всіх 15 сценаріях та командах КЕП.
+- [🌐 Адміністрування та розгортання APT-репозиторію](docs/APT_REPOSITORY_GUIDE.md) — архітектура GitHub Pages репозиторію, автоматизація збірки та випуску оновлень.
+- [🔐 Документація QES Tools](packages/qes-tools/README.md) — повний мануал по всіх 16 сценаріях та командах КЕП.
 
 ---
 
@@ -89,7 +90,8 @@ sudo apt install ./packages/qes-tools/dist/qes-tools_1.0.3_amd64.deb
 Усі пакети покриті наскрізними тестами та автоматизованими робочими процесами GitHub Actions:
 - **`ci.yml`**: автоматичний запуск unit-тестів та E2E сценаріїв на чистому образі Ubuntu при кожному коміті.
 - **`build-deb.yml`**: ізольована збірка `.deb` пакетів та збереження артефактів.
-- **`release.yml`**: автоматичний реліз та публікація бінарників при створенні git-тегу (`git tag v1.0.2 && git push origin v1.0.2`).
+- **`apt-repo.yml`**: автоматична збірка, індексація, цифровий GPG-підпис та публікація APT-репозиторію на GitHub Pages.
+- **`release.yml`**: автоматичний реліз та публікація бінарників при створенні git-тегу (`git tag v1.0.3 && git push origin v1.0.3`).
 
 ---
 
