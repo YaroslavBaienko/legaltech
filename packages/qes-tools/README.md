@@ -1,129 +1,180 @@
 # 🔐 QES Tools — Ukrainian Qualified Electronic Signature (QES / AES) & LegalTech Suite
 
-**QES Tools** is an autonomous (100% offline-first), confidential toolkit for working with Ukrainian Qualified and Advanced Electronic Signatures (DSTU 4145-2002, PKCS#7 / CAdES, PAdES, ASiC-E), document encryption (GOST 28147:89 / `.enc` crypto vaults), OCR processing, and PDF optimization for the Ukrainian "Electronic Court" e-filing system.
+**QES Tools** (версія 1.0.8) — це автономний (100% offline-first), конфіденційний програмний комплекс для роботи з кваліфікованими та удосконаленими електронними підписами України (ДСТУ 4145-2002, PKCS#7 / CAdES, PAdES, ASiC-E), асиметричним шифруванням документів (ГОСТ 28147:89 / `.enc` криптосейфи), апаратними USB-токенами (ЗНОК: «Алмаз-1К», «Кристал-1К», DepositSign, SecureToken-337), оптичним розпізнаванням OCR та оптимізацією судових PDF для підсистеми «Електронний суд».
 
-Engineered to preserve **attorney-client privilege**, complying with the Law of Ukraine "On Electronic Identification and Electronic Trust Services" and the European eIDAS regulation.
-
----
-
-## 🌟 Key Features
-
-- **✍️ Document Signing (CAdES / PAdES / ASiC-E)**:
-  - Generate detached `.p7s` signatures.
-  - Embedded PDF signing (PAdES) with official visual stamp and verification QR code.
-  - Multi-file container bundles (ETSI TS 102 918 `.asice`) for legal cases and contracts.
-  - Multi-signature support (counter-signing existing PDF, ASiC-E, and `.p7s` files without breaking cryptographic integrity).
-- **🔍 Signature & Certificate Verification (`qes-verify`, `qes-cert`)**:
-  - Instant local validation of mathematical integrity without transmitting documents to third-party cloud services.
-  - Detailed QTSP / CA certificate inspector: Full Name, Tax ID (RNOKPP/DRFO), Company ID (EDRPOU), organization role, validity period, and public key parameters.
-- **🛡️ Asymmetric Encryption & Crypto Vaults (`qes-encrypt`, `qes-decrypt`)**:
-  - Personal encrypted vault (`.enc`) using DSTU 4145 Diffie-Hellman key agreement and GOST 28147:89 symmetric cipher.
-  - Public-key encryption for clients/counterparties using their X.509 certificate (`.cer`).
-- **👁️ Optical Character Recognition OCR (`qes-ocr`)**:
-  - Dual-language mode (Ukrainian + English: `ukr+eng`).
-  - Dedicated English mode (`--eng` / `-e`) for international contracts and invoices.
-  - Automatic scan deskewing and linearization for court admissibility.
-- **⚖️ PDF Optimization for "Electronic Court" (`qes-pdf-court`)**:
-  - Automated Fast Web View linearization for rapid opening in judicial portals.
-  - Object stream compression and validation against the 50 MB platform upload limit.
-- **🔑 Hardware Security Tokens (ЗНОК) & EUSW Integration**:
-  - Full native driver integration for **DepositSign / IIT «Алмаз-1К»** (`03eb:9324`), **«Кристал-1К»** (`03eb:9325`), **Author «SecureToken-337»** (`0483:5740`), and **SafeNet eToken 5110**.
-  - Bundles all 30 native crypto modules from IIT End-User CA-1 (`eusw` v1.3.1.109) in `/opt/iit/eu/sw/`.
-  - Non-root user USB device access via `/etc/udev/rules.d/60-iit-e-keys.rules`.
-  - Native Messaging Host daemon (`euscpnmh`) automatically configured for Chrome, Chromium, Brave, Edge, and Firefox for web e-filing (Дія, Е-Суд, ДПС, ProZorro).
-  - Diagnostic tools: `qes-tool token` and `qes-cert --tokens`.
-- **📡 Web Sign Agent & Browser Integration (`qes-agent`)**:
-  - **HTTP (port 8081) & HTTPS (port 8083) JSON-RPC Agent**: compatible with government and banking web portals that expect local agent services (`_loadSignAgent`).
-  - **Native Messaging Host setup**: `qes-agent setup-browsers` registers manifests in both user profiles (`~/.config/...`) and system paths (`/etc/...`).
-  - **Systemd User Service**: `qes-agent enable-service` / `disable-service` for automatic background execution on login.
-- **🏛️ National QTSP Registry & Universal CA Bundle**:
-  - Registry of all 21 accredited Ukrainian trust service providers (`providers.js`) with auto-discovery and live CMP/TSP/OCSP endpoints.
-  - Universal national certificate bundle `ua-all-cas.p7b` (175 certificates from CZO Trusted List).
-- **🖱️ Full GNOME Files (Nautilus) Integration**:
-  - 16 ready-to-use actions in the desktop context menu: **Scripts ➔ 🔐 КЕП та Безпека / QES & Security**.
-  - Interactive GUI prompts with Zenity (`--gui`).
-  - Dynamic language switching: `qes-config --lang uk|en|auto`.
-- **🔒 Secure In-Memory Password Caching (`qes-agent`)**:
-  - Private key passwords requested once per session and stored exclusively in RAM (TTL 15–30 min).
-  - Instant memory wipe on demand via GUI button or CLI: `qes-agent clear`.
+Розроблено для збереження **адвокатської таємниці**, повної відповідності Закону України «Про електронну ідентифікацію та електронні довірчі послуги» та європейському регламенту eIDAS.
 
 ---
 
-## 📦 Package Installation
+## 🌟 Ключові можливості
 
-### Quick Installation on Debian / Ubuntu:
+- **✍️ Усі формати підписання (CAdES / PAdES / ASiC-E)**:
+  - Відокремлений підпис `.p7s` (CAdES) для тендерів, M.E.Doc, Вчасно.
+  - Вшитий підпис PDF (PAdES) з офіційним векторним штампом адвоката та QR-кодом перевірки.
+  - Європейський пакетний контейнер ETSI TS 102 918 (`.asice`) для об'єднання кількох файлів судової справи чи договору.
+  - Мультипідписання (`--append`): додавання другого і наступних підписів без порушення цілісності попередніх.
+- **🪟 Контекстне вікно вибору носія підпису (Contextual Medium Selection)**:
+  - При виклику підписання через меню Nautilus або CLI без явного прапорця з'являється інтерактивне вікно вибору:
+    1. **📁 Файловий ключ із папки (`~/.secure_keys/`)** — використання захищеного локального сховища.
+    2. **🔑 Апаратний ключ (USB-токен / ЗНОК)** — прямий підпис на апаратному носії.
+    3. **📂 Обрати інший файл ключа (`.pfx` / `.p12`)** — вибір довільного контейнера через оглядач файлів.
+  - Прапорці швидкого CLI вибору: `--key <шлях>` або `-t, --token`.
+- **🔑 Повна підтримка захищених носіїв особистих ключів (ЗНОК / USB-токени)**:
+  - Пряма взаємодія з криптомодулями ІІТ (`/opt/iit/eu/sw/euscp.so`) через `token_bridge.py`.
+  - Підтримка токенів: **DepositSign / ІІТ «Алмаз-1К»** (`03eb:9324`), **«Кристал-1К»** (`03eb:9325`), **Автор «SecureToken-337»** (`0483:5740`), SafeNet eToken.
+  - **Ключ ніколи не експортується з токена**: криптографічні операції підписання виконуються безпосередньо апаратним контролером токена.
+  - Безпарольний доступ до USB-пристроїв через udev-правило `60-iit-e-keys.rules`.
+- **🔍 Локальна перевірка підписів та сертифікатів (`qes-verify`, `qes-cert`)**:
+  - Миттєва математична перевірка без відправки конфіденційних документів на сторонні хмарні сервери.
+  - Перегляд реквізитів сертифіката: ПІБ, РНОКПП/ДРФО, ЄДРПОУ, посада, КНЕДП (АЦСК), строк дії.
+- **🛡️ Асиметричне шифрування та криптосейфи (`qes-encrypt`, `qes-decrypt`)**:
+  - Особистий зашифрований сейф (`.enc`) за протоколом Діффі-Хеллмана ДСТУ 4145 та симетричним шифром ГОСТ 28147:89.
+  - Шифрування на відкритий сертифікат клієнта/партнера (`.cer`).
+- **👁️ Оптичне розпізнавання тексту OCR (`qes-ocr`)**:
+  - Українська + англійська (`ukr+eng`) та окремий режим чистої англійської (`--eng`) для міжнародних контрактів.
+  - Автоматичне вирівнювання сканів, очищення артефактів та лінеаризація для суду.
+- **⚖️ Оптимізація PDF для «Електронного суду» (`qes-pdf-court`)**:
+  - Fast Web View лінеаризація та стиснення об'єктів під ліміт 50 МБ.
+- **📡 Web Sign Agent та інтеграція з браузерами (`qes-agent`)**:
+  - Демон Native Messaging Host (`euscpnmh`) для Google Chrome, Chromium, Brave, Microsoft Edge, Mozilla Firefox (робота в Дія, Е-Суд, Електронний кабінет платника податків).
+  - Фоновий HTTP (порт 8081) / HTTPS (порт 8083) Sign Agent.
+- **🔒 Безпечне кешування паролів у RAM (`qes-agent`)**:
+  - Пароль запитується один раз на сесію і зберігається виключно в пам'яті процесу (TTL 15–30 хв).
+  - Миттєве скидання пам'яті за вимогою: `qes-agent clear` або кнопка в контекстному меню.
+- **🖱️ Повна інтеграція з GNOME Files (Nautilus)**:
+  - 16 дій у контекстному меню: **Скрипти ➔ 🔐 КЕП та Безпека**.
+  - Двомовний інтерфейс (українська / англійська): `qes-config --lang uk|en`.
+
+---
+
+## 📁 Де зберігаються особисті файлові ключі?
+
+Усі файлові контейнери ключів КЕП/УЕП зберігаються у суворо ізольованому локальному каталозі користувача:
 
 ```bash
-sudo apt install ./dist/qes-tools_1.0.7_amd64.deb
+~/.secure_keys/
+# Повний шлях: /home/attor/.secure_keys/
 ```
 
-The `apt` package manager automatically resolves and installs all required dependencies (`nodejs`, `python3-cryptography`, `openssl`, `zenity`, `qpdf`, `ocrmypdf`, `tesseract-ocr-ukr`, `tesseract-ocr-eng`, `libnotify-bin`, `libpcsclite1`).
+### Права доступу та безпека:
+- Каталог `~/.secure_keys` має права `0700` (`rwx------`) — доступ дозволено **тільки поточному користувачу**.
+- Файли ключів `.pfx` / `.p12` мають права `0600` (`rw-------`) — читання та запис дозволені виключно власнику.
+- Відкриті сертифікати `.cer` зберігаються поруч з ключем або автоматично експортуються з нього.
 
-After installation:
-- All master and subcommand CLI utilities become available on `$PATH`: `qes-tool`, `qes-sign`, `qes-verify`, `qes-cert`, `qes-ocr`, `qes-pdf-court`, `qes-encrypt`, `qes-decrypt`, `qes-export-cert`, `qes-agent`, `qes-config`.
-- Hardware token drivers and browser extension daemon are pre-configured.
-- The Nautilus context menu scripts are registered for the desktop environment.
+### Наявні ключі в системі:
+- Особистий ключ КЕП monobank: `~/.secure_keys/Баєнко_Я_В_monoКЕП_2025-09-15T20_12_28.pfx`
+- Відкритий сертифікат: `~/.secure_keys/Баєнко_Я_В_monoКЕП_2025-09-15T20_12_28.cer`
+
+*Примітка: якщо в `~/.secure_keys/` знаходиться кілька ключів, у діалозі буде показано актуальний за замовчуванням ключ, або ви можете обрати інший файл через оглядач дисків.*
 
 ---
 
-## 🛠️ Command-Line Interface (CLI) Usage
+## 🪟 Контекстний вибір носія (Діалогове вікно)
+
+Коли ви запускаєте будь-яку дію підписання (через контекстне меню Nautilus або з консолі без прапорця `--key` чи `-t`):
+
+1. **Графічне вікно (Nautilus / GUI)**:
+   Відкривається діалог Zenity:
+   - **📁 Файловий ключ із папки (`~/.secure_keys/`)** — активує знайдений у сховищі ключ (`Баєнко_Я_В_monoКЕП_...pfx`) та запитує пароль / підхоплює його з кешу сесії.
+   - **🔑 Апаратний ключ (USB-токен / ЗНОК)** — опитує підключені токени (наприклад, `IIT E.Key Almaz-1C (№ 441435)`), запитує PIN-код та накладає підпис без виходу ключа з USB-пристрою.
+   - **📂 Обрати інший файл ключа (`.pfx` / `.p12`)...** — відкриває стандартний діалог вибору файлу на комп'ютері чи флешці.
+
+2. **Консольний термінал (CLI TTY)**:
+   Виводить зручне текстове псевдографічне меню:
+   ```text
+   ╔═══════════════════════════════════════════════════════════════════════════════╗
+   ║ ВИБІР НОСІЯ ОСОБИСТОГО КЛЮЧА КЕП (ДСТУ 4145-2002)
+   ║ Об'єкт: позов.pdf
+   ╟───────────────────────────────────────────────────────────────────────────────╢
+   ║ [1] 📁 Файловий ключ із ~/.secure_keys/
+   ║     -> Баєнко_Я_В_monoКЕП_2025-09-15T20_12_28.pfx (папка ~/.secure_keys/)
+   ║
+   ║ [2] 🔑 Апаратний ключ (USB-токен / ЗНОК)
+   ║     -> IIT E.Key Almaz-1C (№ 441435) [🟢 підключено]
+   ║
+   ║ [3] 📂 Обрати інший файл ключа (.pfx / .p12)...
+   ╚═══════════════════════════════════════════════════════════════════════════════╝
+   Оберіть варіант [1-3] (за замовчуванням 1):
+   ```
+
+3. **Автоматичні фонові пайплайни**:
+   Якщо команда викликається у фоновому скрипті (без термінала та без GUI), утиліта автоматично використовує стандартний файловий ключ із `~/.secure_keys/`.
+
+---
+
+## 📦 Встановлення deb-пакета
+
+### Збірка та інсталяція:
+```bash
+# Збірка пакету
+./packages/qes-tools/build.sh
+
+# Встановлення в систему через apt:
+sudo apt install ./packages/qes-tools/dist/qes-tools_1.0.8_amd64.deb
+```
+
+Усі залежності (`nodejs`, `python3-cryptography`, `openssl`, `zenity`, `qpdf`, `ocrmypdf`, `tesseract-ocr-ukr`, `tesseract-ocr-eng`, `libnotify-bin`, `libpcsclite1`) встановлюються автоматично.
+
+---
+
+## 🛠️ Використання командного рядка (CLI)
 
 ```bash
-# 1. Master CLI umbrella and diagnostics
+# 1. Головна утиліта та діагностика
 qes-tool --help
-qes-tool token                    # Diagnose connected hardware tokens (DepositSign, Almaz-1K, etc.)
-qes-tool providers                # Display accredited national QTSP registry
+qes-tool token                    # Діагностика підключених апаратних USB-токенів (Алмаз-1К тощо)
+qes-tool providers                # Перегляд акредитованих КНЕДП України
 
-# 2. Sign PDF with visual stamp and QR code
-qes-sign --pades lawsuit.pdf
+# 2. Підписання PDF зі штампом та QR-кодом (PAdES)
+qes-sign --pades lawsuit.pdf                      # Відкриє вікно вибору носія
+qes-sign --pades -t lawsuit.pdf                   # Пряме підписання апаратним токеном
+qes-sign --pades --key ~/.secure_keys/key.pfx lawsuit.pdf  # Пряме підписання файловим ключем
 
-# 3. Add an additional signature (multi-signature / counter-sign)
+# 3. Мультипідпис (додавання другого підпису без пошкодження першого)
 qes-sign --append contract_signed.pdf
 
-# 4. Create an ASiC-E archive container
+# 4. Створення пакетного архіву ASiC-E
 qes-sign --asice contract.pdf annex1.pdf -o case.asice
 
-# 5. Verify signatures (terminal output or interactive GUI dialog)
-qes-verify document.pdf.p7s
+# 5. Відокремлений підпис (.p7s / CAdES)
+qes-sign act.docx
+
+# 6. Перевірка підписів (термінал або GUI)
+qes-verify lawsuit_signed.pdf
 qes-verify --gui contract_signed.pdf
 
-# 6. Inspect QTSP certificate or connected tokens
-qes-cert my_certificate.cer
-qes-cert --tokens                 # Inspect connected hardware USB tokens
-qes-cert -j my_certificate.cer    # JSON output for scripting
+# 7. Аналіз сертифікатів та токенів
+qes-cert my_cert.cer
+qes-cert --tokens                 # Детальний опис підключених смарт-карт і токенів
 
-# 7. Optimize scanned document for E-Court with English OCR
-qes-pdf-court --eng contract_scan.pdf
+# 8. Оптимізація та OCR для Е-Суду
+qes-pdf-court lawsuit.pdf
+qes-ocr --eng contract_scan.pdf
 
-# 8. Encrypt and decrypt files
-qes-encrypt confidential_file.pdf
-qes-decrypt confidential_file.pdf.enc
+# 9. Криптосейф (шифрування та розшифрування)
+qes-encrypt confidential.pdf
+qes-decrypt confidential.pdf.enc
 
-# 9. Hardware Token Diagnostics, Browser Setup & Web Sign Agent
-qes-agent status                  # Comprehensive status of tokens, browsers, and services
-qes-agent setup-browsers          # Register Native Messaging Host for Chrome, Chromium, Brave, Firefox
-qes-agent start-web --daemon      # Start Web Sign Agent (HTTP 8081 / HTTPS 8083) for web portals
-qes-agent stop-web                # Stop Web Sign Agent
-qes-agent enable-service          # Enable automatic startup on desktop login (systemd --user)
-
-# 10. Clear cached passwords from memory
-qes-agent clear
+# 10. Керування агентом та браузерами
+qes-agent status                  # Стан токенів, браузерів та служб
+qes-agent setup-browsers          # Реєстрація маніфестів Native Messaging для Chrome/Firefox
+qes-agent clear                   # Миттєве скидання кешу паролів із пам'яті RAM
 ```
 
 ---
 
-## 🧪 Running Tests
+## 🧪 Запуск тестів
 
 ```bash
-# Unit tests for the signing engine, token drivers & web agent (26 tests)
+# Юніт-тести модулів підпису, токенів, крипторушія та web-агента (26 тестів)
 npm test
 
-# Comprehensive end-to-end test suite (65 verification checks)
+# Повний наскрізний набір E2E тестів усіх 16 скриптів Nautilus та утиліт CLI (65 тестів)
 ./tests/e2e_all_scenarios.sh
 ```
 
 ---
 
-## ⚖️ License
+## ⚖️ Ліцензія
 
-Apache License 2.0. Free for use by law firms, government agencies, corporate legal departments, and open-source projects.
+Apache License 2.0. Вільне використання для адвокатських об'єднань, судових установ, юридичних департаментів та державних органів.

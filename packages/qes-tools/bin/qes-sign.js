@@ -12,6 +12,11 @@ const { spawnSync } = require('child_process');
 const { QESEngine } = require('../src/engine');
 const { getOrPromptPassword, sendAgentMessage } = require('../src/session');
 const { t } = require('../src/i18n');
+const {
+  chooseSigningMedium,
+  getConnectedHardwareTokens,
+  signWithHardwareToken,
+} = require('../src/token-signer');
 
 const CLR_RESET = '\x1b[0m';
 const CLR_BOLD = '\x1b[1m';
@@ -144,7 +149,8 @@ ${CLR_BOLD}РЕЖИМИ ПІДПИСАННЯ:${CLR_RESET}
 
 ${CLR_BOLD}ПАРАМЕТРИ КЛЮЧА ТА БЕЗПЕКИ:${CLR_RESET}
   ${CLR_GREEN}--key <шлях>${CLR_RESET}        Шлях до файлу контейнера ключа (.pfx / .p12).
-                      За замовчуванням: автоматично береться перший ключ із ~/.secure_keys/
+                      За замовчуванням: діалог вибору носія (файловий ключ ~/.secure_keys/ або токен)
+  ${CLR_GREEN}-t, --token${CLR_RESET}         Використати для підпису підключений апаратний USB-токен (ЗНОК)
   ${CLR_GREEN}--cert <шлях>${CLR_RESET}       Шлях до відкритого сертифіката (.cer / .crt).
                       Якщо не вказано: шукається всередині .pfx або поруч із ключем
   ${CLR_GREEN}--ttl <хв>${CLR_RESET}          Час збереження пароля в сесії RAM (за замовчуванням 15 хв, до 120 хв)
@@ -219,6 +225,7 @@ ${CLR_BOLD}ПЕРЕВІРКА ПІДПИСІВ:${CLR_RESET}
 
   const inputFiles = [];
   let keyPath = null;
+  let useToken = false;
   let certPath = null;
   let outputPath = null;
   let useTsp = true;
@@ -237,6 +244,8 @@ ${CLR_BOLD}ПЕРЕВІРКА ПІДПИСІВ:${CLR_RESET}
     const arg = args[i];
     if (arg === '--key' && i + 1 < args.length) {
       keyPath = path.resolve(args[++i]);
+    } else if (arg === '--token' || arg === '-t') {
+      useToken = true;
     } else if (arg === '--cert' && i + 1 < args.length) {
       certPath = path.resolve(args[++i]);
     } else if ((arg === '--output' || arg === '-o') && i + 1 < args.length) {
@@ -339,10 +348,107 @@ ${CLR_BOLD}ПЕРЕВІРКА ПІДПИСІВ:${CLR_RESET}
   inputFiles.push(...resolvedFiles);
 
   const docPath = inputFiles[0];
+  const docDesc = inputFiles.length === 1
+    ? `${path.basename(inputFiles[0])} (${fs.statSync(inputFiles[0]).size} байт)`
+    : `${inputFiles.length} файлів у пакеті`;
 
-  if (!keyPath) {
-    keyPath = findDefaultKey();
+  // Контекстне вікно вибору носія підпису (файловий ключ або апаратний токен)
+  if (!keyPath && !useToken) {
+    const defaultCand = findDefaultKey();
+    const mediumRes = await chooseSigningMedium({
+      useGui,
+      defaultKeyPath: defaultCand,
+      inputFiles,
+      askPasswordFn: askPassword,
+    });
+
+    if (mediumRes.cancelled) {
+      console.log(`${CLR_YELLOW}Операцію підписання скасовано.${CLR_RESET}`);
+      process.exit(0);
+    }
+
+    if (mediumRes.type === 'token') {
+      useToken = true;
+    } else if (mediumRes.type === 'file') {
+      keyPath = mediumRes.keyPath;
+    }
   }
+
+  // Обробка підписання апаратним токеном (ЗНОК)
+  if (useToken) {
+    const tokState = getConnectedHardwareTokens();
+    if (!tokState.detected || tokState.tokens.length === 0) {
+      if (useGui) {
+        spawnSync('zenity', [
+          '--warning',
+          '--title=Апаратний ключ КЕП',
+          '--text=⚠️ Жодного апаратного токена не виявлено в USB-портах.\n\nБудь ласка, підключіть ваш апаратний носій (Алмаз-1К, Кристал-1К, SecureToken-337 тощо) у USB-порт комп\'ютера та спробуйте ще раз.',
+        ]);
+      } else {
+        console.error(`${CLR_RED}Помилка: апаратних USB-токенів не виявлено в системі. Вставте токен і повторіть спробу.${CLR_RESET}`);
+      }
+      process.exit(1);
+    }
+
+    const activeTok = tokState.tokens[0];
+    console.log(`${CLR_CYAN}╔═══════════════════════════════════════════════════════════════════════════════════════╗${CLR_RESET}`);
+    console.log(`${CLR_CYAN}║ ПІДПИСАННЯ ДОКУМЕНТІВ КЕП (АПАРАТНИЙ ТОКЕН / ЗНОК)${CLR_RESET}`);
+    console.log(`${CLR_CYAN}║ Об'єкт:   ${docDesc}${CLR_RESET}`);
+    console.log(`${CLR_CYAN}║ Пристрій: ${activeTok.displayName}${CLR_RESET}`);
+    console.log(`${CLR_CYAN}╚═══════════════════════════════════════════════════════════════════════════════════════╝${CLR_RESET}`);
+
+    let pin = null;
+    try {
+      pin = await askPassword(`Введіть PIN-код доступу до токена (${activeTok.displayName}):`, useGui);
+    } catch (e) {
+      console.log(`${CLR_YELLOW}Операцію введення PIN-коду скасовано.${CLR_RESET}`);
+      process.exit(0);
+    }
+
+    if (!pin) {
+      process.exit(0);
+    }
+
+    for (let fIdx = 0; fIdx < inputFiles.length; fIdx++) {
+      const curDoc = inputFiles[fIdx];
+      const curOutput = (inputFiles.length === 1 && outputPath) ? outputPath : `${curDoc}.p7s`;
+
+      console.log(`\n${CLR_GRAY}⏳ [${fIdx + 1}/${inputFiles.length}] Підписання апаратним токеном: ${path.basename(curDoc)}...${CLR_RESET}`);
+
+      try {
+        const res = signWithHardwareToken({
+          inputPath: curDoc,
+          outputPath: curOutput,
+          pin,
+          typeIndex: activeTok.typeIndex || 1,
+          devIndex: activeTok.devIndex || 0,
+          isAppend: useAppend,
+          isInternal: false,
+        });
+
+        console.log(`\n${CLR_GREEN}✅ ДОКУМЕНТ УСПІШНО ПІДПИСАНО АПАРАТНИМ ТОКЕНОМ!${CLR_RESET}`);
+        console.log(`  ${CLR_BOLD}Файл підпису:${CLR_RESET} ${res.outputPath} (${res.fileSize} байт)`);
+
+        if (autoVerify) {
+          console.log(`${CLR_CYAN}── Контрольна перевірка через qes-verify ──────────────────────────────────────────${CLR_RESET}`);
+          spawnSync('qes-verify', [res.outputPath], { stdio: 'inherit' });
+        }
+      } catch (err) {
+        if (useGui) {
+          spawnSync('zenity', [
+            '--error',
+            '--title=Помилка апаратного токена',
+            `--text=❌ ${err.message}`,
+          ]);
+        }
+        console.error(`\n${CLR_RED}❌ Помилка підписання: ${err.message}${CLR_RESET}\n`);
+        process.exit(1);
+      }
+    }
+    process.exit(0);
+  }
+
+  // Обробка файлового ключа (.pfx / .p12)
   if (!certPath && process.env.QES_CERT && fs.existsSync(process.env.QES_CERT)) {
     certPath = path.resolve(process.env.QES_CERT);
   }
@@ -351,10 +457,6 @@ ${CLR_BOLD}ПЕРЕВІРКА ПІДПИСІВ:${CLR_RESET}
     console.error(`${CLR_RED}Помилка: файл ключа не знайдено в ~/.secure_keys/. Вкажіть через --key <шлях>.${CLR_RESET}`);
     process.exit(1);
   }
-
-  const docDesc = inputFiles.length === 1
-    ? `${path.basename(inputFiles[0])} (${fs.statSync(inputFiles[0]).size} байт)`
-    : `${inputFiles.length} файлів у пакеті`;
 
   console.log(`${CLR_CYAN}╔═══════════════════════════════════════════════════════════════════════════════════════╗${CLR_RESET}`);
   console.log(`${CLR_CYAN}║ ПІДПИСАННЯ ДОКУМЕНТІВ КЕП (ДСТУ 4145-2002)${CLR_RESET}`);
