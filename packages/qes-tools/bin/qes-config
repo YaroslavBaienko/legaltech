@@ -56,9 +56,16 @@ FOLDER_EN="🔐 QES & Security"
 
 # Find directory containing canonical source scripts
 find_source_scripts_dir() {
+    local real_bin
+    real_bin="$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")"
+    local bin_parent
+    bin_parent="$(cd "$(dirname "$real_bin")/.." 2>/dev/null && pwd || true)"
+
     local candidate_dirs=(
         "/usr/share/qes-tools/nautilus-scripts"
         "/usr/share/nautilus-scripts"
+        "$bin_parent/nautilus-scripts"
+        "$bin_parent/../nautilus-scripts"
         "$(cd "$(dirname "${BASH_SOURCE[0]}")/../nautilus-scripts" 2>/dev/null && pwd || true)"
         "$(cd "$(dirname "${BASH_SOURCE[0]}")/../../nautilus-scripts" 2>/dev/null && pwd || true)"
         "/home/attor/legaltech/packages/qes-tools/nautilus-scripts"

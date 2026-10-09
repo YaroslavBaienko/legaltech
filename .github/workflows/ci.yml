@@ -53,9 +53,16 @@ jobs:
           chmod +x "$HOME/.local/bin/typst"
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
-      - name: Install Node Dependencies
+      - name: Install Node Dependencies & Link Tools
         working-directory: packages/qes-tools
-        run: npm ci || npm install --omit=dev
+        run: |
+          npm ci || npm install --omit=dev
+          sudo npm link
+          sudo ln -sf "$PWD/bin/qes-verify" /usr/local/bin/qes-verify
+          sudo ln -sf "$PWD/bin/qes-cert" /usr/local/bin/qes-cert
+          sudo ln -sf "$PWD/bin/qes-ocr" /usr/local/bin/qes-ocr
+          sudo ln -sf "$PWD/bin/qes-pdf-court" /usr/local/bin/qes-pdf-court
+          sudo ln -sf "$PWD/bin/qes-config" /usr/local/bin/qes-config
 
       - name: Run Unit Tests
         working-directory: packages/qes-tools

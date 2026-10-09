@@ -62,7 +62,61 @@ echo "Тестовий каталог: $TEST_DIR"
 
 mkdir -p "$MOCK_BIN"
 export NODE_PATH="$PACKAGE_DIR/node_modules:${NODE_PATH:-}"
-export PATH="$HOME/.local/bin:$PACKAGE_DIR/bin:${PATH:-}"
+
+# Підготовка бінарних обгорток та симлінків для автономного тестування у будь-якому середовищі
+ln -sfn "$PACKAGE_DIR/bin/qes-sign.js" "$MOCK_BIN/qes-sign"
+ln -sfn "$PACKAGE_DIR/bin/qes-agent.js" "$MOCK_BIN/qes-agent"
+ln -sfn "$PACKAGE_DIR/bin/qes-encrypt.js" "$MOCK_BIN/qes-encrypt"
+ln -sfn "$PACKAGE_DIR/bin/qes-decrypt.js" "$MOCK_BIN/qes-decrypt"
+ln -sfn "$PACKAGE_DIR/bin/qes-export-cert.js" "$MOCK_BIN/qes-export-cert"
+ln -sfn "$PACKAGE_DIR/bin/qes-verify" "$MOCK_BIN/qes-verify"
+ln -sfn "$PACKAGE_DIR/bin/qes-cert" "$MOCK_BIN/qes-cert"
+ln -sfn "$PACKAGE_DIR/bin/qes-pdf-court" "$MOCK_BIN/qes-pdf-court"
+ln -sfn "$PACKAGE_DIR/bin/qes-ocr" "$MOCK_BIN/qes-ocr"
+ln -sfn "$PACKAGE_DIR/bin/qes-config" "$MOCK_BIN/qes-config"
+
+# Створення mock утиліти zenity для неінтерактивної, гарантованої перевірки
+cat << 'EOF' > "$MOCK_BIN/zenity"
+#!/usr/bin/env bash
+for arg in "$@"; do
+    case "$arg" in
+        --password)
+            echo "${QES_PASSWORD:-test_secret_pass_123}"
+            exit 0
+            ;;
+        --file-selection)
+            echo "${TEST_CERT_PATH:-/tmp}"
+            exit 0
+            ;;
+        --entry)
+            echo "пакет_документів.asice"
+            exit 0
+            ;;
+        --radiolist|--list)
+            # Default to English OCR or first item
+            echo "eng"
+            exit 0
+            ;;
+        --progress|--text-info)
+            cat >/dev/null || true
+            exit 0
+            ;;
+        --info|--warning|--error|--notification|--question)
+            exit 0
+            ;;
+    esac
+done
+exit 0
+EOF
+chmod 0755 "$MOCK_BIN/zenity"
+
+cat << 'EOF' > "$MOCK_BIN/notify-send"
+#!/usr/bin/env bash
+exit 0
+EOF
+chmod 0755 "$MOCK_BIN/notify-send"
+
+export PATH="$MOCK_BIN:$HOME/.local/bin:$PACKAGE_DIR/bin:${PATH:-}"
 
 # ------------------------------------------------------------------------------
 # 0. Генерація тестових ключів та тестових документів
@@ -313,47 +367,6 @@ fi
 # ------------------------------------------------------------------------------
 log_test "Симуляція середовища Nautilus: перевірка виконання всіх 15 скриптів меню"
 
-# Створення mock утиліти zenity для повністю неінтерактивної, гарантованої перевірки
-cat << 'EOF' > "$MOCK_BIN/zenity"
-#!/usr/bin/env bash
-for arg in "$@"; do
-    case "$arg" in
-        --password)
-            echo "${QES_PASSWORD:-test_secret_pass_123}"
-            exit 0
-            ;;
-        --file-selection)
-            echo "${TEST_CERT_PATH:-/tmp}"
-            exit 0
-            ;;
-        --entry)
-            echo "пакет_документів.asice"
-            exit 0
-            ;;
-        --radiolist|--list)
-            # Default to English OCR or first item
-            echo "eng"
-            exit 0
-            ;;
-        --progress|--text-info)
-            cat >/dev/null || true
-            exit 0
-            ;;
-        --info|--warning|--error|--notification|--question)
-            exit 0
-            ;;
-    esac
-done
-exit 0
-EOF
-chmod 0755 "$MOCK_BIN/zenity"
-cat << 'EOF' > "$MOCK_BIN/notify-send"
-#!/usr/bin/env bash
-exit 0
-EOF
-chmod 0755 "$MOCK_BIN/notify-send"
-
-export PATH="$MOCK_BIN:$PATH"
 
 # Створення символічного посилання на тестовий ключ у ~/.secure_keys для скриптів Nautilus
 SECURE_KEYS_DIR="$HOME/.secure_keys"
@@ -458,8 +471,47 @@ cp "$SAMPLE_IMG" "$TEST_OCR_ENG_INPUT"
 run_nautilus_script "14_ocr_english.sh" "$TEST_OCR_ENG_INPUT"
 assert_file_exists "${TEST_OCR_ENG_INPUT%.*}_ocr.pdf" "Nautilus чиста англійська OCR PDF"
 
+# ------------------------------------------------------------------------------
+# 15. ТЕСТ: qes-config (перемикання локалі меню Nautilus UK / EN)
+# ------------------------------------------------------------------------------
+log_test "CLI qes-config: динамічне перемикання мови меню Nautilus (UA <-> EN)"
+MOCK_USER_HOME="$TEST_DIR/mock_user_home"
+mkdir -p "$MOCK_USER_HOME"
+
+HOME="$MOCK_USER_HOME" qes-config --lang en >/dev/null
+if [ -d "$MOCK_USER_HOME/.local/share/nautilus/scripts/🔐 QES & Security" ]; then
+    en_cnt=$(ls -1 "$MOCK_USER_HOME/.local/share/nautilus/scripts/🔐 QES & Security" | wc -l)
+    if [ "$en_cnt" -ge 16 ]; then
+        assert_ok "qes-config --lang en створив англійське меню Nautilus ($en_cnt скриптів)"
+    else
+        echo "Помилка: очікувалось >= 16 скриптів у папці EN, знайдено $en_cnt" >&2; exit 1
+    fi
+else
+    echo "Помилка: папка '🔐 QES & Security' не знайдена" >&2; exit 1
+fi
+
+HOME="$MOCK_USER_HOME" qes-config --lang uk >/dev/null
+if [ -d "$MOCK_USER_HOME/.local/share/nautilus/scripts/🔐 КЕП та Безпека" ]; then
+    uk_cnt=$(ls -1 "$MOCK_USER_HOME/.local/share/nautilus/scripts/🔐 КЕП та Безпека" | wc -l)
+    if [ "$uk_cnt" -ge 16 ]; then
+        assert_ok "qes-config --lang uk успішно перемкнув на українське меню ($uk_cnt скриптів)"
+    else
+        echo "Помилка: очікувалось >= 16 скриптів у папці UK, знайдено $uk_cnt" >&2; exit 1
+    fi
+else
+    echo "Помилка: папка '🔐 КЕП та Безпека' не знайдена" >&2; exit 1
+fi
+
+cfg_status=$(HOME="$MOCK_USER_HOME" qes-config --status)
+if [[ "$cfg_status" == *"uk"* || "$cfg_status" == *"Українська"* ]]; then
+    assert_ok "qes-config --status повертає коректний стан мовної конфігурації"
+else
+    echo "Помилка: невірний статус qes-config: $cfg_status" >&2; exit 1
+fi
+
 # Очищення тимчасового тестового ключа з ~/.secure_keys
 rm -f "$TEST_LINK" "$TEST_LINK_CER"
+
 
 echo -e "\n${CLR_BOLD}${CLR_GREEN}==============================================================================${CLR_RESET}"
 echo -e "${CLR_BOLD}${CLR_GREEN} 🎉 ВСІ $PASSED_COUNT ТЕСТІВ ТА СЦЕНАРІЇВ УСПІШНО ПРОЙДЕНО БЕЗ ЖОДНОЇ ПОМИЛКИ!${CLR_RESET}"
