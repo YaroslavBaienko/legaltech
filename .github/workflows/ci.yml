@@ -1,0 +1,62 @@
+name: CI Tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test-qes-tools:
+    name: Test QES Tools Suite
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: 'packages/qes-tools/package-lock.json'
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            python3-cryptography \
+            qpdf \
+            poppler-utils \
+            tesseract-ocr \
+            tesseract-ocr-ukr \
+            tesseract-ocr-eng \
+            unpaper \
+            zenity \
+            libnotify-bin \
+            jq
+
+      - name: Install Typst (Static Binary)
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          curl -sSL "https://github.com/typst/typst/releases/download/v0.12.0/typst-x86_64-unknown-linux-musl.tar.xz" | tar -xJ -C /tmp
+          mv /tmp/typst-*/typst "$HOME/.local/bin/typst"
+          chmod +x "$HOME/.local/bin/typst"
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Install Node Dependencies
+        working-directory: packages/qes-tools
+        run: npm ci || npm install --omit=dev
+
+      - name: Run Unit Tests
+        working-directory: packages/qes-tools
+        run: npm test
+
+      - name: Run E2E All Scenarios (CLI & Nautilus)
+        working-directory: packages/qes-tools
+        run: ./tests/e2e_all_scenarios.sh

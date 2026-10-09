@@ -10,19 +10,42 @@
 
 | Пакет | Опис | Статус | Документація |
 | :--- | :--- | :---: | :---: |
-| **`qes-tools`** | Автономний комплекс КЕП/УЕП (ДСТУ 4145, CAdES, PAdES зі штампом та QR, ASiC-E, ГОСТ шифрування, OCR для судів, інтеграція в Nautilus). | **v1.0.2** (Stable) | [README пакета](packages/qes-tools/README.md) |
+| **`qes-tools`** | Автономний комплекс КЕП/УЕП (ДСТУ 4145, CAdES, PAdES зі штампом та без штампа, QR, ASiC-E, ГОСТ шифрування, OCR для судів, 16 сценаріїв у Nautilus). | **v1.0.3** (Stable) | [README пакета](packages/qes-tools/README.md) |
 | **`deb-package-starter`** | Універсальний стартовий шаблон для швидкої розробки будь-якого нового deb-пакета. | **Template** | [README шаблону](templates/deb-package-starter/README.md) |
 
 ---
 
-## ⚡ Швидкий старт для користувачів
+## ⚡ Швидке встановлення та автоматичні оновлення
 
-### Встановлення флагманського пакета `qes-tools`:
+### 🌟 Офіційний APT-репозиторій (Рекомендовано для отримання `sudo apt upgrade`):
 
-Завантажте останній релізний `.deb` пакет з [Releases](https://github.com/YaroslavBaienko/legaltech/releases) або встановіть зібраний локально:
+Підключіть репозиторій один раз у своєму терміналі:
 
 ```bash
-sudo apt install ./packages/qes-tools/dist/qes-tools_1.0.2_amd64.deb
+# 1. Додати публічний GPG-ключ репозиторію
+curl -fsSL https://yaroslavbaienko.github.io/legaltech/public.gpg | sudo gpg --dearmor -o /etc/apt/keyrings/legaltech.gpg
+
+# 2. Додати репозиторій LegalTech у список джерел APT
+echo "deb [signed-by=/etc/apt/keyrings/legaltech.gpg] https://yaroslavbaienko.github.io/legaltech stable main" | sudo tee /etc/apt/sources.list.d/legaltech.list
+
+# 3. Оновити індекси та встановити qes-tools
+sudo apt update
+sudo apt install qes-tools
+```
+
+Після цього будь-які нові версії будуть автоматично оновлюватися системною командою:
+```bash
+sudo apt update && sudo apt upgrade
+```
+
+---
+
+### Або локальне встановлення готового `.deb` файлу:
+
+Завантажте останній релізний `.deb` пакет з [Releases](https://github.com/YaroslavBaienko/legaltech/releases) та встановіть його:
+
+```bash
+sudo apt install ./packages/qes-tools/dist/qes-tools_1.0.3_amd64.deb
 ```
 
 Менеджер пакетів `apt` автоматично розв'яже всі системні залежності. Після встановлення всі функції доступні:

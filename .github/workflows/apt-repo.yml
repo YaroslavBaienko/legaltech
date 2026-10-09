@@ -1,0 +1,159 @@
+name: Update APT Repository
+
+on:
+  push:
+    tags:
+      - 'v*'
+  release:
+    types: [ published ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apt-repository:
+    name: Build & Publish APT Repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install APT Archiving & Packaging Tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y dpkg-dev apt-utils binutils lintian gnupg gzip
+
+      - name: Install Typst (Static Binary)
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          curl -sSL "https://github.com/typst/typst/releases/download/v0.12.0/typst-x86_64-unknown-linux-musl.tar.xz" | tar -xJ -C /tmp
+          mv /tmp/typst-*/typst "$HOME/.local/bin/typst"
+          chmod +x "$HOME/.local/bin/typst"
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Build qes-tools .deb
+        working-directory: packages/qes-tools
+        run: |
+          npm ci || npm install --omit=dev
+          ./build.sh
+
+      - name: Build and Sign APT Repository
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+        run: |
+          set -e
+          REPO_DIR="$RUNNER_TEMP/apt-repo"
+          mkdir -p "$REPO_DIR/pool/main"
+          mkdir -p "$REPO_DIR/dists/stable/main/binary-amd64"
+
+          # 1. Fetch previous deb packages from gh-pages branch if it exists
+          git fetch origin gh-pages:refs/remotes/origin/gh-pages || true
+          if git rev-parse --verify origin/gh-pages >/dev/null 2>&1; then
+            mkdir -p /tmp/gh-pages-checkout
+            git --work-tree=/tmp/gh-pages-checkout --git-dir=.git checkout origin/gh-pages -- pool/ || true
+            if [ -d "/tmp/gh-pages-checkout/pool/main" ]; then
+              cp -r /tmp/gh-pages-checkout/pool/main/* "$REPO_DIR/pool/main/" || true
+            fi
+          fi
+
+          # 2. Copy current build packages into pool
+          cp packages/qes-tools/dist/*.deb "$REPO_DIR/pool/main/"
+
+          # 3. Generate Packages and Packages.gz index
+          cd "$REPO_DIR"
+          apt-ftparchive packages pool/main > dists/stable/main/binary-amd64/Packages
+          gzip -9c dists/stable/main/binary-amd64/Packages > dists/stable/main/binary-amd64/Packages.gz
+
+          # 4. Generate Release manifest
+          cd "$REPO_DIR/dists/stable"
+          apt-ftparchive \
+            -o APT::FTPArchive::Release::Origin="LegalTech" \
+            -o APT::FTPArchive::Release::Label="LegalTech APT Repository" \
+            -o APT::FTPArchive::Release::Suite="stable" \
+            -o APT::FTPArchive::Release::Codename="stable" \
+            -o APT::FTPArchive::Release::Architectures="amd64" \
+            -o APT::FTPArchive::Release::Components="main" \
+            release . > Release
+
+          # 5. Import GPG signing key
+          if [ -n "$GPG_PRIVATE_KEY" ]; then
+            echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+            KEY_ID=$(gpg --with-colons --list-secret-keys | grep "^sec:" | cut -d: -f5 | head -n 1)
+
+            # Export public key to web root
+            gpg --armor --export "$KEY_ID" > "$REPO_DIR/public.gpg"
+            cp "$REPO_DIR/public.gpg" "$REPO_DIR/KEY.gpg"
+
+            # Cryptographically sign Release
+            gpg --batch --yes --default-key "$KEY_ID" -abs -o Release.gpg Release
+            gpg --batch --yes --default-key "$KEY_ID" --clearsign -o InRelease Release
+            echo "Successfully signed APT Release with key: $KEY_ID"
+          else
+            echo "Warning: GPG_PRIVATE_KEY secret is not configured; skipping signature."
+          fi
+
+          # 6. Create static index.html and .nojekyll
+          touch "$REPO_DIR/.nojekyll"
+          cat > "$REPO_DIR/index.html" << 'HTML_EOF'
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LegalTech Debian/Ubuntu APT Repository</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #f8fafc; margin: 0; padding: 2rem; display: flex; justify-content: center; }
+    .card { background: #1e293b; border-radius: 12px; padding: 2.5rem; max-width: 760px; width: 100%; box-shadow: 0 10px 25px rgba(0,0,0,0.5); border: 1px solid #334155; }
+    h1 { color: #38bdf8; margin-top: 0; display: flex; align-items: center; gap: 0.5rem; font-size: 1.8rem; }
+    p { line-height: 1.6; color: #94a3b8; }
+    pre { background: #090d16; padding: 1.2rem; border-radius: 8px; border: 1px solid #1e293b; overflow-x: auto; color: #a5f3fc; font-size: 0.95rem; line-height: 1.5; }
+    .tag { display: inline-block; background: #0369a1; color: white; padding: 0.2rem 0.6rem; border-radius: 4px; font-size: 0.8rem; font-weight: bold; margin-bottom: 1rem; }
+    a { color: #38bdf8; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .btn { display: inline-block; margin-top: 1rem; background: #0284c7; color: white; padding: 0.6rem 1.2rem; border-radius: 6px; font-weight: 500; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <span class="tag">DEBIAN / UBUNTU OFFICIAL APT REPOSITORY</span>
+    <h1>⚖️ LegalTech APT Repository</h1>
+    <p>Офіційний статичний APT-репозиторій для встановлення та автоматичного оновлення пакетів юридичних інструментів (LegalTech Suite, QES Tools) в операційних системах Debian, Ubuntu та Linux Mint.</p>
+
+    <h3>🚀 Швидке встановлення в 1 крок:</h3>
+    <pre><code># 1. Завантажити публічний GPG-ключ репозиторію
+curl -fsSL https://yaroslavbaienko.github.io/legaltech/public.gpg | sudo gpg --dearmor -o /etc/apt/keyrings/legaltech.gpg
+
+# 2. Додати репозиторій у системні джерела APT
+echo "deb [signed-by=/etc/apt/keyrings/legaltech.gpg] https://yaroslavbaienko.github.io/legaltech stable main" | sudo tee /etc/apt/sources.list.d/legaltech.list
+
+# 3. Оновити індекси та встановити qes-tools
+sudo apt update
+sudo apt install qes-tools</code></pre>
+
+    <h3>🔄 Автоматичні оновлення:</h3>
+    <p>Після підключення репозиторію всі нові версії будуть встановлюватися стандартною командою системи:</p>
+    <pre><code>sudo apt update && sudo apt upgrade</code></pre>
+
+    <p style="margin-top: 2rem; border-top: 1px solid #334155; padding-top: 1rem; font-size: 0.9rem;">
+      Вихідний код та документація: <a href="https://github.com/YaroslavBaienko/legaltech">GitHub: YaroslavBaienko/legaltech</a>
+    </p>
+  </div>
+</body>
+</html>
+HTML_EOF
+
+      - name: Deploy to GitHub Pages (gh-pages)
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ${{ runner.temp }}/apt-repo
+          publish_branch: gh-pages
+          force_orphan: true
