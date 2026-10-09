@@ -618,3 +618,38 @@ test('qes-config CLI switches Nautilus menu language between Ukrainian and Engli
   }
 });
 
+test('qes-tool master CLI supports --version, --help and subcommand dispatching', () => {
+  const toolBin = path.join(__dirname, '..', 'bin', 'qes-tool');
+  assert.strictEqual(fs.existsSync(toolBin), true, 'qes-tool script exists');
+
+  // Test --version
+  const resVer = spawnSync('bash', [toolBin, '--version'], { encoding: 'utf-8' });
+  assert.strictEqual(resVer.status, 0);
+  assert.match(resVer.stdout, /qes-tools v1\.0\.4/);
+
+  // Test -v
+  const resShortVer = spawnSync('bash', [toolBin, '-v'], { encoding: 'utf-8' });
+  assert.strictEqual(resShortVer.status, 0);
+  assert.match(resShortVer.stdout, /qes-tools v1\.0\.4/);
+
+  // Test --help UK
+  const resHelpUk = spawnSync('bash', [toolBin, '--help'], {
+    encoding: 'utf-8',
+    env: { ...process.env, QES_LANG: 'uk' },
+  });
+  assert.strictEqual(resHelpUk.status, 0);
+  assert.match(resHelpUk.stdout, /Комплекс КЕП та криптографічного захисту/);
+  assert.match(resHelpUk.stdout, /ПРИКЛАДИ КОМАНД/);
+  assert.match(resHelpUk.stdout, /qes-sign --pades/);
+
+  // Test --help EN
+  const resHelpEn = spawnSync('bash', [toolBin, '--help'], {
+    encoding: 'utf-8',
+    env: { ...process.env, QES_LANG: 'en' },
+  });
+  assert.strictEqual(resHelpEn.status, 0);
+  assert.match(resHelpEn.stdout, /Ukrainian QES & Cryptographic LegalTech Suite/);
+  assert.match(resHelpEn.stdout, /COMMAND EXAMPLES/);
+  assert.match(resHelpEn.stdout, /qes-sign --pades/);
+});
+

@@ -12,6 +12,8 @@ if [ "$1" = "configure" ]; then
     chmod 0755 /usr/bin/qes-agent 2>/dev/null || true
     chmod 0755 /usr/bin/qes-ocr 2>/dev/null || true
     chmod 0755 /usr/bin/qes-config 2>/dev/null || true
+    chmod 0755 /usr/bin/qes-tool 2>/dev/null || true
+    chmod 0755 /usr/bin/qes-tools 2>/dev/null || true
     if [ -f /usr/lib/qes-tools/bin/typst ]; then
         chmod 0755 /usr/lib/qes-tools/bin/typst 2>/dev/null || true
     fi

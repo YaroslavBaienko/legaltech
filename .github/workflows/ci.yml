@@ -63,6 +63,8 @@ jobs:
           sudo ln -sf "$PWD/bin/qes-ocr" /usr/local/bin/qes-ocr
           sudo ln -sf "$PWD/bin/qes-pdf-court" /usr/local/bin/qes-pdf-court
           sudo ln -sf "$PWD/bin/qes-config" /usr/local/bin/qes-config
+          sudo ln -sf "$PWD/bin/qes-tool" /usr/local/bin/qes-tool
+          sudo ln -sf "$PWD/bin/qes-tool" /usr/local/bin/qes-tools
 
       - name: Run Unit Tests
         working-directory: packages/qes-tools

@@ -74,6 +74,8 @@ ln -sfn "$PACKAGE_DIR/bin/qes-cert" "$MOCK_BIN/qes-cert"
 ln -sfn "$PACKAGE_DIR/bin/qes-pdf-court" "$MOCK_BIN/qes-pdf-court"
 ln -sfn "$PACKAGE_DIR/bin/qes-ocr" "$MOCK_BIN/qes-ocr"
 ln -sfn "$PACKAGE_DIR/bin/qes-config" "$MOCK_BIN/qes-config"
+ln -sfn "$PACKAGE_DIR/bin/qes-tool" "$MOCK_BIN/qes-tool"
+ln -sfn "$PACKAGE_DIR/bin/qes-tool" "$MOCK_BIN/qes-tools"
 
 # Створення mock утиліти zenity для неінтерактивної, гарантованої перевірки
 cat << 'EOF' > "$MOCK_BIN/zenity"
@@ -509,8 +511,54 @@ else
     echo "Помилка: невірний статус qes-config: $cfg_status" >&2; exit 1
 fi
 
+# ------------------------------------------------------------------------------
+# 16. ТЕСТ: qes-tool (майстер-утиліта, прапорці --version, --help та диспетчер)
+# ------------------------------------------------------------------------------
+log_test "CLI qes-tool: прапорець --version, довідка --help та диспетчеризація"
+
+# Перевірка прапорця --version
+tool_ver=$(qes-tool --version)
+if [[ "$tool_ver" == *"qes-tools v1.0.4"* ]]; then
+    assert_ok "qes-tool --version повертає коректний номер версії ($tool_ver)"
+else
+    echo "Помилка qes-tool --version: $tool_ver" >&2; exit 1
+fi
+
+# Перевірка синоніма qes-tools -v
+tools_ver=$(qes-tools -v)
+if [[ "$tools_ver" == *"qes-tools v1.0.4"* ]]; then
+    assert_ok "qes-tools -v працює ідентично через аліас ($tools_ver)"
+else
+    echo "Помилка qes-tools -v: $tools_ver" >&2; exit 1
+fi
+
+# Перевірка довідки та прикладів українською мовою
+help_uk=$(QES_LANG=uk qes-tool --help)
+if [[ "$help_uk" == *"Комплекс КЕП"* && "$help_uk" == *"ПРИКЛАДИ КОМАНД"* && "$help_uk" == *"qes-sign --pades"* ]]; then
+    assert_ok "qes-tool --help містить повноцінний гайд та приклади команд українською"
+else
+    echo "Помилка: help_uk не містить очікуваних розділів" >&2; exit 1
+fi
+
+# Перевірка довідки та прикладів англійською мовою
+help_en=$(QES_LANG=en qes-tool --help)
+if [[ "$help_en" == *"Ukrainian QES"* && "$help_en" == *"COMMAND EXAMPLES"* && "$help_en" == *"qes-sign --pades"* ]]; then
+    assert_ok "QES_LANG=en qes-tool --help виводить документацію та приклади англійською"
+else
+    echo "Помилка: help_en не містить очікуваних розділів" >&2; exit 1
+fi
+
+# Перевірка виконання підкоманди через диспетчер: qes-tool agent status
+dispatch_res=$(qes-tool agent status)
+if [[ "$dispatch_res" == *"QES SESSION STATUS"* || "$dispatch_res" == *"СТАТУС СЕСІЇ"* ]]; then
+    assert_ok "qes-tool agent status успішно викликає підкоманду через єдину точку входу"
+else
+    echo "Помилка диспетчеризації: $dispatch_res" >&2; exit 1
+fi
+
 # Очищення тимчасового тестового ключа з ~/.secure_keys
 rm -f "$TEST_LINK" "$TEST_LINK_CER"
+
 
 
 echo -e "\n${CLR_BOLD}${CLR_GREEN}==============================================================================${CLR_RESET}"

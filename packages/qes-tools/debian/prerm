@@ -12,7 +12,9 @@ if [ "$1" = "remove" ] || [ "$1" = "purge" ] || [ "$1" = "deconfigure" ]; then
           /usr/bin/qes-pdf-court \
           /usr/bin/qes-agent \
           /usr/bin/qes-ocr \
-          /usr/bin/qes-config 2>/dev/null || true
+          /usr/bin/qes-config \
+          /usr/bin/qes-tool \
+          /usr/bin/qes-tools 2>/dev/null || true
 
     # Видалення скриптів Nautilus з /etc/skel
     rm -rf "/etc/skel/.local/share/nautilus/scripts/🔐 КЕП та Безпека" \

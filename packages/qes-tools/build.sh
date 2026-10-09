@@ -149,6 +149,17 @@ cat << 'EOF' > "${BUILD_ROOT}/usr/bin/qes-config"
 exec /usr/lib/qes-tools/bin/qes-config "$@"
 EOF
 
+cat << 'EOF' > "${BUILD_ROOT}/usr/bin/qes-tool"
+#!/bin/sh
+exec /usr/lib/qes-tools/bin/qes-tool "$@"
+EOF
+
+cat << 'EOF' > "${BUILD_ROOT}/usr/bin/qes-tools"
+#!/bin/sh
+exec /usr/lib/qes-tools/bin/qes-tool "$@"
+EOF
+
+
 chmod 0755 "${BUILD_ROOT}/usr/bin/"*
 chmod 0755 "${BUILD_ROOT}/usr/lib/qes-tools/bin/"*
 

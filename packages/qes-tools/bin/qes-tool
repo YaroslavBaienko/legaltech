@@ -1,0 +1,400 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# qes-tool — Master CLI umbrella & documentation guide for QES Tools Suite
+# 100% Offline-First | Ukrainian Qualified Electronic Signature (КЕП / ДСТУ 4145)
+# ==============================================================================
+set -euo pipefail
+
+# ANSI color codes (disabled if stdout is not a TTY or NO_COLOR is set)
+if [[ -t 1 && -z "${NO_COLOR:-}" ]]; then
+    CLR_RESET="\033[0m"
+    CLR_BOLD="\033[1m"
+    CLR_GREEN="\033[32m"
+    CLR_CYAN="\033[36m"
+    CLR_YELLOW="\033[33m"
+    CLR_RED="\033[31m"
+    CLR_GRAY="\033[90m"
+    CLR_BLUE="\033[34m"
+else
+    CLR_RESET=""
+    CLR_BOLD=""
+    CLR_GREEN=""
+    CLR_CYAN=""
+    CLR_YELLOW=""
+    CLR_RED=""
+    CLR_GRAY=""
+    CLR_BLUE=""
+fi
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PACKAGE_DIR="$(cd "${SCRIPT_DIR}/.." 2>/dev/null && pwd || true)"
+
+REAL_SCRIPT="$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || realpath "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")"
+REAL_BIN_DIR="$(cd "$(dirname "${REAL_SCRIPT}")" 2>/dev/null && pwd || true)"
+REAL_PKG_DIR="$(cd "${REAL_BIN_DIR}/.." 2>/dev/null && pwd || true)"
+
+get_version() {
+    local candidates=(
+        "${REAL_PKG_DIR}/package.json"
+        "/usr/lib/qes-tools/package.json"
+        "${PACKAGE_DIR}/package.json"
+    )
+    for c in "${candidates[@]}"; do
+        if [[ -f "$c" ]]; then
+            local v
+            v=$(grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' "$c" 2>/dev/null | head -n1 | cut -d'"' -f4 || true)
+            if [[ -n "$v" ]]; then
+                echo "$v"
+                return 0
+            fi
+        fi
+    done
+    echo "1.0.4"
+}
+
+VERSION="$(get_version)"
+
+get_lang() {
+    # 1. Explicit override via QES_LANG
+    if [[ -n "${QES_LANG:-}" ]]; then
+        if [[ "$QES_LANG" == "en" ]]; then echo "en"; return 0; fi
+        echo "uk"; return 0
+    fi
+
+    # 2. Config file ~/.config/qes/config.json
+    local cfg="$HOME/.config/qes/config.json"
+    if [[ -f "$cfg" ]]; then
+        local l
+        l=$(grep -o '"lang"[[:space:]]*:[[:space:]]*"[^"]*"' "$cfg" 2>/dev/null | cut -d'"' -f4 || true)
+        if [[ "$l" == "en" ]]; then echo "en"; return 0; fi
+        if [[ "$l" == "uk" ]]; then echo "uk"; return 0; fi
+    fi
+
+    # 3. System locale ($LC_ALL, $LC_MESSAGES, $LANG)
+    local loc="${LC_ALL:-${LC_MESSAGES:-${LANG:-uk_UA.UTF-8}}}"
+    if [[ "$loc" =~ ^uk || "$loc" =~ ^uk_ ]]; then
+        echo "uk"
+    else
+        echo "en"
+    fi
+}
+
+CURRENT_LANG="$(get_lang)"
+
+show_version() {
+    echo "qes-tools v${VERSION}"
+}
+
+show_help_uk() {
+    cat << EOF
+${CLR_BOLD}${CLR_CYAN}================================================================================${CLR_RESET}
+${CLR_BOLD}${CLR_CYAN}  qes-tool v${VERSION} — Комплекс КЕП та криптографічного захисту для юристів${CLR_RESET}
+${CLR_BOLD}${CLR_CYAN}  100% Offline-First | ДСТУ 4145-2002 | PAdES | CAdES | ASiC-E | ГОСТ 28147:89${CLR_RESET}
+${CLR_BOLD}${CLR_CYAN}================================================================================${CLR_RESET}
+
+${CLR_BOLD}ОПИС:${CLR_RESET}
+  ${CLR_BOLD}qes-tool${CLR_RESET} (або ${CLR_BOLD}qes-tools${CLR_RESET}) — єдиний центр керування та довідник для роботи
+  з українським кваліфікованим електронним підписом (КЕП / ДСТУ 4145-2002),
+  шифруванням адвокатської таємниці та судовою підсистемою «Електронний суд».
+
+  Всі операції виконуються ${CLR_GREEN}100% автономно на вашому комп'ютері${CLR_RESET} без передачі
+  файлів чи паролів у хмару або сторонні сервери.
+
+${CLR_BOLD}ВИКОРИСТАННЯ:${CLR_RESET}
+  $ qes-tool [КОМАНДА | ОПЦІЯ] [АРГУМЕНТИ...]
+  $ qes-tools [КОМАНДА | ОПЦІЯ] [АРГУМЕНТИ...]
+
+${CLR_BOLD}ОСНОВНІ ОПЦІЇ:${CLR_RESET}
+  ${CLR_GREEN}-v, --version, version${CLR_RESET}   Показати поточну версію комплексу (${VERSION})
+  ${CLR_GREEN}-h, --help, help${CLR_RESET}         Показати цю довідку та приклади команд
+
+${CLR_BOLD}ДОСТУПНІ ІНСТРУМЕНТИ КОМПЛЕКСУ:${CLR_RESET}
+  ${CLR_CYAN}qes-sign${CLR_RESET}        ✍️  Підписання (PAdES PDF зі штампом/QR, CAdES .p7s, ASiC-E)
+  ${CLR_CYAN}qes-verify${CLR_RESET}      🔍  Перевірка підписів, сертифікатів та цілісності (.pdf, .p7s, .asice)
+  ${CLR_CYAN}qes-encrypt${CLR_RESET}     🛡️  Асиметричне шифрування (особистий сейф або для адресата за .cer)
+  ${CLR_CYAN}qes-decrypt${CLR_RESET}     🔓  Розшифрування файлів особистим ключем КЕП (.enc -> оригінал)
+  ${CLR_CYAN}qes-export-cert${CLR_RESET} 📤  Експорт відкритого сертифіката (.cer) з закритого ключа (.pfx)
+  ${CLR_CYAN}qes-cert${CLR_RESET}        📜  Аналіз сертифікатів, ланцюжків КНЕДП, пакетів PKCS#7 (.p7b)
+  ${CLR_CYAN}qes-agent${CLR_RESET}       🔒  Керування сесією пам'яті (кешування пароля в RAM та блокування)
+  ${CLR_CYAN}qes-config${CLR_RESET}      ⚙️  Налаштування мови інтерфейсу (UA/EN) та інтеграції з Nautilus
+  ${CLR_CYAN}qes-pdf-court${CLR_RESET}   ⚖️  Оптимізація та лінеаризація PDF для «Електронного суду» (<50 МБ)
+  ${CLR_CYAN}qes-ocr${CLR_RESET}         👁️  Оптичне розпізнавання тексту сканів у повнотекстовий PDF
+
+${CLR_BOLD}ПРИКЛАДИ КОМАНД (CLI):${CLR_RESET}
+  ${CLR_YELLOW}1. Підписати PDF зі штампом адвоката та QR-кодом (PAdES):${CLR_RESET}
+     $ qes-sign --pades --key ~/.secure_keys/my_key.pfx позов.pdf
+     ${CLR_GRAY}# Створює позов_signed.pdf з векторним офіційним штампом та QR${CLR_RESET}
+
+  ${CLR_YELLOW}2. Підписати PDF без накладання візуального штампа:${CLR_RESET}
+     $ qes-sign --pades --no-stamp --key ~/.secure_keys/my_key.pfx договір.pdf
+
+  ${CLR_YELLOW}3. Пакетне підписання кількох документів у контейнер ASiC-E:${CLR_RESET}
+     $ qes-sign --asice -o справа_42.asice договір.pdf розрахунок.xlsx довідка.docx
+
+  ${CLR_YELLOW}4. Додати другий підпис до вже підписаного PDF (Мультипідпис):${CLR_RESET}
+     $ qes-sign --append --key ~/.secure_keys/partner.pfx договір_signed.pdf
+
+  ${CLR_YELLOW}5. Накласти відокремлений підпис CAdES (.p7s):${CLR_RESET}
+     $ qes-sign акт.docx
+     ${CLR_GRAY}# Створює файл акт.docx.p7s поруч з оригіналом${CLR_RESET}
+
+  ${CLR_YELLOW}6. Перевірити валідність підпису на документі:${CLR_RESET}
+     $ qes-verify договір_signed.pdf
+     $ qes-verify справа_42.asice
+
+  ${CLR_YELLOW}7. Видобути оригінальні файли з контейнера ASiC-E:${CLR_RESET}
+     $ qes-verify -x /шлях/до/папки справа_42.asice
+
+  ${CLR_YELLOW}8. Зашифрувати файл у свій особистий криптосейф:${CLR_RESET}
+     $ qes-encrypt конфіденційно.docx
+     ${CLR_GRAY}# Створює зашифрований файл конфіденційно.docx.enc${CLR_RESET}
+
+  ${CLR_YELLOW}9. Зашифрувати файл для колеги або клієнта (за його сертифікатом):${CLR_RESET}
+     $ qes-encrypt -r клієнт_сертифікат.cer договір.pdf
+
+  ${CLR_YELLOW}10. Розшифрувати отриманий зашифрований файл (.enc):${CLR_RESET}
+     $ qes-decrypt документ.enc
+
+  ${CLR_YELLOW}11. Експортувати свій відкритий сертифікат для передачі клієнту:${CLR_RESET}
+     $ qes-export-cert -o Мій_Сертифікат_КЕП.cer
+
+  ${CLR_YELLOW}12. Перевірити стан кешу пароля та заблокувати сесію:${CLR_RESET}
+     $ qes-agent status    ${CLR_GRAY}# Перегляд активних сесій та часу дії${CLR_RESET}
+     $ qes-agent clear     ${CLR_GRAY}# Миттєве вилучення паролів з пам'яті${CLR_RESET}
+
+  ${CLR_YELLOW}13. Оптимізувати великий PDF для підсистеми «Електронний суд»:${CLR_RESET}
+     $ qes-pdf-court скановані_матеріали.pdf
+     ${CLR_GRAY}# Забезпечує сумісність: ліміт < 50 МБ, лінеаризація Fast Web View${CLR_RESET}
+
+  ${CLR_YELLOW}14. Розпізнати текст сканованого документа (OCR):${CLR_RESET}
+     $ qes-ocr --sidecar скан.png       ${CLR_GRAY}# Українська + Англійська${CLR_RESET}
+     $ qes-ocr --eng скан_договору.pdf  ${CLR_GRAY}# Чиста Англійська мова${CLR_RESET}
+
+  ${CLR_YELLOW}15. Змінити мову меню в системному провіднику Nautilus:${CLR_RESET}
+     $ qes-config --lang en    ${CLR_GRAY}# Меню англійською: 🔐 QES & Security${CLR_RESET}
+     $ qes-config --lang uk    ${CLR_GRAY}# Меню українською: 🔐 КЕП та Безпека${CLR_RESET}
+     $ qes-config --status     ${CLR_GRAY}# Переглянути стан конфігурації${CLR_RESET}
+
+${CLR_BOLD}ГРАФІЧНИЙ ІНТЕРФЕЙС (ПРАВА КНОПКА МИШІ В GNOME / NAUTILUS):${CLR_RESET}
+  Усі 16 функцій комплексу доступні в 1 клік без термінала:
+  Клацніть правою кнопкою миші на файлі ➔ ${CLR_BOLD}Скрипти (Scripts)${CLR_RESET} ➔ ${CLR_CYAN}🔐 КЕП та Безпека${CLR_RESET}.
+
+${CLR_BOLD}ПРЯМИЙ ВИКЛИК ПІДКОМАНД ЧЕРЕЗ QES-TOOL:${CLR_RESET}
+  Ви можете викликати будь-яку утиліту або напряму, або через команду 'qes-tool':
+  $ qes-tool sign [опції...]       (еквівалент qes-sign)
+  $ qes-tool verify [файл...]      (еквівалент qes-verify)
+  $ qes-tool encrypt [файл...]     (еквівалент qes-encrypt)
+  $ qes-tool decrypt [файл.enc]    (еквівалент qes-decrypt)
+  $ qes-tool export-cert           (еквівалент qes-export-cert)
+  $ qes-tool cert [файл.cer]       (еквівалент qes-cert)
+  $ qes-tool agent [status|clear]  (еквівалент qes-agent)
+  $ qes-tool config [--lang...]    (еквівалент qes-config)
+  $ qes-tool pdf-court [файл.pdf]  (еквівалент qes-pdf-court)
+  $ qes-tool ocr [файл...]         (еквівалент qes-ocr)
+${CLR_BOLD}${CLR_CYAN}================================================================================${CLR_RESET}
+EOF
+}
+
+show_help_en() {
+    cat << EOF
+${CLR_BOLD}${CLR_CYAN}================================================================================${CLR_RESET}
+${CLR_BOLD}${CLR_CYAN}  qes-tool v${VERSION} — Ukrainian QES & Cryptographic LegalTech Suite${CLR_RESET}
+${CLR_BOLD}${CLR_CYAN}  100% Offline-First | DSTU 4145-2002 | PAdES | CAdES | ASiC-E | GOST 28147:89${CLR_RESET}
+${CLR_BOLD}${CLR_CYAN}================================================================================${CLR_RESET}
+
+${CLR_BOLD}DESCRIPTION:${CLR_RESET}
+  ${CLR_BOLD}qes-tool${CLR_RESET} (or ${CLR_BOLD}qes-tools${CLR_RESET}) is the master control center and documentation
+  guide for Ukrainian Qualified Electronic Signatures (QES / DSTU 4145-2002),
+  legal attorney-client privilege encryption, and "Electronic Court" automation.
+
+  All operations run ${CLR_GREEN}100% offline and locally on your workstation${CLR_RESET} without
+  transmitting documents or passwords to any cloud or external servers.
+
+${CLR_BOLD}USAGE:${CLR_RESET}
+  $ qes-tool [COMMAND | OPTION] [ARGUMENTS...]
+  $ qes-tools [COMMAND | OPTION] [ARGUMENTS...]
+
+${CLR_BOLD}MAIN OPTIONS:${CLR_RESET}
+  ${CLR_GREEN}-v, --version, version${CLR_RESET}   Show installed suite version (${VERSION})
+  ${CLR_GREEN}-h, --help, help${CLR_RESET}         Display this documentation guide and command examples
+
+${CLR_BOLD}AVAILABLE SUITE TOOLS:${CLR_RESET}
+  ${CLR_CYAN}qes-sign${CLR_RESET}        ✍️  Signing (PAdES PDF with stamp/QR, CAdES .p7s, ASiC-E)
+  ${CLR_CYAN}qes-verify${CLR_RESET}      🔍  Signature verification, certificate inspection & integrity
+  ${CLR_CYAN}qes-encrypt${CLR_RESET}     🛡️  Asymmetric encryption (personal vault or recipient's .cer)
+  ${CLR_CYAN}qes-decrypt${CLR_RESET}     🔓  Decryption using personal QES private key (.enc -> original)
+  ${CLR_CYAN}qes-export-cert${CLR_RESET} 📤  Export public certificate (.cer) from container (.pfx)
+  ${CLR_CYAN}qes-cert${CLR_RESET}        📜  Certificate inspector, CA trust chains & PKCS#7 bundles (.p7b)
+  ${CLR_CYAN}qes-agent${CLR_RESET}       🔒  Memory session manager (RAM password cache & instant lock)
+  ${CLR_CYAN}qes-config${CLR_RESET}      ⚙️  Language settings (UA/EN) & Nautilus desktop menu integration
+  ${CLR_CYAN}qes-pdf-court${CLR_RESET}   ⚖️  PDF optimization & linearization for "Electronic Court" (<50 MB)
+  ${CLR_CYAN}qes-ocr${CLR_RESET}         👁️  OCR text recognition into searchable PDF with sidecar export
+
+${CLR_BOLD}COMMAND EXAMPLES (CLI):${CLR_RESET}
+  ${CLR_YELLOW}1. Sign PDF with visual attorney stamp and QR code (PAdES):${CLR_RESET}
+     $ qes-sign --pades --key ~/.secure_keys/my_key.pfx lawsuit.pdf
+     ${CLR_GRAY}# Creates lawsuit_signed.pdf with embedded stamp and verification QR${CLR_RESET}
+
+  ${CLR_YELLOW}2. Sign PDF without applying visual stamp:${CLR_RESET}
+     $ qes-sign --pades --no-stamp --key ~/.secure_keys/my_key.pfx contract.pdf
+
+  ${CLR_YELLOW}3. Package multiple files into a European ASiC-E container:${CLR_RESET}
+     $ qes-sign --asice -o case_42.asice contract.pdf calc.xlsx report.docx
+
+  ${CLR_YELLOW}4. Append secondary signature to an already signed PDF (Multi-Sign):${CLR_RESET}
+     $ qes-sign --append --key ~/.secure_keys/partner.pfx contract_signed.pdf
+
+  ${CLR_YELLOW}5. Create detached signature CAdES (.p7s):${CLR_RESET}
+     $ qes-sign contract.docx
+     ${CLR_GRAY}# Creates contract.docx.p7s next to the original document${CLR_RESET}
+
+  ${CLR_YELLOW}6. Verify signature and mathematical integrity:${CLR_RESET}
+     $ qes-verify contract_signed.pdf
+     $ qes-verify case_42.asice
+
+  ${CLR_YELLOW}7. Extract original documents from an ASiC-E container:${CLR_RESET}
+     $ qes-verify -x /path/to/destination case_42.asice
+
+  ${CLR_YELLOW}8. Encrypt document into personal cryptographic vault:${CLR_RESET}
+     $ qes-encrypt confidential.docx
+     ${CLR_GRAY}# Creates encrypted file confidential.docx.enc${CLR_RESET}
+
+  ${CLR_YELLOW}9. Encrypt file for a colleague or client (using their .cer certificate):${CLR_RESET}
+     $ qes-encrypt -r client_cert.cer contract.pdf
+
+  ${CLR_YELLOW}10. Decrypt received encrypted file (.enc):${CLR_RESET}
+     $ qes-decrypt document.enc
+
+  ${CLR_YELLOW}11. Export personal public certificate for client sharing:${CLR_RESET}
+     $ qes-export-cert -o My_Certificate.cer
+
+  ${CLR_YELLOW}12. Check RAM password session status and clear/lock:${CLR_RESET}
+     $ qes-agent status    ${CLR_GRAY}# View active sessions and remaining TTL${CLR_RESET}
+     $ qes-agent clear     ${CLR_GRAY}# Instantly wipe passwords from memory${CLR_RESET}
+
+  ${CLR_YELLOW}13. Optimize large PDF for Ukrainian "Electronic Court":${CLR_RESET}
+     $ qes-pdf-court scanned_records.pdf
+     ${CLR_GRAY}# Enforces court rules: size limit < 50 MB, linearization (Fast Web View)${CLR_RESET}
+
+  ${CLR_YELLOW}14. OCR text recognition on scanned images / PDFs:${CLR_RESET}
+     $ qes-ocr --sidecar scan.png       ${CLR_GRAY}# Ukrainian + English${CLR_RESET}
+     $ qes-ocr --eng contract_scan.pdf  ${CLR_GRAY}# Pure English mode${CLR_RESET}
+
+  ${CLR_YELLOW}15. Switch menu language in GNOME Nautilus file manager:${CLR_RESET}
+     $ qes-config --lang en    ${CLR_GRAY}# English menu: 🔐 QES & Security${CLR_RESET}
+     $ qes-config --lang uk    ${CLR_GRAY}# Ukrainian menu: 🔐 КЕП та Безпека${CLR_RESET}
+     $ qes-config --status     ${CLR_GRAY}# View active language status${CLR_RESET}
+
+${CLR_BOLD}DESKTOP FILE MANAGER (GNOME / NAUTILUS CONTEXT MENU):${CLR_RESET}
+  All 16 tools are available with a single right-click in Nautilus:
+  Right-click on any file ➔ ${CLR_BOLD}Scripts${CLR_RESET} ➔ ${CLR_CYAN}🔐 QES & Security${CLR_RESET}.
+
+${CLR_BOLD}RUNNING SUBCOMMANDS VIA QES-TOOL:${CLR_RESET}
+  You can execute any subcommand directly or via 'qes-tool':
+  $ qes-tool sign [options...]     (equivalent to qes-sign)
+  $ qes-tool verify [file...]      (equivalent to qes-verify)
+  $ qes-tool encrypt [file...]     (equivalent to qes-encrypt)
+  $ qes-tool decrypt [file.enc]    (equivalent to qes-decrypt)
+  $ qes-tool export-cert           (equivalent to qes-export-cert)
+  $ qes-tool cert [file.cer]       (equivalent to qes-cert)
+  $ qes-tool agent [status|clear]  (equivalent to qes-agent)
+  $ qes-tool config [--lang...]    (equivalent to qes-config)
+  $ qes-tool pdf-court [file.pdf]  (equivalent to qes-pdf-court)
+  $ qes-tool ocr [file...]         (equivalent to qes-ocr)
+${CLR_BOLD}${CLR_CYAN}================================================================================${CLR_RESET}
+EOF
+}
+
+show_help() {
+    if [[ "$CURRENT_LANG" == "en" ]]; then
+        show_help_en
+    else
+        show_help_uk
+    fi
+}
+
+find_subcommand_binary() {
+    local target="$1"
+    # 1. System command in PATH
+    if command -v "$target" >/dev/null 2>&1; then
+        command -v "$target"
+        return 0
+    fi
+    # 2. In /usr/bin
+    if [[ -x "/usr/bin/$target" ]]; then
+        echo "/usr/bin/$target"
+        return 0
+    fi
+    # 3. In relative bin dir
+    if [[ -x "${REAL_BIN_DIR}/$target" ]]; then
+        echo "${REAL_BIN_DIR}/$target"
+        return 0
+    fi
+    # 4. In relative bin dir as .js
+    if [[ -f "${REAL_BIN_DIR}/${target}.js" ]]; then
+        echo "${REAL_BIN_DIR}/${target}.js"
+        return 0
+    fi
+    # 5. In /usr/lib/qes-tools/bin
+    if [[ -x "/usr/lib/qes-tools/bin/$target" ]]; then
+        echo "/usr/lib/qes-tools/bin/$target"
+        return 0
+    fi
+    if [[ -f "/usr/lib/qes-tools/bin/${target}.js" ]]; then
+        echo "/usr/lib/qes-tools/bin/${target}.js"
+        return 0
+    fi
+    return 1
+}
+
+# ------------------------------------------------------------------------------
+# Dispatcher logic
+# ------------------------------------------------------------------------------
+if [[ $# -eq 0 ]]; then
+    show_help
+    exit 0
+fi
+
+ACTION="$1"
+shift
+
+case "$ACTION" in
+    -v|--version|version)
+        show_version
+        exit 0
+        ;;
+    -h|--help|help)
+        show_help
+        exit 0
+        ;;
+    sign|verify|encrypt|decrypt|export-cert|cert|agent|config|pdf-court|ocr)
+        TARGET_BIN="qes-${ACTION}"
+        BIN_PATH="$(find_subcommand_binary "$TARGET_BIN" || true)"
+        if [[ -z "$BIN_PATH" ]]; then
+            echo -e "${CLR_RED}Помилка: підкоманда '$TARGET_BIN' не знайдена в системі.${CLR_RESET}" >&2
+            exit 1
+        fi
+        if [[ "$BIN_PATH" == *.js ]]; then
+            exec node "$BIN_PATH" "$@"
+        else
+            exec "$BIN_PATH" "$@"
+        fi
+        ;;
+    qes-*)
+        BIN_PATH="$(find_subcommand_binary "$ACTION" || true)"
+        if [[ -z "$BIN_PATH" ]]; then
+            echo -e "${CLR_RED}Помилка: команда '$ACTION' не знайдена в системі.${CLR_RESET}" >&2
+            exit 1
+        fi
+        if [[ "$BIN_PATH" == *.js ]]; then
+            exec node "$BIN_PATH" "$@"
+        else
+            exec "$BIN_PATH" "$@"
+        fi
+        ;;
+    *)
+        echo -e "${CLR_RED}Невідома команда або опція:${CLR_RESET} $ACTION" >&2
+        echo -e "Запустіть ${CLR_BOLD}qes-tool --help${CLR_RESET} для перегляду повного списку команд та прикладів." >&2
+        exit 1
+        ;;
+esac
