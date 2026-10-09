@@ -390,6 +390,12 @@ cp "$SAMPLE_PDF" "$TEST_NAUTILUS_PDF"
 run_nautilus_script "1_sign_pades.sh" "$TEST_NAUTILUS_PDF"
 assert_file_exists "${TEST_NAUTILUS_PDF%.*}_signed.pdf" "Nautilus PAdES результат"
 
+# 2b. 1b_sign_pades_no_stamp.sh
+TEST_NAUTILUS_NO_STAMP_PDF="$TEST_DIR/nautilus_doc_nostamp.pdf"
+cp "$SAMPLE_PDF" "$TEST_NAUTILUS_NO_STAMP_PDF"
+run_nautilus_script "1b_sign_pades_no_stamp.sh" "$TEST_NAUTILUS_NO_STAMP_PDF"
+assert_file_exists "${TEST_NAUTILUS_NO_STAMP_PDF%.*}_signed.pdf" "Nautilus PAdES результат (без штампа)"
+
 # 3. 2_sign_p7s.sh
 TEST_NAUTILUS_TXT="$TEST_DIR/nautilus_doc.txt"
 cp "$SAMPLE_TXT" "$TEST_NAUTILUS_TXT"
@@ -458,4 +464,4 @@ rm -f "$TEST_LINK" "$TEST_LINK_CER"
 echo -e "\n${CLR_BOLD}${CLR_GREEN}==============================================================================${CLR_RESET}"
 echo -e "${CLR_BOLD}${CLR_GREEN} 🎉 ВСІ $PASSED_COUNT ТЕСТІВ ТА СЦЕНАРІЇВ УСПІШНО ПРОЙДЕНО БЕЗ ЖОДНОЇ ПОМИЛКИ!${CLR_RESET}"
 echo -e "${CLR_BOLD}${CLR_GREEN}==============================================================================${CLR_RESET}"
-echo -e "Покриття: 100% CLI утиліт, 100% Nautilus скриптів (15/15), PAdES/CAdES/ASiC-E/OCR/Vault."
+echo -e "Покриття: 100% CLI утиліт, 100% Nautilus скриптів (16/16), PAdES (зі штампом і без)/CAdES/ASiC-E/OCR/Vault."

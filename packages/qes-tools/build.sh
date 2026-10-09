@@ -8,7 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PKG_ROOT="${SCRIPT_DIR}"
 
 PKG_NAME="qes-tools"
-PKG_VERSION="1.0.2"
+PKG_VERSION="1.0.3"
 PKG_ARCH="amd64"
 DEB_FILENAME="${PKG_NAME}_${PKG_VERSION}_${PKG_ARCH}.deb"
 
@@ -148,6 +148,7 @@ echo -e "${CLR_YELLOW}[5/6] Копіювання скриптів меню Nauti
 NAUTILUS_TARGET="${BUILD_ROOT}/usr/share/nautilus-scripts/🔐 КЕП та Безпека"
 cp "${PKG_ROOT}/nautilus-scripts/0_help.sh" "$NAUTILUS_TARGET/📖 Довідка та Інструкції КЕП"
 cp "${PKG_ROOT}/nautilus-scripts/1_sign_pades.sh" "$NAUTILUS_TARGET/✍️ Підписати (PAdES PDF зі штампом та QR)"
+cp "${PKG_ROOT}/nautilus-scripts/1b_sign_pades_no_stamp.sh" "$NAUTILUS_TARGET/✍️ Підписати (PAdES PDF без штампу та QR)"
 cp "${PKG_ROOT}/nautilus-scripts/2_sign_p7s.sh" "$NAUTILUS_TARGET/✍️ Підписати (Відокремлений підпис .p7s)"
 cp "${PKG_ROOT}/nautilus-scripts/3_sign_asice.sh" "$NAUTILUS_TARGET/📦 Підписати (Пакетний контейнер ASiC-E)"
 cp "${PKG_ROOT}/nautilus-scripts/4_verify.sh" "$NAUTILUS_TARGET/🔍 Перевірити підпис КЕП"
