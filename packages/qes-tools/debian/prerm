@@ -1,8 +1,37 @@
 #!/bin/sh
 set -e
 
-if [ "$1" = "remove" ] || [ "$1" = "purge" ]; then
-    rm -f /usr/bin/qes-sign /usr/bin/qes-verify /usr/bin/qes-encrypt /usr/bin/qes-decrypt /usr/bin/qes-export-cert /usr/bin/qes-pdf-court 2>/dev/null || true
+if [ "$1" = "remove" ] || [ "$1" = "purge" ] || [ "$1" = "deconfigure" ]; then
+    # Видалення глобальних бінарних обгорток
+    rm -f /usr/bin/qes-sign \
+          /usr/bin/qes-verify \
+          /usr/bin/qes-cert \
+          /usr/bin/qes-encrypt \
+          /usr/bin/qes-decrypt \
+          /usr/bin/qes-export-cert \
+          /usr/bin/qes-pdf-court \
+          /usr/bin/qes-agent \
+          /usr/bin/qes-ocr 2>/dev/null || true
+
+    # Видалення скриптів Nautilus з /etc/skel
+    rm -rf "/etc/skel/.local/share/nautilus/scripts/🔐 КЕП та Безпека" 2>/dev/null || true
+
+    # Видалення скриптів Nautilus з домашніх каталогів користувачів
+    for user_home in /home/*; do
+        if [ -d "$user_home" ]; then
+            rm -rf "$user_home/.local/share/nautilus/scripts/🔐 КЕП та Безпека" 2>/dev/null || true
+        fi
+    done
+
+    if [ -n "${SUDO_USER:-}" ]; then
+        sudo_home=$(getent passwd "$SUDO_USER" | cut -d: -f6)
+        if [ -n "$sudo_home" ] && [ -d "$sudo_home" ]; then
+            rm -rf "$sudo_home/.local/share/nautilus/scripts/🔐 КЕП та Безпека" 2>/dev/null || true
+        fi
+    fi
+
+    # Перезавантаження процесу Nautilus для миттєвого оновлення меню
+    pkill -x nautilus 2>/dev/null || true
 fi
 
 exit 0

@@ -49,6 +49,10 @@ echo -e "${CLR_YELLOW}[2/6] Копіювання керуючих файлів D
 cp "${PKG_ROOT}/debian/control" "${BUILD_ROOT}/DEBIAN/control"
 cp "${PKG_ROOT}/debian/postinst" "${BUILD_ROOT}/DEBIAN/postinst"
 cp "${PKG_ROOT}/debian/prerm" "${BUILD_ROOT}/DEBIAN/prerm"
+if [ -f "${PKG_ROOT}/debian/postrm" ]; then
+    cp "${PKG_ROOT}/debian/postrm" "${BUILD_ROOT}/DEBIAN/postrm"
+    chmod 0755 "${BUILD_ROOT}/DEBIAN/postrm"
+fi
 chmod 0755 "${BUILD_ROOT}/DEBIAN/postinst"
 chmod 0755 "${BUILD_ROOT}/DEBIAN/prerm"
 
