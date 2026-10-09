@@ -32,6 +32,10 @@ Engineered to preserve **attorney-client privilege**, complying with the Law of 
   - Non-root user USB device access via `/etc/udev/rules.d/60-iit-e-keys.rules`.
   - Native Messaging Host daemon (`euscpnmh`) automatically configured for Chrome, Chromium, Brave, Edge, and Firefox for web e-filing (Дія, Е-Суд, ДПС, ProZorro).
   - Diagnostic tools: `qes-tool token` and `qes-cert --tokens`.
+- **📡 Web Sign Agent & Browser Integration (`qes-agent`)**:
+  - **HTTP (port 8081) & HTTPS (port 8083) JSON-RPC Agent**: compatible with government and banking web portals that expect local agent services (`_loadSignAgent`).
+  - **Native Messaging Host setup**: `qes-agent setup-browsers` registers manifests in both user profiles (`~/.config/...`) and system paths (`/etc/...`).
+  - **Systemd User Service**: `qes-agent enable-service` / `disable-service` for automatic background execution on login.
 - **🏛️ National QTSP Registry & Universal CA Bundle**:
   - Registry of all 21 accredited Ukrainian trust service providers (`providers.js`) with auto-discovery and live CMP/TSP/OCSP endpoints.
   - Universal national certificate bundle `ua-all-cas.p7b` (175 certificates from CZO Trusted List).
@@ -50,7 +54,7 @@ Engineered to preserve **attorney-client privilege**, complying with the Law of 
 ### Quick Installation on Debian / Ubuntu:
 
 ```bash
-sudo apt install ./dist/qes-tools_1.0.6_amd64.deb
+sudo apt install ./dist/qes-tools_1.0.7_amd64.deb
 ```
 
 The `apt` package manager automatically resolves and installs all required dependencies (`nodejs`, `python3-cryptography`, `openssl`, `zenity`, `qpdf`, `ocrmypdf`, `tesseract-ocr-ukr`, `tesseract-ocr-eng`, `libnotify-bin`, `libpcsclite1`).
@@ -95,7 +99,14 @@ qes-pdf-court --eng contract_scan.pdf
 qes-encrypt confidential_file.pdf
 qes-decrypt confidential_file.pdf.enc
 
-# 9. Clear cached passwords from memory
+# 9. Hardware Token Diagnostics, Browser Setup & Web Sign Agent
+qes-agent status                  # Comprehensive status of tokens, browsers, and services
+qes-agent setup-browsers          # Register Native Messaging Host for Chrome, Chromium, Brave, Firefox
+qes-agent start-web --daemon      # Start Web Sign Agent (HTTP 8081 / HTTPS 8083) for web portals
+qes-agent stop-web                # Stop Web Sign Agent
+qes-agent enable-service          # Enable automatic startup on desktop login (systemd --user)
+
+# 10. Clear cached passwords from memory
 qes-agent clear
 ```
 
@@ -104,7 +115,7 @@ qes-agent clear
 ## 🧪 Running Tests
 
 ```bash
-# Unit tests for the signing engine & token drivers (25 tests)
+# Unit tests for the signing engine, token drivers & web agent (26 tests)
 npm test
 
 # Comprehensive end-to-end test suite (65 verification checks)

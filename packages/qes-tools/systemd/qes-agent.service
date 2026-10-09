@@ -1,0 +1,13 @@
+[Unit]
+Description=QES Tools Web Signing Agent (IIT EUSW Bridge)
+Documentation=https://github.com/YaroslavBaienko/legaltech
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/qes-agent start-web
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target

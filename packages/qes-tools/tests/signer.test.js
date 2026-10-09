@@ -796,4 +796,83 @@ test('integrated EUSW native modules and udev rules exist and satisfy Linux bina
   }
 });
 
+test('web-agent module bridges JSON-RPC to euscpnmh over HTTP and manages browser manifests', async () => {
+  const {
+    NmhBridge,
+    startWebAgentServer,
+    setupBrowserManifests,
+    checkBrowserManifests,
+    detectTokens,
+  } = require('../src/web-agent');
+
+  // 1. Test NmhBridge directly
+  const bridge = new NmhBridge();
+  assert.strictEqual(bridge.isAlive, true, 'NmhBridge process started');
+
+  const rpcResult = await new Promise((resolve, reject) => {
+    bridge.call(JSON.stringify({ jsonrpc: '2.0', id: 101, method: 'GetVersion', params: [] }), (err, res) => {
+      if (err) return reject(err);
+      resolve(JSON.parse(res));
+    });
+  });
+
+  assert.strictEqual(rpcResult.id, 101);
+  assert.strictEqual(rpcResult.result.result, '1.3.109');
+  assert.strictEqual(rpcResult.result.error.code, 0);
+  bridge.destroy();
+
+  // 2. Test startWebAgentServer HTTP GET & POST
+  const srv = startWebAgentServer({ portHttp: 18091, portHttps: 18093 });
+  assert.ok(srv.httpServer);
+
+  // Test GET status
+  const getRes = await new Promise((resolve) => {
+    const http = require('http');
+    http.get('http://127.0.0.1:18091/', (res) => {
+      let data = '';
+      res.on('data', (c) => { data += c; });
+      res.on('end', () => resolve(JSON.parse(data)));
+    });
+  });
+  assert.strictEqual(getRes.status, 'ok');
+  assert.strictEqual(getRes.eusw, '1.3.109');
+
+  // Test POST JSON-RPC
+  const postRes = await new Promise((resolve) => {
+    const http = require('http');
+    const req = http.request({
+      hostname: '127.0.0.1',
+      port: 18091,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json-rpc' },
+    }, (res) => {
+      let data = '';
+      res.on('data', (c) => { data += c; });
+      res.on('end', () => resolve(JSON.parse(data)));
+    });
+    req.write(JSON.stringify({ jsonrpc: '2.0', id: 202, method: 'GetVersion', params: [] }));
+    req.end();
+  });
+  assert.strictEqual(postRes.id, 202);
+  assert.strictEqual(postRes.result.result, '1.3.109');
+  srv.close();
+
+  // 3. Test setupBrowserManifests in temp home
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'qes-browser-test-'));
+  const setupRes = setupBrowserManifests(tmpHome);
+  assert.ok(setupRes.length > 0);
+
+  const userManifests = checkBrowserManifests(tmpHome).filter((c) => c.name.includes('(User)'));
+  for (const m of userManifests) {
+    assert.strictEqual(m.exists, true, `Manifest ${m.name} exists in ${m.file}`);
+  }
+
+  // 4. Test detectTokens
+  const detected = detectTokens();
+  assert.ok(Array.isArray(detected));
+
+  fs.rmSync(tmpHome, { recursive: true, force: true });
+});
+
+
 

@@ -8,7 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PKG_ROOT="${SCRIPT_DIR}"
 
 PKG_NAME="qes-tools"
-PKG_VERSION="1.0.6"
+PKG_VERSION="1.0.7"
 PKG_ARCH="amd64"
 DEB_FILENAME="${PKG_NAME}_${PKG_VERSION}_${PKG_ARCH}.deb"
 
@@ -214,6 +214,13 @@ cp "${PKG_ROOT}/nautilus-scripts/14_ocr_english.sh" "$NAUTILUS_TARGET/👁️ Р
 cp "${PKG_ROOT}/nautilus-scripts/_i18n.sh" "$NAUTILUS_TARGET/.i18n.sh"
 chmod 0755 "$NAUTILUS_TARGET/"*
 chmod 0755 "$NAUTILUS_TARGET/.i18n.sh"
+
+# 7. Встановлення юніта systemd --user для qes-agent
+if [ -f "${PKG_ROOT}/systemd/qes-agent.service" ]; then
+    mkdir -p "${BUILD_ROOT}/usr/lib/systemd/user"
+    cp "${PKG_ROOT}/systemd/qes-agent.service" "${BUILD_ROOT}/usr/lib/systemd/user/"
+    chmod 0644 "${BUILD_ROOT}/usr/lib/systemd/user/qes-agent.service"
+fi
 
 # Авторські права / документація
 cat << 'EOF' > "${BUILD_ROOT}/usr/share/doc/qes-tools/copyright"

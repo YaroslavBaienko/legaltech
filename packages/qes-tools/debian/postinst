@@ -105,6 +105,50 @@ EOF_NMH
             chmod 0644 "$d/ua.com.iit.eusign.nmh.json" 2>/dev/null || true
         done
 
+        # Реєструємо маніфести у профілях браузерів для активного користувача ($SUDO_USER)
+        if [ -n "$SUDO_USER" ] && [ "$SUDO_USER" != "root" ]; then
+            sudo_home=$(getent passwd "$SUDO_USER" | cut -d: -f6)
+            if [ -n "$sudo_home" ] && [ -d "$sudo_home" ]; then
+                for ud in \
+                    "$sudo_home/.config/google-chrome/NativeMessagingHosts" \
+                    "$sudo_home/.config/chromium/NativeMessagingHosts" \
+                    "$sudo_home/.config/BraveSoftware/Brave-Browser/NativeMessagingHosts" \
+                    "$sudo_home/.config/microsoft-edge/NativeMessagingHosts"
+                do
+                    mkdir -p "$ud" 2>/dev/null || true
+                    cat << 'EOF_NMH_CHROME' > "$ud/ua.com.iit.eusign.nmh.json"
+{
+  "name": "ua.com.iit.eusign.nmh",
+  "description": "IIT End User CA-1. Sign (web)",
+  "path": "/opt/iit/eu/sw/euscpnmh",
+  "type": "stdio",
+  "allowed_origins": [
+    "chrome-extension://jffafkigfgmjafhpkoibhfefeaebmccg/"
+  ]
+}
+EOF_NMH_CHROME
+                    chmod 0644 "$ud/ua.com.iit.eusign.nmh.json" 2>/dev/null || true
+                    chown -R "$SUDO_USER:" "$ud" 2>/dev/null || true
+                done
+
+                fxd="$sudo_home/.mozilla/native-messaging-hosts"
+                mkdir -p "$fxd" 2>/dev/null || true
+                cat << 'EOF_NMH_FX' > "$fxd/ua.com.iit.eusign.nmh.json"
+{
+  "name": "ua.com.iit.eusign.nmh",
+  "description": "IIT End User CA-1. Sign (web)",
+  "path": "/opt/iit/eu/sw/euscpnmh",
+  "type": "stdio",
+  "allowed_extensions": [
+    "eusw@iit.com.ua"
+  ]
+}
+EOF_NMH_FX
+                chmod 0644 "$fxd/ua.com.iit.eusign.nmh.json" 2>/dev/null || true
+                chown -R "$SUDO_USER:" "$fxd" 2>/dev/null || true
+            fi
+        fi
+
         # Плагін NPAPI для Mozilla (якщо існує каталог)
         if [ -f /opt/iit/eu/sw/npeuscp.so ]; then
             mkdir -p /usr/lib/mozilla/plugins 2>/dev/null || true
@@ -124,7 +168,7 @@ EOF_NMH
     fi
 
     echo "================================================================================"
-    echo " 🇺🇦 Встановлено комплекс електронного підпису та шифрування qes-tools v1.0.6"
+    echo " 🇺🇦 Встановлено комплекс електронного підпису та шифрування qes-tools v1.0.7"
     echo " • qes-sign        — підписання (CAdES .p7s, PAdES .pdf, ASiC-E .asice, мультипідпис)"
     echo " • qes-verify      — перевірка підписів (.p7s, .pdf, .asice) та сертифікатів"
     echo " • qes-cert        — швидкий інспектор сертифікатів КНЕДП / АЦСК (X.509, ДСТУ 4145)"
@@ -133,7 +177,7 @@ EOF_NMH
     echo " • qes-encrypt     — шифрування (ДСТУ 4145 / ГОСТ 28147:89 .enc/.p7e)"
     echo " • qes-decrypt     — розшифрування особистим КЕП"
     echo " • qes-export-cert — експорт відкритого сертифіката (.cer)"
-    echo " • qes-agent       — менеджер пам'яті паролів сесії (Session TTL)"
+    echo " • qes-agent       — Web Sign Agent (HTTP 8081 / HTTPS 8083), браузери та сесії паролів"
     echo " • qes-config      — керування мовою (UA/EN) та меню Nautilus (qes-config --lang uk|en|auto)"
     echo " • qes-tool token  — діагностика апаратних токенів (DepositSign, Алмаз-1К, Кристал-1К, Автор)"
     echo " • qes-tool providers — реєстр КНЕДП та автопошук сертифікатів (DepositSign, Дія, ДПС, Приват, mono)"
