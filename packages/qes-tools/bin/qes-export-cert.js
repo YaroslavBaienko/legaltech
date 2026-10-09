@@ -28,10 +28,23 @@ function askPassword(promptText, forceGui = false) {
     }
 
     if ((forceGui || !process.stdin.isTTY) && (process.env.DISPLAY || process.env.WAYLAND_DISPLAY)) {
-      const zenityRes = spawnSync('zenity', [
+      const cleanPrompt = (promptText || t('enterPassword')).replace(/\x1b\[[0-9;]*m/g, '');
+      const pangoText = `<span size="larger" weight="bold" color="#2a75d3">📤 Експорт відкритого сертифіката (.cer)</span>\n\n${cleanPrompt}\n<span size="small" color="#666666">Введіть пароль для безпечного видобування відкритого сертифіката з контейнера КЕП:</span>`;
+      const PAPIRUS_CERT_ICON = fs.existsSync('/home/attor/.local/share/icons/Papirus/48x48/mimetypes/application-certificate.svg')
+        ? '/home/attor/.local/share/icons/Papirus/48x48/mimetypes/application-certificate.svg'
+        : null;
+
+      const zenArgs = [
         '--password',
         `--title=${t('exportCertDialogTitle')}`,
-      ], { encoding: 'utf-8' });
+        `--text=${pangoText}`,
+        '--icon-name=application-certificate',
+        '--ok-label=Експортувати',
+        '--cancel-label=Скасувати',
+      ];
+      if (PAPIRUS_CERT_ICON) zenArgs.push(`--window-icon=${PAPIRUS_CERT_ICON}`);
+
+      const zenityRes = spawnSync('zenity', zenArgs, { encoding: 'utf-8' });
 
       if (zenityRes.status === 0) {
         return resolve(zenityRes.stdout.trim());

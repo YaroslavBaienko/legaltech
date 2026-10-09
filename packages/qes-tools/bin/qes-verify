@@ -672,8 +672,12 @@ def show_gui_report(results: List[Dict[str, Any]], file_path: str):
             f"--title={report_title}",
             f"--text={pango_text}",
             f"--ok-label={close_btn}",
-            "--width=580",
+            "--icon-name=application-certificate",
+            "--width=650",
+            "--height=460",
         ]
+        if os.path.isfile("/home/attor/.local/share/icons/Papirus/48x48/mimetypes/application-certificate.svg"):
+            cmd.append("--window-icon=/home/attor/.local/share/icons/Papirus/48x48/mimetypes/application-certificate.svg")
         if is_asice:
             cmd.extend([f"--extra-button={extract_btn}"])
         cmd.extend(["--extra-button=📖 Help / Довідка"])

@@ -28,10 +28,23 @@ function askPassword(promptText, forceGui = false) {
     }
 
     if ((forceGui || !process.stdin.isTTY) && (process.env.DISPLAY || process.env.WAYLAND_DISPLAY)) {
-      const zenityRes = spawnSync('zenity', [
+      const cleanPrompt = (promptText || t('enterPassword')).replace(/\x1b\[[0-9;]*m/g, '');
+      const pangoText = `<span size="larger" weight="bold" color="#2a75d3">🔓 Розшифрування особистим КЕП</span>\n\n${cleanPrompt}\n<span size="small" color="#666666">Введіть пароль вашого особистого ключа для відкриття зашифрованого файлу (.enc):</span>`;
+      const PAPIRUS_UNLOCK_ICON = fs.existsSync('/home/attor/.local/share/icons/Papirus/48x48/emblems/emblem-unlocked.svg')
+        ? '/home/attor/.local/share/icons/Papirus/48x48/emblems/emblem-unlocked.svg'
+        : null;
+
+      const zenArgs = [
         '--password',
         `--title=${t('decryptDialogTitle')}`,
-      ], { encoding: 'utf-8' });
+        `--text=${pangoText}`,
+        '--icon-name=emblem-unlocked',
+        '--ok-label=Розшифрувати',
+        '--cancel-label=Скасувати',
+      ];
+      if (PAPIRUS_UNLOCK_ICON) zenArgs.push(`--window-icon=${PAPIRUS_UNLOCK_ICON}`);
+
+      const zenityRes = spawnSync('zenity', zenArgs, { encoding: 'utf-8' });
 
       if (zenityRes.status === 0) {
         return resolve(zenityRes.stdout.trim());

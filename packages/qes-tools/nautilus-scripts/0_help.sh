@@ -331,13 +331,21 @@ EXTRA_BTN="Термінал: qes-tool --help"
 TERMINAL_PROMPT="Натисніть Enter для виходу..."
 fi
 
-RES=$(echo -e "$HELP_TEXT" | zenity --text-info \
-    --title="$TITLE" \
-    --width=840 \
-    --height=620 \
-    --font="Sans 10" \
-    --ok-label="$BTN_LABEL" \
-    --extra-button="$EXTRA_BTN" 2>/dev/null || true)
+HELP_ZEN_ARGS=(
+    --text-info
+    --title="$TITLE"
+    --width=860
+    --height=640
+    --font="Sans 10"
+    --ok-label="$BTN_LABEL"
+    --extra-button="$EXTRA_BTN"
+    --icon-name="help-browser"
+)
+if [[ -f "/home/attor/.local/share/icons/Papirus/48x48/mimetypes/application-certificate.svg" ]]; then
+    HELP_ZEN_ARGS+=(--window-icon="/home/attor/.local/share/icons/Papirus/48x48/mimetypes/application-certificate.svg")
+fi
+
+RES=$(echo -e "$HELP_TEXT" | zenity "${HELP_ZEN_ARGS[@]}" 2>/dev/null || true)
 
 if [[ "$RES" == "$EXTRA_BTN" ]]; then
     if command -v gnome-terminal >/dev/null 2>&1; then

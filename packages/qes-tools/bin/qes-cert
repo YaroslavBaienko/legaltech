@@ -768,8 +768,12 @@ def show_single_cert_gui(d: Dict[str, Any], file_path: str, allow_back: bool = F
             f"--title=Сертифікат КНЕДП — {os.path.basename(file_path)}",
             f"--text={pango_text}",
             "--ok-label=Закрити",
-            "--width=620",
+            "--icon-name=application-certificate",
+            "--width=650",
+            "--height=480",
         ]
+        if os.path.isfile("/home/attor/.local/share/icons/Papirus/48x48/mimetypes/application-certificate.svg"):
+            cmd.append("--window-icon=/home/attor/.local/share/icons/Papirus/48x48/mimetypes/application-certificate.svg")
 
         if allow_back:
             cmd.append("--extra-button=🔙 До списку сертифікатів")

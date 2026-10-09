@@ -37,11 +37,38 @@ function askPassword(promptText, forceGui = false) {
     if ((forceGui || !process.stdin.isTTY) && (process.env.DISPLAY || process.env.WAYLAND_DISPLAY)) {
       try {
         const cleanPrompt = promptText.replace(/\x1b\[[0-9;]*m/g, '');
-        const zRes = spawnSync('zenity', [
+        const isPin = cleanPrompt.toLowerCase().includes('pin');
+        const lang = getQESLang();
+
+        const dlgTitle = isPin
+          ? (lang === 'en' ? 'Hardware Token Authorization — QES Tools' : 'Авторизація апаратного токена — QES Tools')
+          : (lang === 'en' ? 'Private Key Authorization — QES Tools' : 'Авторизація особистого ключа — QES Tools');
+
+        const header = isPin
+          ? (lang === 'en' ? '🔑 Hardware Token PIN (ЗНОК)' : '🔑 Авторизація апаратного токена (ЗНОК)')
+          : (lang === 'en' ? '🔐 Enter Private Key Password' : '🔐 Введення пароля особистого КЕП');
+
+        const sub = isPin
+          ? (lang === 'en' ? 'Key is hardware protected. Signing occurs directly on the crypto chip.' : 'Ключ захищено апаратно. Підписання відбувається всередині смарт-чіпа.')
+          : (lang === 'en' ? 'Password is safe in RAM session cache (TTL 15 min).' : 'Пароль надійно зберігатиметься виключно в оперативній пам\'яті сесії RAM.');
+
+        const pangoText = `<span size="larger" weight="bold" color="#2a75d3">${header}</span>\n\n${cleanPrompt}\n<span size="small" color="#666666">${sub}</span>`;
+
+        const PAPIRUS_LOCK_ICON = fs.existsSync('/home/attor/.local/share/icons/Papirus/48x48/status/stock_lock.svg')
+          ? '/home/attor/.local/share/icons/Papirus/48x48/status/stock_lock.svg'
+          : null;
+
+        const zenArgs = [
           '--password',
-          `--title=${t('dialogTitle')}`,
-          `--text=${cleanPrompt}`,
-        ], { encoding: 'utf-8' });
+          `--title=${dlgTitle}`,
+          `--text=${pangoText}`,
+          '--icon-name=dialog-password',
+          '--ok-label=' + (lang === 'en' ? 'Authorize' : 'Підтвердити'),
+          '--cancel-label=' + (lang === 'en' ? 'Cancel' : 'Скасувати'),
+        ];
+        if (PAPIRUS_LOCK_ICON) zenArgs.push(`--window-icon=${PAPIRUS_LOCK_ICON}`);
+
+        const zRes = spawnSync('zenity', zenArgs, { encoding: 'utf-8' });
         if (zRes.status === 0 && zRes.stdout) {
           return resolve(zRes.stdout.trim());
         } else if (zRes.status !== 0) {

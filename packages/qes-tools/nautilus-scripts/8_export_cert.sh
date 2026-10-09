@@ -22,7 +22,7 @@ fi
 cd "$TARGET_DIR"
 
 if qes-export-cert --gui; then
-    qes_notify "certificate" \
+    qes_notify "application-certificate" \
         "📤 Сертифікат експортовано" \
         "📤 Certificate Exported" \
         "Відкритий сертифікат збережено у поточній папці. Ви можете безпечно передавати його клієнтам." \

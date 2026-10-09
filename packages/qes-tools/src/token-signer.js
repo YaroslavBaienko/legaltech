@@ -87,13 +87,19 @@ async function chooseSigningMedium(options = {}) {
   // --- GUI MODE (Zenity) ---
   if (useGui || process.env.DISPLAY || process.env.WAYLAND_DISPLAY) {
     if (useGui) {
+      const PAPIRUS_CERT_ICON = fs.existsSync('/home/attor/.local/share/icons/Papirus/48x48/mimetypes/application-certificate.svg')
+        ? '/home/attor/.local/share/icons/Papirus/48x48/mimetypes/application-certificate.svg'
+        : (fs.existsSync('/usr/share/icons/Papirus/48x48/mimetypes/application-certificate.svg')
+          ? '/usr/share/icons/Papirus/48x48/mimetypes/application-certificate.svg'
+          : null);
+
       const title = lang === 'en'
         ? 'Select Signature Medium — QES Tools'
-        : 'Вибір носія особистого ключа КЕП / УЕП';
+        : 'Вибір носія особистого ключа — QES Tools';
 
       const promptText = lang === 'en'
-        ? `Select private key medium for signing:\n<b>Object:</b> ${docDesc}\n<i>(File keys are stored in: ~/.secure_keys/)</i>`
-        : `Оберіть спосіб підписання для виділених документів:\n<b>Об'єкт:</b> ${docDesc}\n<i>(Файлові ключі зберігаються в: ~/.secure_keys/)</i>`;
+        ? `<span size="larger" weight="bold" color="#2a75d3">🔐 Electronic Signature (QES / DSTU 4145)</span>\n\n<b>Object:</b> ${docDesc}\n<span size="small" color="#555555">Select key storage medium to perform digital signing:</span>`
+        : `<span size="larger" weight="bold" color="#2a75d3">🔐 Електронний підпис (КЕП / ДСТУ 4145)</span>\n\n<b>Об'єкт:</b> ${docDesc}\n<span size="small" color="#555555">Оберіть носій особистого ключа для накладання підпису:</span>`;
 
       const colChoice = lang === 'en' ? 'Select' : 'Вибір';
       const colCode = 'Code';
@@ -101,17 +107,27 @@ async function chooseSigningMedium(options = {}) {
       const colDesc = lang === 'en' ? 'Details / Location' : 'Деталі / Розташування';
 
       const optFile = lang === 'en'
-        ? '📁 File Key (~/.secure_keys/)'
-        : '📁 Файловий ключ із папки (~/.secure_keys/)';
+        ? '📁  File Key'
+        : '📁  Файловий ключ';
+      const optFileDesc = defaultKeyPath
+        ? `${defaultKeyName}  <span size="small" color="#2a75d3">(~/.secure_keys/)</span>`
+        : (lang === 'en' ? '<span color="#d97706">No key in ~/.secure_keys/</span>' : '<span color="#d97706">Ключ відсутній у ~/.secure_keys/</span>');
+
       const optToken = lang === 'en'
-        ? '🔑 Hardware Token (USB ЗНОК)'
-        : '🔑 Апаратний ключ (USB-токен / ЗНОК)';
+        ? '🔑  Hardware Token (ЗНОК)'
+        : '🔑  Апаратний ключ (ЗНОК)';
+      const optTokenDesc = activeToken
+        ? `<span color="#16a34a"><b>🟢 ${activeToken.displayName}</b></span>  <span size="small" color="#15803d">(USB смарт-чіп)</span>`
+        : (lang === 'en'
+          ? '<span color="#d97706">⚠️ USB token not connected</span>  <span size="small" color="#777777">(Almaz-1K, SecureToken-337)</span>'
+          : '<span color="#d97706">⚠️ USB-токен не підключено</span>  <span size="small" color="#777777">(Алмаз-1К, SecureToken-337)</span>');
+
       const optBrowse = lang === 'en'
-        ? '📂 Choose another key file (.pfx)...'
-        : '📂 Обрати інший файл ключа (.pfx / .p12)...';
+        ? '📂  Choose Another Key File...'
+        : '📂  Обрати інший файл ключа...';
       const descBrowse = lang === 'en'
-        ? 'Browse file from computer'
-        : 'Вибрати інший файл ключа з довільної папки';
+        ? '<span color="#6b7280">Browse .pfx / .p12 container from disk or USB flash drive</span>'
+        : '<span color="#6b7280">Вибрати файл .pfx / .p12 з довільної папки або USB-флешки</span>';
 
       const zenityArgs = [
         '--list',
@@ -124,12 +140,18 @@ async function chooseSigningMedium(options = {}) {
         `--column=${colDesc}`,
         '--hide-column=2',
         '--print-column=2',
-        '--width=680',
-        '--height=290',
-        'TRUE', 'file', optFile, defaultKeyName,
-        'FALSE', 'token', optToken, tokenLabel,
+        '--width=760',
+        '--height=370',
+        '--ok-label=' + (lang === 'en' ? 'Continue' : 'Продовжити'),
+        '--cancel-label=' + (lang === 'en' ? 'Cancel' : 'Скасувати'),
+        '--icon-name=application-certificate',
+        'TRUE', 'file', optFile, optFileDesc,
+        'FALSE', 'token', optToken, optTokenDesc,
         'FALSE', 'browse', optBrowse, descBrowse,
       ];
+      if (PAPIRUS_CERT_ICON) {
+        zenityArgs.push(`--window-icon=${PAPIRUS_CERT_ICON}`);
+      }
 
       const proc = spawnSync('zenity', zenityArgs, { encoding: 'utf-8' });
       if (proc.status !== 0 || !proc.stdout) {
@@ -145,12 +167,17 @@ async function chooseSigningMedium(options = {}) {
         const fileSelTitle = lang === 'en'
           ? 'Choose Private Key Container (.pfx, .p12)'
           : 'Оберіть файл особистого ключа (.pfx, .p12)';
-        const fileProc = spawnSync('zenity', [
+        const fileArgs = [
           '--file-selection',
           `--title=${fileSelTitle}`,
           '--file-filter=Ключі КЕП (*.pfx, *.p12) | *.pfx *.p12 *.jks',
           '--file-filter=Усі файли (*.*) | *.*',
-        ], { encoding: 'utf-8' });
+          '--icon-name=application-certificate',
+        ];
+        if (PAPIRUS_CERT_ICON) {
+          fileArgs.push(`--window-icon=${PAPIRUS_CERT_ICON}`);
+        }
+        const fileProc = spawnSync('zenity', fileArgs, { encoding: 'utf-8' });
         if (fileProc.status !== 0 || !fileProc.stdout.trim()) {
           return { cancelled: true };
         }

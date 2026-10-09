@@ -215,16 +215,29 @@ show_ocr_help_dialog() {
 # Interactive language selection in GUI mode if not provided via CLI
 if [[ "$USE_GUI" = true && "$LANG_SPECIFIED" = false ]]; then
     while true; do
-        LANG_CHOICE=$(zenity --list --radiolist \
-            --title="Оптичне розпізнавання тексту OCR (Е-Суд & LegalTech)" \
-            --text="<b>Виберіть мову документа для розпізнавання OCR:</b>\n<i>(Для англомовних документів та міжнародних контрактів оберіть чисту англійську)</i>" \
-            --column="Вибір" --column="Код" --column="Мова та призначення" \
-            FALSE "eng" "🇬🇧 Чиста Англійська мова (Pure English / eng — контракти, інвойси, міжнародні угоди)" \
-            FALSE "ukr" "🇺🇦 Чиста Українська мова (Ukrainian / ukr — позовні заяви, рішення, скарги)" \
-            TRUE "ukr+eng" "🇺🇦🇬🇧 Двомовне (Українська + Англійська / ukr+eng — змішані договори, митниця)" \
-            --hide-column=2 --print-column=2 \
-            --extra-button="📖 Довідка / Help" \
-            --width=680 --height=290 2>/dev/null || true)
+        PAPIRUS_DOC_ICON=""
+        if [[ -f "/home/attor/.local/share/icons/Papirus/48x48/mimetypes/application-certificate.svg" ]]; then
+            PAPIRUS_DOC_ICON="/home/attor/.local/share/icons/Papirus/48x48/mimetypes/application-certificate.svg"
+        fi
+
+        ZEN_OCR_ARGS=(
+            --list --radiolist
+            --title="Оптичне розпізнавання тексту OCR — QES Tools"
+            --text="<span size=\"larger\" weight=\"bold\" color=\"#2a75d3\">👁️ Оптичне розпізнавання сканів (OCR)</span>\n\n<b>Призначення:</b> Формування повнотекстового Searchable PDF для підсистеми «Електронний суд»\n<span size=\"small\" color=\"#666666\">Оберіть мову розпізнавання для максимальної точності:</span>"
+            --column="Вибір" --column="Код" --column="Мова та призначення"
+            FALSE "eng" "🇬🇧 Чиста Англійська мова (Pure English / eng — контракти, інвойси, міжнародні угоди)"
+            FALSE "ukr" "🇺🇦 Чиста Українська мова (Ukrainian / ukr — позовні заяви, рішення, скарги)"
+            TRUE "ukr+eng" "🇺🇦🇬🇧 Двомовне (Українська + Англійська / ukr+eng — змішані договори, митниця)"
+            --hide-column=2 --print-column=2
+            --ok-label="Розпізнати"
+            --cancel-label="Скасувати"
+            --extra-button="📖 Довідка / Help"
+            --icon-name="document-search"
+            --width=750 --height=360
+        )
+        [[ -n "$PAPIRUS_DOC_ICON" ]] && ZEN_OCR_ARGS+=(--window-icon="$PAPIRUS_DOC_ICON")
+
+        LANG_CHOICE=$(zenity "${ZEN_OCR_ARGS[@]}" 2>/dev/null || true)
 
         if [[ "$LANG_CHOICE" == *"Довідка"* ]]; then
             show_ocr_help_dialog
