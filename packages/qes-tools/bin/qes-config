@@ -62,14 +62,14 @@ find_source_scripts_dir() {
     bin_parent="$(cd "$(dirname "$real_bin")/.." 2>/dev/null && pwd || true)"
 
     local candidate_dirs=(
-        "/usr/share/qes-tools/nautilus-scripts"
-        "/usr/share/nautilus-scripts"
         "$bin_parent/nautilus-scripts"
         "$bin_parent/../nautilus-scripts"
         "$(cd "$(dirname "${BASH_SOURCE[0]}")/../nautilus-scripts" 2>/dev/null && pwd || true)"
         "$(cd "$(dirname "${BASH_SOURCE[0]}")/../../nautilus-scripts" 2>/dev/null && pwd || true)"
         "/home/attor/legaltech/packages/qes-tools/nautilus-scripts"
         "/home/attor/ai-debian-admin/tools/nautilus-scripts"
+        "/usr/share/qes-tools/nautilus-scripts"
+        "/usr/share/nautilus-scripts"
     )
     for d in "${candidate_dirs[@]}"; do
         if [[ -n "$d" && -d "$d" && -f "$d/1_sign_pades.sh" ]]; then
