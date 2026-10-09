@@ -80,14 +80,13 @@ if [ "$1" = "configure" ]; then
         /opt/iit/eu/sw/euscpnmh /install 2>/dev/null || true
 
         # Додатково гарантуємо наявність маніфестів для Chrome, Chromium, Brave, Edge та Firefox
-        nmh_dirs=(
-            "/etc/opt/chrome/native-messaging-hosts"
-            "/etc/chromium/native-messaging-hosts"
-            "/usr/lib/mozilla/native-messaging-hosts"
-            "/etc/brave/native-messaging-hosts"
-            "/etc/opt/edge/native-messaging-hosts"
-        )
-        for d in "${nmh_dirs[@]}"; do
+        for d in \
+            /etc/opt/chrome/native-messaging-hosts \
+            /etc/chromium/native-messaging-hosts \
+            /usr/lib/mozilla/native-messaging-hosts \
+            /etc/brave/native-messaging-hosts \
+            /etc/opt/edge/native-messaging-hosts
+        do
             mkdir -p "$d" 2>/dev/null || true
             cat << 'EOF_NMH' > "$d/ua.com.iit.eusign.nmh.json"
 {
@@ -125,7 +124,7 @@ EOF_NMH
     fi
 
     echo "================================================================================"
-    echo " 🇺🇦 Встановлено комплекс електронного підпису та шифрування qes-tools v1.0.5"
+    echo " 🇺🇦 Встановлено комплекс електронного підпису та шифрування qes-tools v1.0.6"
     echo " • qes-sign        — підписання (CAdES .p7s, PAdES .pdf, ASiC-E .asice, мультипідпис)"
     echo " • qes-verify      — перевірка підписів (.p7s, .pdf, .asice) та сертифікатів"
     echo " • qes-cert        — швидкий інспектор сертифікатів КНЕДП / АЦСК (X.509, ДСТУ 4145)"
