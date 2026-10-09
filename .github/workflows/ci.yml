@@ -26,6 +26,10 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Install Python Package Dependencies
+        run: |
+          pip install cryptography ocrmypdf
+
       - name: Install System Dependencies
         run: |
           sudo apt-get update
