@@ -295,7 +295,7 @@ assert_file_exists "$PEM_FILE" "Експортований PEM сертифік�
 # ------------------------------------------------------------------------------
 log_test "CLI qes-agent: статус сесії, вилучення пароля та очищення пам'яті"
 agent_status=$(qes-agent status)
-if [[ "$agent_status" == *"Активних ключів"* ]]; then
+if [[ "$agent_status" == *"Активних ключів"* || "$agent_status" == *"Active keys"* ]]; then
     assert_ok "qes-agent status коректно відображає активний стан сесії в RAM"
 else
     echo "Помилка qes-agent status: $agent_status" >&2; exit 1
@@ -303,7 +303,7 @@ fi
 
 qes-agent clear >/dev/null
 agent_cleared=$(qes-agent status)
-if [[ "$agent_cleared" == *"Активних ключів: 0"* ]]; then
+if [[ "$agent_cleared" == *"Активних ключів: 0"* || "$agent_cleared" == *"Active keys: 0"* ]]; then
     assert_ok "qes-agent clear миттєво очищує всі паролі з оперативної пам'яті"
 else
     echo "Помилка qes-agent clear: $agent_cleared" >&2; exit 1
