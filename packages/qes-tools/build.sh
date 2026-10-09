@@ -8,7 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PKG_ROOT="${SCRIPT_DIR}"
 
 PKG_NAME="qes-tools"
-PKG_VERSION="1.0.3"
+PKG_VERSION="1.0.4"
 PKG_ARCH="amd64"
 DEB_FILENAME="${PKG_NAME}_${PKG_VERSION}_${PKG_ARCH}.deb"
 
@@ -73,8 +73,8 @@ else
     (cd "${BUILD_ROOT}/usr/lib/qes-tools" && npm install --omit=dev --no-audit --no-fund)
 fi
 
-# Копіювання бінарників
-cp "${PKG_ROOT}/bin/"* "${BUILD_ROOT}/usr/lib/qes-tools/bin/"
+# Копіювання бінарників (виключаючи __pycache__)
+find "${PKG_ROOT}/bin" -maxdepth 1 -type f -exec cp {} "${BUILD_ROOT}/usr/lib/qes-tools/bin/" \;
 
 # Включення бінарника typst для гарантованого відтворення векторного штампа
 TYPST_BIN="$(command -v typst || true)"
@@ -144,12 +144,23 @@ cat << 'EOF' > "${BUILD_ROOT}/usr/bin/qes-ocr"
 exec /usr/lib/qes-tools/bin/qes-ocr "$@"
 EOF
 
+cat << 'EOF' > "${BUILD_ROOT}/usr/bin/qes-config"
+#!/bin/sh
+exec /usr/lib/qes-tools/bin/qes-config "$@"
+EOF
+
 chmod 0755 "${BUILD_ROOT}/usr/bin/"*
 chmod 0755 "${BUILD_ROOT}/usr/lib/qes-tools/bin/"*
 
 # 6. Копіювання скриптів Nautilus
 echo -e "${CLR_YELLOW}[5/6] Копіювання скриптів меню Nautilus...${CLR_RESET}"
+CANONICAL_SCRIPTS="${BUILD_ROOT}/usr/share/qes-tools/nautilus-scripts"
+mkdir -p "$CANONICAL_SCRIPTS"
+cp "${PKG_ROOT}/nautilus-scripts/"* "$CANONICAL_SCRIPTS/"
+chmod 0755 "$CANONICAL_SCRIPTS/"*
+
 NAUTILUS_TARGET="${BUILD_ROOT}/usr/share/nautilus-scripts/🔐 КЕП та Безпека"
+mkdir -p "$NAUTILUS_TARGET"
 cp "${PKG_ROOT}/nautilus-scripts/0_help.sh" "$NAUTILUS_TARGET/📖 Довідка та Інструкції КЕП"
 cp "${PKG_ROOT}/nautilus-scripts/1_sign_pades.sh" "$NAUTILUS_TARGET/✍️ Підписати (PAdES PDF зі штампом та QR)"
 cp "${PKG_ROOT}/nautilus-scripts/1b_sign_pades_no_stamp.sh" "$NAUTILUS_TARGET/✍️ Підписати (PAdES PDF без штампу та QR)"
@@ -166,7 +177,9 @@ cp "${PKG_ROOT}/nautilus-scripts/11_lock_session.sh" "$NAUTILUS_TARGET/🔒 Ск
 cp "${PKG_ROOT}/nautilus-scripts/12_ocr_court.sh" "$NAUTILUS_TARGET/👁️ Розпізнати текст OCR (Е-Суд)"
 cp "${PKG_ROOT}/nautilus-scripts/13_view_cert.sh" "$NAUTILUS_TARGET/📜 Переглянути сертифікат КНЕДП"
 cp "${PKG_ROOT}/nautilus-scripts/14_ocr_english.sh" "$NAUTILUS_TARGET/👁️ Розпізнати текст OCR (🇬🇧 Чиста Англійська)"
+cp "${PKG_ROOT}/nautilus-scripts/_i18n.sh" "$NAUTILUS_TARGET/.i18n.sh"
 chmod 0755 "$NAUTILUS_TARGET/"*
+chmod 0755 "$NAUTILUS_TARGET/.i18n.sh"
 
 # Авторські права / документація
 cat << 'EOF' > "${BUILD_ROOT}/usr/share/doc/qes-tools/copyright"

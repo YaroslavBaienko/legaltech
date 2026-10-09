@@ -11,6 +11,7 @@ const readline = require('readline');
 const { spawnSync } = require('child_process');
 const { QESEngine } = require('../src/engine');
 const { getOrPromptPassword, sendAgentMessage } = require('../src/session');
+const { t } = require('../src/i18n');
 
 const CLR_RESET = '\x1b[0m';
 const CLR_BOLD = '\x1b[1m';
@@ -33,13 +34,13 @@ function askPassword(promptText, forceGui = false) {
         const cleanPrompt = promptText.replace(/\x1b\[[0-9;]*m/g, '');
         const zRes = spawnSync('zenity', [
           '--password',
-          '--title=КЕП (ДСТУ 4145-2002)',
+          `--title=${t('dialogTitle')}`,
           `--text=${cleanPrompt}`,
         ], { encoding: 'utf-8' });
         if (zRes.status === 0 && zRes.stdout) {
           return resolve(zRes.stdout.trim());
         } else if (zRes.status !== 0) {
-          return reject(new Error('Введення пароля скасовано користувачем.'));
+          return reject(new Error(t('pwdCancelled')));
         }
       } catch (err) {
         // Fall back to readline

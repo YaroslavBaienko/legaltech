@@ -14,6 +14,7 @@ const {
   sendAgentMessage,
   runAgentServer,
 } = require('../src/session');
+const { t, getQESLang } = require('../src/i18n');
 
 const CLR_RESET = '\x1b[0m';
 const CLR_BOLD = '\x1b[1m';
@@ -66,11 +67,11 @@ ${CLR_BOLD}ГАРАНТІЇ БЕЗПЕКИ:${CLR_RESET}
     try {
       const res = await sendAgentMessage({ action: 'clear' }, { timeoutMs: 1000 });
       if (res && res.status === 'ok') {
-        console.log(`${CLR_GREEN}🔒 Сесію КЕП завершено: вилучено ${res.cleared} ключ(ів) з оперативної пам'яті.${CLR_RESET}`);
+        console.log(`${CLR_GREEN}${t('clearedKeys', res.cleared)}${CLR_RESET}`);
         process.exit(0);
       }
     } catch (e) {
-      console.log(`${CLR_GRAY}ℹ️ Агент не був запущений або кеш уже порожній.${CLR_RESET}`);
+      console.log(`${CLR_GRAY}${t('agentEmptyOrNotRunning')}${CLR_RESET}`);
       process.exit(0);
     }
   }
@@ -78,33 +79,37 @@ ${CLR_BOLD}ГАРАНТІЇ БЕЗПЕКИ:${CLR_RESET}
   if (cmd === 'stop') {
     try {
       await sendAgentMessage({ action: 'stop' }, { timeoutMs: 1000 });
-      console.log(`${CLR_GREEN}✅ Агента qes-agent успішно зупинено.${CLR_RESET}`);
+      console.log(`${CLR_GREEN}${t('agentStopped')}${CLR_RESET}`);
     } catch (e) {
-      console.log(`${CLR_GRAY}ℹ️ Агент уже не активний.${CLR_RESET}`);
+      console.log(`${CLR_GRAY}${t('agentAlreadyStopped')}${CLR_RESET}`);
     }
     process.exit(0);
   }
 
   if (cmd === 'status') {
+    const lang = getQESLang();
     try {
       const res = await sendAgentMessage({ action: 'status' }, { timeoutMs: 1000 });
       if (res && res.status === 'ok') {
         console.log(`\n${CLR_BOLD}${CLR_CYAN}╔═══════════════════════════════════════════════════════════════════════════════════════╗${CLR_RESET}`);
-        console.log(`${CLR_BOLD}${CLR_CYAN}║ СТАТУС СЕСІЇ КЕП (qes-agent)${CLR_RESET}`);
-        console.log(`${CLR_CYAN}║ Сокет:   ${res.socketPath || getSocketPath()}${CLR_RESET}`);
-        console.log(`${CLR_CYAN}║ Пам'ять: 100% RAM / tmpfs (права 0600)${CLR_RESET}`);
-        console.log(`${CLR_CYAN}║ Активних ключів: ${res.count}${CLR_RESET}`);
+        console.log(`${CLR_BOLD}${CLR_CYAN}║ ${t('agentHeader')}${CLR_RESET}`);
+        console.log(`${CLR_CYAN}║ ${t('socket')}:   ${res.socketPath || getSocketPath()}${CLR_RESET}`);
+        console.log(`${CLR_CYAN}║ ${t('memory')}${CLR_RESET}`);
+        console.log(`${CLR_CYAN}║ ${t('activeKeys')}: ${res.count}${CLR_RESET}`);
         console.log(`${CLR_CYAN}╟───────────────────────────────────────────────────────────────────────────────────────╢${CLR_RESET}`);
 
         if (res.count === 0) {
-          console.log(`${CLR_CYAN}║ ${CLR_GRAY}Немає активних сесій (кеш порожній). Пароль буде запитано при наступній дії.${CLR_CYAN}   ║${CLR_RESET}`);
+          console.log(`${CLR_CYAN}║ ${CLR_GRAY}${t('noActiveSessions')}${CLR_CYAN}   ║${CLR_RESET}`);
         } else {
           for (const k of res.active) {
             const mins = Math.floor(k.remainingSec / 60);
             const secs = k.remainingSec % 60;
-            const timeStr = mins > 0 ? `${mins} хв ${secs} с` : `${secs} с`;
+            const timeStr = lang === 'en'
+              ? (mins > 0 ? `${mins} min ${secs} s` : `${secs} s`)
+              : (mins > 0 ? `${mins} хв ${secs} с` : `${secs} с`);
+            const unitStr = lang === 'en' ? 'min' : 'хв';
             console.log(`${CLR_CYAN}║ • ${CLR_BOLD}${CLR_GREEN}${k.label}${CLR_RESET}`);
-            console.log(`${CLR_CYAN}║   Залишилось часу: ${CLR_YELLOW}${timeStr}${CLR_RESET} (TTL: ${Math.round(k.ttlSec / 60)} хв)`);
+            console.log(`${CLR_CYAN}║   ${t('remTime')}: ${CLR_YELLOW}${timeStr}${CLR_RESET} (${t('ttl')}: ${Math.round(k.ttlSec / 60)} ${unitStr})`);
           }
         }
         console.log(`${CLR_BOLD}${CLR_CYAN}╚═══════════════════════════════════════════════════════════════════════════════════════╝${CLR_RESET}\n`);
@@ -112,8 +117,8 @@ ${CLR_BOLD}ГАРАНТІЇ БЕЗПЕКИ:${CLR_RESET}
       }
     } catch (e) {
       console.log(`\n${CLR_CYAN}╔═══════════════════════════════════════════════════════════════════════════════════════╗${CLR_RESET}`);
-      console.log(`${CLR_CYAN}║ СТАТУС СЕСІЇ КЕП (qes-agent)${CLR_RESET}`);
-      console.log(`${CLR_CYAN}║ Агент:   ${CLR_GRAY}Не активний (буде запущено автоматично при першому підписанні)${CLR_RESET}`);
+      console.log(`${CLR_CYAN}║ ${t('agentHeader')}${CLR_RESET}`);
+      console.log(`${CLR_CYAN}║ ${t('agentInactive')}${CLR_RESET}`);
       console.log(`${CLR_CYAN}╚═══════════════════════════════════════════════════════════════════════════════════════╝${CLR_RESET}\n`);
       process.exit(0);
     }

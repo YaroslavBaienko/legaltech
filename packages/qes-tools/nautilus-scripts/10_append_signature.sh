@@ -1,10 +1,19 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# ✍️ Додати другий підпис до існуючого (Мультипідпис)
+# ✍️ Додати другий підпис (Мультипідпис) / Add Secondary Signature (Multi-Sign)
 # ==============================================================================
 set -euo pipefail
 
-# Read files from Nautilus environment or arguments
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f "${SCRIPT_DIR}/.i18n.sh" ]]; then
+    source "${SCRIPT_DIR}/.i18n.sh"
+elif [[ -f "${SCRIPT_DIR}/_i18n.sh" ]]; then
+    source "${SCRIPT_DIR}/_i18n.sh"
+elif [[ -f "/usr/share/qes-tools/nautilus-scripts/_i18n.sh" ]]; then
+    source "/usr/share/qes-tools/nautilus-scripts/_i18n.sh"
+fi
+QES_LANG="${QES_LANG:-uk}"
+
 FILES=()
 if [[ -n "${NAUTILUS_SCRIPT_SELECTED_FILE_PATHS:-}" ]]; then
     while IFS= read -r line; do
@@ -22,17 +31,25 @@ for f in "${FILES[@]}"; do
 done
 
 if [[ ${#VALID_FILES[@]} -eq 0 ]]; then
-    zenity --warning --title="Мультипідписання КЕП" --text="Будь ласка, виберіть хоча б один файл (.pdf, .asice або .p7s) для додавання другого підпису."
+    qes_warn_dialog \
+        "Мультипідписання КЕП" \
+        "Multi-Sign QES" \
+        "Будь ласка, виберіть хоча б один файл (.pdf, .asice або .p7s) для додавання другого підпису." \
+        "Please select at least one file (.pdf, .asice or .p7s) to append a secondary signature."
     exit 0
 fi
 
 # Run signing with GUI password dialog and --append flag
 if qes-sign --append --gui "${VALID_FILES[@]}"; then
-    notify-send -a "QES Tools" -i document-edit \
+    qes_notify "document-edit" \
         "✅ Мультипідпис накладено" \
-        "Успішно додано новий підпис до ${#VALID_FILES[@]} документа(-ів) зі збереженням чинності попередніх підписів."
+        "✅ Multi-Signature Applied" \
+        "Успішно додано новий підпис до ${#VALID_FILES[@]} документа(-ів) зі збереженням чинності попередніх підписів." \
+        "Successfully added signature to ${#VALID_FILES[@]} document(s) preserving validity of prior signatures."
 else
-    notify-send -a "QES Tools" -i dialog-error \
+    qes_notify "dialog-error" \
         "❌ Помилка мультипідписання" \
-        "Підписання документа скасовано або виникла помилка."
+        "❌ Multi-Sign Error" \
+        "Підписання документа скасовано або виникла помилка." \
+        "Document signing was cancelled or an error occurred."
 fi

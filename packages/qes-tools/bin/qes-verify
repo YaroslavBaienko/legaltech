@@ -490,49 +490,89 @@ def print_cli_report(res: Dict[str, Any], use_color: bool = True, sig_index: int
     return all_ok
 
 
-def show_gui_report(results: List[Dict[str, Any]], file_path: str):
-    if not results:
-        subprocess.run([
-            "zenity", "--warning",
-            "--title=Перевірка КЕП",
-            f"--text=⚠️ У файлі <b>{os.path.basename(file_path)}</b> не виявлено електронного підпису."
-        ])
-        return
+def get_qes_lang() -> str:
+    cfg = Path.home() / ".config" / "qes" / "config.json"
+    if cfg.is_file():
+        try:
+            with open(cfg, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if data.get("lang") == "en":
+                    return "en"
+                if data.get("lang") in ("uk", "ua"):
+                    return "uk"
+        except Exception:
+            pass
+    l = os.environ.get("LC_ALL") or os.environ.get("LC_MESSAGES") or os.environ.get("LANG") or ""
+    return "uk" if l.lower().startswith("uk") else "en"
+
 
 def show_help_dialog():
     """Відображає довідкове вікно з повним керівництвом користувача."""
-    help_pango = (
-        "<span size='x-large' weight='bold' color='#1a5fb4'>📖 Довідка та Інструкції: Перевірка КЕП / УЕП</span>\n"
-        "<span size='small' color='#666666'>Автономний аналізатор підписів ДСТУ 4145, CAdES, PAdES, ASiC-E</span>\n\n"
-        "<b>1. ПІДТРИМУВАНІ ФОРМАТИ:</b>\n"
-        "• <b>PAdES (.pdf):</b> вбудовані підписи в судових рішеннях, договорах, заявах.\n"
-        "• <b>ASiC-E (.asice):</b> європейські контейнери архівів із пакетами підписаних файлів.\n"
-        "• <b>CAdES / PKCS#7 (.p7s):</b> класичні відокремлені підписи (Дія, M.E.Doc, Вчасно).\n"
-        "• <b>Сертифікати (.cer, .crt, .p7b):</b> автоматично відкриваються в інспекторі <code>qes-cert</code>.\n\n"
-        "<b>2. СТАТУСИ ПЕРЕВІРКИ:</b>\n"
-        "• <span color='#1e7e34'><b>✅ КЕП ДІЙСНИЙ:</b></span> підпис математично валідний, цілісність підтверджена.\n"
-        "• <span color='#d9534f'><b>❌ НЕВАЛІДНИЙ:</b></span> документ змінено після підписання або пошкоджено.\n"
-        "• <b>🕒 Мітка TSP:</b> підтвердження точного астрономічного часу від акредитованого сервера.\n\n"
-        "<b>3. КОМАНДИ ТЕРМІНАЛА:</b>\n"
-        "• <code>qes-verify document_signed.pdf</code> — перевірка PDF зі штампом\n"
-        "• <code>qes-verify doc.pdf doc.pdf.p7s</code> — перевірка відповідності оригіналу та підпису\n"
-        "• <code>qes-verify package.asice</code> — перевірка цілісності архіву ASiC-E\n"
-        "• <code>qes-verify -x /папка package.asice</code> — видобування оригінальних документів\n"
-        "• <code>qes-verify cert.cer</code> — перегляд реквізитів сертифіката підписувача\n"
-        "• <code>qes-verify --json file.pdf</code> — машинний вивід для скриптів\n"
-    )
+    lang = get_qes_lang()
+    if lang == "en":
+        help_pango = (
+            "<span size='x-large' weight='bold' color='#1a5fb4'>📖 Help & Instructions: QES / AES Verification</span>\n"
+            "<span size='small' color='#666666'>Offline-first signature validator for DSTU 4145, CAdES, PAdES, ASiC-E</span>\n\n"
+            "<b>1. SUPPORTED FORMATS:</b>\n"
+            "• <b>PAdES (.pdf):</b> embedded signatures in court rulings, contracts, and applications.\n"
+            "• <b>ASiC-E (.asice):</b> European container archives bundling signed document packages.\n"
+            "• <b>CAdES / PKCS#7 (.p7s):</b> detached signatures (Diia, M.E.Doc, Vchasno).\n"
+            "• <b>Certificates (.cer, .crt, .p7b):</b> automatically inspected via <code>qes-cert</code>.\n\n"
+            "<b>2. VERIFICATION STATUSES:</b>\n"
+            "• <span color='#1e7e34'><b>✅ SIGNATURE VALID:</b></span> mathematically valid, integrity confirmed.\n"
+            "• <span color='#d9534f'><b>❌ INVALID:</b></span> document altered after signing or corrupted.\n"
+            "• <b>🕒 TSP Stamp:</b> cryptographic timestamp from accredited time-stamping authority.\n\n"
+            "<b>3. CLI COMMANDS:</b>\n"
+            "• <code>qes-verify document_signed.pdf</code> — verify PDF with stamp\n"
+            "• <code>qes-verify doc.pdf doc.pdf.p7s</code> — verify matching detached signature\n"
+            "• <code>qes-verify package.asice</code> — verify ASiC-E archive integrity\n"
+            "• <code>qes-verify -x /folder package.asice</code> — extract original documents\n"
+            "• <code>qes-verify cert.cer</code> — inspect signer certificate details\n"
+            "• <code>qes-verify --json file.pdf</code> — machine-readable JSON output\n"
+        )
+        title = "Help — qes-verify"
+        btn = "Understood"
+    else:
+        help_pango = (
+            "<span size='x-large' weight='bold' color='#1a5fb4'>📖 Довідка та Інструкції: Перевірка КЕП / УЕП</span>\n"
+            "<span size='small' color='#666666'>Автономний аналізатор підписів ДСТУ 4145, CAdES, PAdES, ASiC-E</span>\n\n"
+            "<b>1. ПІДТРИМУВАНІ ФОРМАТИ:</b>\n"
+            "• <b>PAdES (.pdf):</b> вбудовані підписи в судових рішеннях, договорах, заявах.\n"
+            "• <b>ASiC-E (.asice):</b> європейські контейнери архівів із пакетами підписаних файлів.\n"
+            "• <b>CAdES / PKCS#7 (.p7s):</b> класичні відокремлені підписи (Дія, M.E.Doc, Вчасно).\n"
+            "• <b>Сертифікати (.cer, .crt, .p7b):</b> автоматично відкриваються в інспекторі <code>qes-cert</code>.\n\n"
+            "<b>2. СТАТУСИ ПЕРЕВІРКИ:</b>\n"
+            "• <span color='#1e7e34'><b>✅ КЕП ДІЙСНИЙ:</b></span> підпис математично валідний, цілісність підтверджена.\n"
+            "• <span color='#d9534f'><b>❌ НЕВАЛІДНИЙ:</b></span> документ змінено після підписання або пошкоджено.\n"
+            "• <b>🕒 Мітка TSP:</b> підтвердження точного астрономічного часу від акредитованого сервера.\n\n"
+            "<b>3. КОМАНДИ ТЕРМІНАЛА:</b>\n"
+            "• <code>qes-verify document_signed.pdf</code> — перевірка PDF зі штампом\n"
+            "• <code>qes-verify doc.pdf doc.pdf.p7s</code> — перевірка відповідності оригіналу та підпису\n"
+            "• <code>qes-verify package.asice</code> — перевірка цілісності архіву ASiC-E\n"
+            "• <code>qes-verify -x /папка package.asice</code> — видобування оригінальних документів\n"
+            "• <code>qes-verify cert.cer</code> — перегляд реквізитів сертифіката підписувача\n"
+            "• <code>qes-verify --json file.pdf</code> — машинний вивід для скриптів\n"
+        )
+        title = "Довідка — qes-verify"
+        btn = "Зрозуміло"
+
     subprocess.run([
         "zenity", "--info",
-        "--title=Довідка — qes-verify",
+        f"--title={title}",
         f"--text={help_pango}",
-        "--ok-label=Зрозуміло",
+        f"--ok-label={btn}",
         "--width=620"
     ])
 
 
 def show_gui_report(results: List[Dict[str, Any]], file_path: str):
+    lang = get_qes_lang()
+    is_en = (lang == "en")
+
     if not results:
-        subprocess.run(["zenity", "--warning", "--title=Перевірка КЕП", f"--text=У файлі '{os.path.basename(file_path)}' підписів не виявлено."])
+        w_title = "QES Verification" if is_en else "Перевірка КЕП"
+        w_text = f"⚠️ No electronic signatures found in file <b>{os.path.basename(file_path)}</b>." if is_en else f"⚠️ У файлі <b>{os.path.basename(file_path)}</b> не виявлено електронного підпису."
+        subprocess.run(["zenity", "--warning", f"--title={w_title}", f"--text={w_text}"])
         return
 
     is_valid = True
@@ -541,40 +581,50 @@ def show_gui_report(results: List[Dict[str, Any]], file_path: str):
             is_valid = False
             break
 
-    status_title = "✅ КЕП ДІЙСНИЙ" if is_valid else "❌ ПІДПИС НЕВАЛІДНИЙ"
+    if is_en:
+        status_title = "✅ SIGNATURE VALID" if is_valid else "❌ SIGNATURE INVALID"
+    else:
+        status_title = "✅ КЕП ДІЙСНИЙ" if is_valid else "❌ ПІДПИС НЕВАЛІДНИЙ"
     status_color = "#1e7e34" if is_valid else "#d9534f"
 
     lines = []
     lines.append(f"<span size='x-large' weight='bold' color='{status_color}'>{status_title}</span>\n")
-    lines.append(f"<b>Файл:</b> {os.path.basename(file_path)}")
+    lines.append(f"<b>{'File' if is_en else 'Файл'}:</b> {os.path.basename(file_path)}")
 
     is_asice = False
     asice_files = []
 
     for r_idx, res in enumerate(results, 1):
+        c_fmt = res.get('container_format', 'QES' if is_en else 'КЕП')
         if len(results) > 1:
-            lines.append(f"\n<b>── Підпис #{r_idx}: {res.get('container_format', 'КЕП')} ──</b>")
+            hdr = f"── Signature #{r_idx}: {c_fmt} ──" if is_en else f"── Підпис #{r_idx}: {c_fmt} ──"
+            lines.append(f"\n<b>{hdr}</b>")
         else:
-            lines.append(f"<b>Формат:</b> {res.get('container_format', 'КЕП')}")
+            lbl = "Format" if is_en else "Формат"
+            lines.append(f"<b>{lbl}:</b> {c_fmt}")
 
         st = format_iso_time(res.get("signing_time"))
-        lines.append(f"<b>Час підписання:</b> {st}")
+        lines.append(f"<b>{'Signing Time' if is_en else 'Час підписання'}:</b> {st}")
 
         if res.get("has_tsp"):
             tsp_str = format_iso_time(res.get("tsp_time"))
-            lines.append(f"<b>Позначка часу (TSP):</b> <span color='#1e7e34'>🕒 {tsp_str} (Підтверджено КНЕДП)</span>")
+            sub = "Certified by TSP" if is_en else "Підтверджено КНЕДП"
+            lines.append(f"<b>{'Timestamp (TSP)' if is_en else 'Позначка часу (TSP)'}:</b> <span color='#1e7e34'>🕒 {tsp_str} ({sub})</span>")
         else:
-            lines.append("<b>Позначка часу (TSP):</b> ⚠️ Відсутня окрема мітка TSP")
+            lines.append(f"<b>{'Timestamp (TSP)' if is_en else 'Позначка часу (TSP)'}:</b> ⚠️ {'No standalone TSP timestamp' if is_en else 'Відсутня окрема мітка TSP'}")
 
         if res.get("manifest_verified") is True:
-            lines.append("<b>Цілісність архіву:</b> <span color='#1e7e34'>✅ Усі файли відповідають контрольним сумам</span>")
+            m_ok = "✅ All files match checksums" if is_en else "✅ Усі файли відповідають контрольним сумам"
+            lines.append(f"<b>{'Archive integrity' if is_en else 'Цілісність архіву'}:</b> <span color='#1e7e34'>{m_ok}</span>")
         elif res.get("manifest_verified") is False:
-            lines.append("<b>Цілісність архіву:</b> <span color='#d9534f'>❌ ПОШКОДЖЕНО (контрольні суми не збігаються)</span>")
+            m_err = "❌ CORRUPTED (checksum mismatch)" if is_en else "❌ ПОШКОДЖЕНО (контрольні суми не збігаються)"
+            lines.append(f"<b>{'Archive integrity' if is_en else 'Цілісність архіву'}:</b> <span color='#d9534f'>{m_err}</span>")
 
         if res.get("signed_files"):
             is_asice = True
             asice_files = res.get("signed_files")
-            lines.append(f"\n<b>📦 Підписані файли ({len(asice_files)}):</b>")
+            s_hdr = f"Signed files ({len(asice_files)}):" if is_en else f"Підписані файли ({len(asice_files)}):"
+            lines.append(f"\n<b>📦 {s_hdr}</b>")
             for sf in asice_files:
                 lines.append(f"  • {sf}")
 
@@ -586,61 +636,71 @@ def show_gui_report(results: List[Dict[str, Any]], file_path: str):
             full_name = subj.get("cn") or f"{subj.get('surname', '')} {subj.get('given_name', '')}".strip() or "—"
             drfo = subj.get("drfo") or subj.get("serial_number") or "—"
             ca_name = iss.get("cn") or iss.get("organization") or "—"
-            q_type = "🟢 Кваліфікований електронний підпис (КЕП)" if c.get("is_qes") else "🟡 Удосконалений електронний підпис (УЕП)"
+            if is_en:
+                q_type = "🟢 Qualified Electronic Signature (QES)" if c.get("is_qes") else "🟡 Advanced Electronic Signature (AES)"
+            else:
+                q_type = "🟢 Кваліфікований електронний підпис (КЕП)" if c.get("is_qes") else "🟡 Удосконалений електронний підпис (УЕП)"
 
             if len(certs) > 1:
-                lines.append(f"\n<b>── Підписувач #{c_idx} ──</b>")
+                sig_hdr = f"── Signer #{c_idx} ──" if is_en else f"── Підписувач #{c_idx} ──"
+                lines.append(f"\n<b>{sig_hdr}</b>")
             else:
                 lines.append("")
 
-            lines.append(f"<b>Підписувач:</b> {full_name}")
-            lines.append(f"<b>РНОКПП (ІПН):</b> {drfo}")
+            lines.append(f"<b>{'Signer' if is_en else 'Підписувач'}:</b> {full_name}")
+            lines.append(f"<b>{'Tax ID (RNOKPP)' if is_en else 'РНОКПП (ІПН)'}:</b> {drfo}")
             if subj.get("organization") and subj.get("organization") != "ФІЗИЧНА ОСОБА":
-                lines.append(f"<b>Організація:</b> {subj.get('organization')}")
+                lines.append(f"<b>{'Organization' if is_en else 'Організація'}:</b> {subj.get('organization')}")
             if subj.get("edrpou"):
-                lines.append(f"<b>ЄДРПОУ:</b> {subj.get('edrpou')}")
-            lines.append(f"<b>КНЕДП (АЦСК):</b> {ca_name}")
-            lines.append(f"<b>Тип підпису:</b> {q_type}")
+                lines.append(f"<b>{'USREOU' if is_en else 'ЄДРПОУ'}:</b> {subj.get('edrpou')}")
+            lines.append(f"<b>{'CA (TSP)' if is_en else 'КНЕДП (АЦСК)'}:</b> {ca_name}")
+            lines.append(f"<b>{'Signature type' if is_en else 'Тип підпису'}:</b> {q_type}")
 
             val_from = format_iso_time(c.get("valid_from"))
             val_to = format_iso_time(c.get("valid_to"))
-            lines.append(f"<b>Дія сертифіката:</b> з {val_from} до {val_to}")
+            lines.append(f"<b>{'Certificate validity' if is_en else 'Дія сертифіката'}:</b> {'from' if is_en else 'з'} {val_from} {'to' if is_en else 'до'} {val_to}")
 
     pango_text = "\n".join(lines)
+
+    report_title = f"QES Verification Report — {os.path.basename(file_path)}" if is_en else f"Протокол перевірки КЕП — {os.path.basename(file_path)}"
+    close_btn = "Close" if is_en else "Закрити"
+    extract_btn = "Extract Documents" if is_en else "Видобути документи"
 
     while True:
         cmd = [
             "zenity", "--info",
-            f"--title=Протокол перевірки КЕП — {os.path.basename(file_path)}",
+            f"--title={report_title}",
             f"--text={pango_text}",
-            "--ok-label=Закрити",
+            f"--ok-label={close_btn}",
             "--width=580",
         ]
         if is_asice:
-            cmd.extend(["--extra-button=Видобути документи"])
-        cmd.extend(["--extra-button=📖 Довідка / Help"])
+            cmd.extend([f"--extra-button={extract_btn}"])
+        cmd.extend(["--extra-button=📖 Help / Довідка"])
 
         proc = subprocess.run(cmd, stdout=subprocess.PIPE, text=True)
         clicked = proc.stdout.strip()
 
-        if clicked == "Видобути документи":
+        if clicked == extract_btn:
+            dlg_title = "Select folder to extract files" if is_en else "Оберіть папку для видобування файлів"
             dest_dir = subprocess.run(
-                ["zenity", "--file-selection", "--directory", "--title=Оберіть папку для видобування файлів"],
+                ["zenity", "--file-selection", "--directory", f"--title={dlg_title}"],
                 stdout=subprocess.PIPE, text=True
             ).stdout.strip()
             if dest_dir:
                 extract_asice_files(file_path, dest_dir)
+                notif_title = "📦 Files Extracted" if is_en else "📦 Файли видобуто"
+                notif_msg = f"Documents successfully extracted to:\n{dest_dir}" if is_en else f"Документи успішно видобуто у:\n{dest_dir}"
                 if shutil.which("notify-send"):
                     subprocess.run([
                         "notify-send", "-a", "QES Tools", "-i", "folder",
-                        "📦 Файли видобуто",
-                        f"Документи успішно видобуто у:\n{dest_dir}"
+                        notif_title, notif_msg
                     ])
                 elif shutil.which("zenity"):
-                    subprocess.run(["zenity", "--notification", f"--text=📦 Файли успішно видобуто у:\n{dest_dir}"])
+                    subprocess.run(["zenity", "--notification", f"--text={notif_title}: {notif_msg}"])
                 subprocess.Popen(["xdg-open", dest_dir])
             continue
-        elif "Довідка" in clicked:
+        elif "Help" in clicked or "Довідка" in clicked:
             show_help_dialog()
             continue
         else:

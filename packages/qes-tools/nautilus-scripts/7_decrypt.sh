@@ -1,8 +1,18 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# 🔓 Розшифрувати особистим КЕП
+# 🔓 Розшифрувати особистим КЕП / Decrypt with Personal Key
 # ==============================================================================
 set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f "${SCRIPT_DIR}/.i18n.sh" ]]; then
+    source "${SCRIPT_DIR}/.i18n.sh"
+elif [[ -f "${SCRIPT_DIR}/_i18n.sh" ]]; then
+    source "${SCRIPT_DIR}/_i18n.sh"
+elif [[ -f "/usr/share/qes-tools/nautilus-scripts/_i18n.sh" ]]; then
+    source "/usr/share/qes-tools/nautilus-scripts/_i18n.sh"
+fi
+QES_LANG="${QES_LANG:-uk}"
 
 FILES=()
 if [[ -n "${NAUTILUS_SCRIPT_SELECTED_FILE_PATHS:-}" ]]; then
@@ -14,16 +24,24 @@ else
 fi
 
 if [[ ${#FILES[@]} -eq 0 ]]; then
-    zenity --warning --title="Розшифрування КЕП" --text="Оберіть зашифрований файл (.enc / .p7e) для розшифрування."
+    qes_warn_dialog \
+        "Розшифрування КЕП" \
+        "QES Decryption" \
+        "Оберіть зашифрований файл (.enc / .p7e) для розшифрування." \
+        "Select encrypted file (.enc / .p7e) to decrypt."
     exit 0
 fi
 
 if qes-decrypt --gui "${FILES[@]}"; then
-    notify-send -a "QES Tools" -i changes-allow \
+    qes_notify "changes-allow" \
         "🔓 Розшифровано КЕП" \
-        "Документи успішно розшифровано та відновлено в оригінальному вигляді."
+        "🔓 Decrypted with QES" \
+        "Документи успішно розшифровано та відновлено в оригінальному вигляді." \
+        "Documents successfully decrypted and restored to original form."
 else
-    notify-send -a "QES Tools" -i dialog-error \
+    qes_notify "dialog-error" \
         "❌ Помилка розшифрування" \
-        "Не вдалося розшифрувати файл. Перевірте правильність пароля або відповідність ключа."
+        "❌ Decryption Error" \
+        "Не вдалося розшифрувати файл. Перевірте правильність пароля або відповідність ключа." \
+        "Failed to decrypt file. Check your password or verify the key matches."
 fi

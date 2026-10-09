@@ -23,6 +23,8 @@ Thumbs.db
 npm-debug.log*
 tmp/
 .cache/
+__pycache__/
+*.py[cod]
 
 # Large binaries (downloaded during build if needed)
 **/bin/typst

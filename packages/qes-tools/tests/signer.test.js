@@ -572,3 +572,44 @@ test('qes-verify seamlessly routes .cer certificate files to qes-cert', () => {
     assert.strictEqual(parsed[0].subject.drfo, '3255419579');
   }
 });
+
+test('i18n module provides proper translations for UK and EN locales', () => {
+  const { t, strings } = require('../src/i18n');
+  assert.ok(strings.uk);
+  assert.ok(strings.en);
+  assert.strictEqual(strings.uk.dialogTitle, 'КЕП (ДСТУ 4145-2002)');
+  assert.strictEqual(strings.en.dialogTitle, 'QES (DSTU 4145-2002)');
+  assert.strictEqual(strings.uk.sigValid, 'ПІДПИС ДІЙСНИЙ');
+  assert.strictEqual(strings.en.sigValid, 'SIGNATURE VALID');
+});
+
+test('qes-config CLI switches Nautilus menu language between Ukrainian and English', () => {
+  const configBin = path.join(__dirname, '../bin/qes-config');
+  assert.strictEqual(fs.existsSync(configBin), true);
+
+  // Switch to UK
+  const resUk = spawnSync('bash', [configBin, '--lang', 'uk'], { encoding: 'utf-8' });
+  assert.strictEqual(resUk.status, 0);
+  assert.match(resUk.stdout, /Встановлено українську мову/);
+
+  const scriptsDir = path.join(os.homedir(), '.local/share/nautilus/scripts');
+  const ukFolder = path.join(scriptsDir, '🔐 КЕП та Безпека');
+  const enFolder = path.join(scriptsDir, '🔐 QES & Security');
+  assert.strictEqual(fs.existsSync(ukFolder), true);
+  assert.strictEqual(fs.existsSync(enFolder), false);
+  assert.strictEqual(fs.existsSync(path.join(ukFolder, '.i18n.sh')), true);
+
+  // Switch to EN
+  const resEn = spawnSync('bash', [configBin, '--lang', 'en'], { encoding: 'utf-8' });
+  assert.strictEqual(resEn.status, 0);
+  assert.match(resEn.stdout, /Language set to English/);
+  assert.strictEqual(fs.existsSync(ukFolder), false);
+  assert.strictEqual(fs.existsSync(enFolder), true);
+  assert.strictEqual(fs.existsSync(path.join(enFolder, '.i18n.sh')), true);
+
+  // Restore to UK as per user system convention
+  const resRestore = spawnSync('bash', [configBin, '--lang', 'uk'], { encoding: 'utf-8' });
+  assert.strictEqual(resRestore.status, 0);
+  assert.strictEqual(fs.existsSync(ukFolder), true);
+});
+

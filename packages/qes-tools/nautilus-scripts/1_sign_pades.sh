@@ -1,8 +1,18 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# ✍️ Підписати (PAdES PDF зі штампом та QR)
+# ✍️ Підписати (PAdES PDF зі штампом та QR) / Sign (PAdES PDF with Stamp & QR)
 # ==============================================================================
 set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f "${SCRIPT_DIR}/.i18n.sh" ]]; then
+    source "${SCRIPT_DIR}/.i18n.sh"
+elif [[ -f "${SCRIPT_DIR}/_i18n.sh" ]]; then
+    source "${SCRIPT_DIR}/_i18n.sh"
+elif [[ -f "/usr/share/qes-tools/nautilus-scripts/_i18n.sh" ]]; then
+    source "/usr/share/qes-tools/nautilus-scripts/_i18n.sh"
+fi
+QES_LANG="${QES_LANG:-uk}"
 
 # Read files from Nautilus environment or arguments
 FILES=()
@@ -23,7 +33,9 @@ done
 
 if [[ ${#PDF_FILES[@]} -eq 0 ]]; then
     if command -v zenity >/dev/null 2>&1; then
-        CHOSEN=$(zenity --file-selection --multiple --separator="|" --title="Оберіть PDF-документи для підписання зі штампом та QR" --file-filter="PDF документи (*.pdf) | *.pdf *.PDF" 2>/dev/null || true)
+        dlg_title="$(qes_text "Оберіть PDF-документи для підписання зі штампом та QR" "Select PDF documents to sign with stamp & QR")"
+        dlg_filter="$(qes_text "PDF документи (*.pdf) | *.pdf *.PDF" "PDF documents (*.pdf) | *.pdf *.PDF")"
+        CHOSEN=$(zenity --file-selection --multiple --separator="|" --title="$dlg_title" --file-filter="$dlg_filter" 2>/dev/null || true)
         if [[ -n "$CHOSEN" ]]; then
             IFS="|" read -ra PDF_FILES <<< "$CHOSEN"
         else
@@ -36,11 +48,15 @@ fi
 
 # Run signing with GUI password dialog
 if qes-sign --pades --gui "${PDF_FILES[@]}"; then
-    notify-send -a "QES Tools" -i document-edit \
+    qes_notify "document-edit" \
         "✅ Підписано КЕП (PAdES)" \
-        "Успішно підписано ${#PDF_FILES[@]} PDF-документ(ів) з офіційним штампом та QR-кодом."
+        "✅ Signed with QES (PAdES)" \
+        "Успішно підписано ${#PDF_FILES[@]} PDF-документ(ів) з офіційним штампом та QR-кодом." \
+        "Successfully signed ${#PDF_FILES[@]} PDF document(s) with official stamp & QR code."
 else
-    notify-send -a "QES Tools" -i dialog-error \
+    qes_notify "dialog-error" \
         "❌ Помилка підписання" \
-        "Підписання документа скасовано або виникла помилка."
+        "❌ Signing Error" \
+        "Підписання документа скасовано або виникла помилка." \
+        "Document signing was cancelled or an error occurred."
 fi

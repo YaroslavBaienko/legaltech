@@ -1,8 +1,18 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# 👁️ Розпізнати текст OCR (Е-Суд / PDF)
+# 👁️ Розпізнати текст OCR (Е-Суд) / OCR Text Recognition (Court PDF)
 # ==============================================================================
 set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f "${SCRIPT_DIR}/.i18n.sh" ]]; then
+    source "${SCRIPT_DIR}/.i18n.sh"
+elif [[ -f "${SCRIPT_DIR}/_i18n.sh" ]]; then
+    source "${SCRIPT_DIR}/_i18n.sh"
+elif [[ -f "/usr/share/qes-tools/nautilus-scripts/_i18n.sh" ]]; then
+    source "/usr/share/qes-tools/nautilus-scripts/_i18n.sh"
+fi
+QES_LANG="${QES_LANG:-uk}"
 
 # Read files from Nautilus environment or arguments
 FILES=()
@@ -28,8 +38,11 @@ for f in "${FILES[@]}"; do
 done
 
 if [[ ${#TARGET_FILES[@]} -eq 0 ]]; then
-    zenity --warning --title="OCR Розпізнавання (Е-Суд)" \
-        --text="Будь ласка, виберіть хоча б один PDF-документ або скан-зображення (PNG/JPG/TIFF) для оптичного розпізнавання тексту."
+    qes_warn_dialog \
+        "OCR Розпізнавання (Е-Суд)" \
+        "OCR Text Recognition (Court PDF)" \
+        "Будь ласка, виберіть хоча б один PDF-документ або скан-зображення (PNG/JPG/TIFF) для оптичного розпізнавання тексту." \
+        "Please select at least one PDF document or scanned image (PNG/JPG/TIFF) for OCR text recognition."
     exit 0
 fi
 

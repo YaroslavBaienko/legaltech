@@ -17,6 +17,7 @@ const path = require('path');
 const net = require('net');
 const crypto = require('crypto');
 const { spawn } = require('child_process');
+const { t, getQESLang } = require('./i18n');
 
 function getSocketDir() {
   const runtime = process.env.XDG_RUNTIME_DIR;
@@ -388,14 +389,17 @@ async function getOrPromptPassword({
       if (cached && cached.found && cached.password) {
         try {
           const boxInfo = await engine.initBox(keyPath, cached.password, certPath);
+          const lang = getQESLang();
           const mins = Math.floor(cached.remainingSec / 60);
           const secs = cached.remainingSec % 60;
-          const timeStr = mins > 0 ? `${mins} хв ${secs} с` : `${secs} с`;
-          console.log(`\x1b[32m🔑 Сесія КЕП активна:\x1b[0m пароль отримано з пам'яті (залишилось ${timeStr})`);
+          const timeStr = lang === 'en'
+            ? (mins > 0 ? `${mins} min ${secs} s` : `${secs} s`)
+            : (mins > 0 ? `${mins} хв ${secs} с` : `${secs} с`);
+          console.log(t('sessionActive', timeStr));
           return boxInfo;
         } catch (err) {
           // Stale password, invalidate cache and prompt
-          console.warn(`\x1b[33m⚠️ Збережений у сесії пароль не підійшов до ключа. Запитуємо знову...\x1b[0m`);
+          console.warn(`\x1b[33m${t('stalePassword')}\x1b[0m`);
           await sendAgentMessage({ action: 'clear', keyId }).catch(() => {});
         }
       }
@@ -405,11 +409,11 @@ async function getOrPromptPassword({
   }
 
   // 2. Prompt user interactively
-  const prompt = promptText || `Введіть пароль до ключа \x1b[1m${label}\x1b[0m: `;
+  const prompt = promptText || t('enterPassword', label);
   let password = await askPasswordFn(prompt, useGui);
 
   // 3. Initialize engine with entered password
-  console.log(`\x1b[90m⏳ Ініціалізація крипторушія ДСТУ 4145...\x1b[0m`);
+  console.log(`\x1b[90m${t('initCrypto')}\x1b[0m`);
   let boxInfo;
   try {
     boxInfo = await engine.initBox(keyPath, password, certPath);
@@ -430,7 +434,7 @@ async function getOrPromptPassword({
           ttl,
         }, { timeoutMs: 1000 });
         const ttlMin = Math.round(ttl / 60);
-        console.log(`\x1b[90m🔒 Пароль закешовано в оперативній пам'яті (сесія на ${ttlMin} хв)\x1b[0m`);
+        console.log(t('cachedSession', ttlMin));
       }
     } catch (e) {
       // Non-fatal if agent fails to cache

@@ -1,8 +1,18 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# 📨 Зашифрувати для адресата (.enc)
+# 📨 Зашифрувати для адресата (.enc) / Encrypt for Recipient (.enc)
 # ==============================================================================
 set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f "${SCRIPT_DIR}/.i18n.sh" ]]; then
+    source "${SCRIPT_DIR}/.i18n.sh"
+elif [[ -f "${SCRIPT_DIR}/_i18n.sh" ]]; then
+    source "${SCRIPT_DIR}/_i18n.sh"
+elif [[ -f "/usr/share/qes-tools/nautilus-scripts/_i18n.sh" ]]; then
+    source "/usr/share/qes-tools/nautilus-scripts/_i18n.sh"
+fi
+QES_LANG="${QES_LANG:-uk}"
 
 FILES=()
 if [[ -n "${NAUTILUS_SCRIPT_SELECTED_FILE_PATHS:-}" ]]; then
@@ -14,25 +24,34 @@ else
 fi
 
 if [[ ${#FILES[@]} -eq 0 ]]; then
-    zenity --warning --title="Шифрування для адресата" --text="Оберіть файл(и) або папку для спрямованого шифрування."
+    qes_warn_dialog \
+        "Шифрування для адресата" \
+        "Encrypt for Recipient" \
+        "Оберіть файл(и) або папку для спрямованого шифрування." \
+        "Select file(s) or folder for targeted encryption."
     exit 0
 fi
 
-# Select recipient certificate file
+dlg_title="$(qes_text "Оберіть відкритий сертифікат адресата (.cer / .crt)" "Select recipient's public certificate (.cer / .crt)")"
+dlg_filter="$(qes_text "Сертифікати (*.cer *.crt) | *.cer *.crt" "Certificates (*.cer *.crt) | *.cer *.crt")"
 CERT_FILE=$(zenity --file-selection \
-    --title="Оберіть відкритий сертифікат адресата (.cer / .crt)" \
-    --file-filter="Сертифікати (*.cer *.crt) | *.cer *.crt" 2>/dev/null || true)
+    --title="$dlg_title" \
+    --file-filter="$dlg_filter" 2>/dev/null || true)
 
 if [[ -z "$CERT_FILE" || ! -f "$CERT_FILE" ]]; then
     exit 0
 fi
 
 if qes-encrypt --gui -r "$CERT_FILE" "${FILES[@]}"; then
-    notify-send -a "QES Tools" -i mail-send \
+    qes_notify "mail-send" \
         "🎯 Зашифровано для адресата" \
-        "Файли успішно зашифровано на відкритий ключ отримувача. Відкрити зможе лише власник цільового КЕП."
+        "🎯 Encrypted for Recipient" \
+        "Файли успішно зашифровано на відкритий ключ отримувача. Відкрити зможе лише власник цільового КЕП." \
+        "Files successfully encrypted with recipient's public key. Only the intended recipient can decrypt."
 else
-    notify-send -a "QES Tools" -i dialog-error \
+    qes_notify "dialog-error" \
         "❌ Помилка шифрування" \
-        "Операцію шифрування скасовано або сталася помилка."
+        "❌ Encryption Error" \
+        "Операцію шифрування скасовано або сталася помилка." \
+        "Encryption operation was cancelled or an error occurred."
 fi

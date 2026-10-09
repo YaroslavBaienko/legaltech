@@ -11,6 +11,7 @@ const readline = require('readline');
 const { spawnSync } = require('child_process');
 const { QESEngine } = require('../src/engine');
 const { getOrPromptPassword, sendAgentMessage } = require('../src/session');
+const { t } = require('../src/i18n');
 
 const CLR_RESET = '\x1b[0m';
 const CLR_BOLD = '\x1b[1m';
@@ -29,13 +30,13 @@ function askPassword(promptText, forceGui = false) {
     if ((forceGui || !process.stdin.isTTY) && (process.env.DISPLAY || process.env.WAYLAND_DISPLAY)) {
       const zenityRes = spawnSync('zenity', [
         '--password',
-        `--title=Розшифрування КЕП (ДСТУ 4145)`,
+        `--title=${t('decryptDialogTitle')}`,
       ], { encoding: 'utf-8' });
 
       if (zenityRes.status === 0) {
         return resolve(zenityRes.stdout.trim());
       } else {
-        return reject(new Error('Введення пароля скасовано користувачем у діалоговому вікні.'));
+        return reject(new Error(t('pwdCancelled')));
       }
     }
 

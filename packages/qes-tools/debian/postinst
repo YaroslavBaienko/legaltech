@@ -11,6 +11,7 @@ if [ "$1" = "configure" ]; then
     chmod 0755 /usr/bin/qes-pdf-court 2>/dev/null || true
     chmod 0755 /usr/bin/qes-agent 2>/dev/null || true
     chmod 0755 /usr/bin/qes-ocr 2>/dev/null || true
+    chmod 0755 /usr/bin/qes-config 2>/dev/null || true
     if [ -f /usr/lib/qes-tools/bin/typst ]; then
         chmod 0755 /usr/lib/qes-tools/bin/typst 2>/dev/null || true
     fi
@@ -34,8 +35,10 @@ if [ "$1" = "configure" ]; then
     fi
     update-desktop-database /usr/share/applications 2>/dev/null || true
 
-    # Розгортання скриптів Nautilus у домашні каталоги
-    if [ -d /usr/share/nautilus-scripts ]; then
+    # Розгортання скриптів Nautilus відповідно до мови системи (Auto UK/EN)
+    if [ -x /usr/bin/qes-config ]; then
+        /usr/bin/qes-config --all-users --lang auto 2>/dev/null || true
+    elif [ -d /usr/share/nautilus-scripts ]; then
         mkdir -p /etc/skel/.local/share/nautilus/scripts/
         rm -rf "/etc/skel/.local/share/nautilus/scripts/🔐 КЕП та Безпека"
         cp -r "/usr/share/nautilus-scripts/🔐 КЕП та Безпека" /etc/skel/.local/share/nautilus/scripts/ 2>/dev/null || true
@@ -71,7 +74,7 @@ if [ "$1" = "configure" ]; then
     fi
 
     echo "================================================================================"
-    echo " 🇺🇦 Встановлено комплекс електронного підпису та шифрування qes-tools v1.0.3"
+    echo " 🇺🇦 Встановлено комплекс електронного підпису та шифрування qes-tools v1.0.4"
     echo " • qes-sign        — підписання (CAdES .p7s, PAdES .pdf, ASiC-E .asice, мультипідпис)"
     echo " • qes-verify      — перевірка підписів (.p7s, .pdf, .asice) та сертифікатів"
     echo " • qes-cert        — швидкий інспектор сертифікатів КНЕДП / АЦСК (X.509, ДСТУ 4145)"
@@ -81,7 +84,8 @@ if [ "$1" = "configure" ]; then
     echo " • qes-decrypt     — розшифрування особистим КЕП"
     echo " • qes-export-cert — експорт відкритого сертифіката (.cer)"
     echo " • qes-agent       — менеджер пам'яті паролів сесії (Session TTL)"
-    echo " 🖱️ Інтегровано у файловий менеджер GNOME (правий клік -> Скрипти -> 🔐 КЕП та Безпека)"
+    echo " • qes-config      — керування мовою (UA/EN) та меню Nautilus (qes-config --lang uk|en|auto)"
+    echo " 🖱️ Інтегровано у файловий менеджер GNOME (правий клік -> Скрипти -> 🔐 КЕП та Безпека / QES & Security)"
     echo "================================================================================"
 fi
 

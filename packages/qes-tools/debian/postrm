@@ -2,16 +2,19 @@
 set -e
 
 if [ "$1" = "purge" ] || [ "$1" = "remove" ]; then
-    rm -rf "/etc/skel/.local/share/nautilus/scripts/🔐 КЕП та Безпека" 2>/dev/null || true
+    rm -rf "/etc/skel/.local/share/nautilus/scripts/🔐 КЕП та Безпека" \
+           "/etc/skel/.local/share/nautilus/scripts/🔐 QES & Security" 2>/dev/null || true
     for user_home in /home/*; do
         if [ -d "$user_home" ]; then
-            rm -rf "$user_home/.local/share/nautilus/scripts/🔐 КЕП та Безпека" 2>/dev/null || true
+            rm -rf "$user_home/.local/share/nautilus/scripts/🔐 КЕП та Безпека" \
+                   "$user_home/.local/share/nautilus/scripts/🔐 QES & Security" 2>/dev/null || true
         fi
     done
     if [ -n "${SUDO_USER:-}" ]; then
         sudo_home=$(getent passwd "$SUDO_USER" | cut -d: -f6)
         if [ -n "$sudo_home" ] && [ -d "$sudo_home" ]; then
-            rm -rf "$sudo_home/.local/share/nautilus/scripts/🔐 КЕП та Безпека" 2>/dev/null || true
+            rm -rf "$sudo_home/.local/share/nautilus/scripts/🔐 КЕП та Безпека" \
+                   "$sudo_home/.local/share/nautilus/scripts/🔐 QES & Security" 2>/dev/null || true
         fi
     fi
     pkill -x nautilus 2>/dev/null || true

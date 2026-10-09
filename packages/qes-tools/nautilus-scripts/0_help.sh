@@ -1,9 +1,96 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# 📖 Довідка та Інструкція користувача (QES Tools)
+# 📖 Довідка та Інструкція користувача (QES Tools) / User Guide
 # ==============================================================================
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f "${SCRIPT_DIR}/.i18n.sh" ]]; then
+    source "${SCRIPT_DIR}/.i18n.sh"
+elif [[ -f "${SCRIPT_DIR}/_i18n.sh" ]]; then
+    source "${SCRIPT_DIR}/_i18n.sh"
+elif [[ -f "/usr/share/qes-tools/nautilus-scripts/_i18n.sh" ]]; then
+    source "/usr/share/qes-tools/nautilus-scripts/_i18n.sh"
+fi
+QES_LANG="${QES_LANG:-uk}"
+
+if [[ "$QES_LANG" == "en" ]]; then
+HELP_TEXT="<span size='x-large' weight='bold' color='#1a5fb4'>📖 QES Tools User Guide & Documentation</span>
+<span size='small' color='#666666'>Offline-first qualified electronic signatures, encryption and court document automation (DSTU 4145 / GOST 28147:89)</span>
+
+<b>1. SIGNING DOCUMENTS (QES / AES)</b>
+• <b>PAdES (PDF with visual stamp & QR):</b>
+  Right-click on PDF ➔ <i>«✍️ Sign (PAdES PDF with Stamp & QR)»</i>
+  Embeds cryptographic signature, vector official stamp and verification QR code.
+  Creates <code>document_signed.pdf</code>.
+  <i>CLI:</i> <code>qes-sign --pades document.pdf</code>
+
+• <b>PAdES (PDF without stamp & QR):</b>
+  Right-click on PDF ➔ <i>«✍️ Sign (PAdES PDF without Stamp & QR)»</i>
+  Applies invisible cryptographic PAdES signature without page modification.
+  <i>CLI:</i> <code>qes-sign --pades --no-stamp document.pdf</code>
+
+• <b>Multi-signing (secondary signatures):</b>
+  Right-click on signed PDF, ASiC-E or .p7s ➔ <i>«✍️ Add Secondary Signature (Multi-Sign)»</i>
+  Appends secondary signatures without invalidating existing ones. Stamps stack neatly.
+  <i>CLI:</i> <code>qes-sign --append document_signed.pdf</code>
+
+• <b>Detached Signature (.p7s):</b>
+  Right-click ➔ <i>«✍️ Sign (Detached Signature .p7s)»</i>
+  Creates <code>document.p7s</code> alongside the original file. Suitable for tenders and courts.
+  <i>CLI:</i> <code>qes-sign document.docx</code>
+
+• <b>Package Container ASiC-E (.asice):</b>
+  Select multiple files or folder ➔ <i>«📦 Sign (Package Container ASiC-E)»</i>
+  Creates standard European ETSI TS 102 918 ZIP archive with manifest and signatures.
+  <i>CLI:</i> <code>qes-sign --asice file1 file2 -o bundle.asice</code>
+
+<b>2. VERIFYING SIGNATURES & INSPECTING CERTIFICATES</b>
+• <b>Verify QES Signature:</b>
+  Right-click on .pdf, .asice, .p7s ➔ <i>«🔍 Verify QES Signature»</i>
+  Validates mathematical integrity, signer identities, tax IDs, and TSP time stamps.
+  Click <i>«Extract Documents»</i> to extract bundled files from ASiC-E containers.
+  <i>CLI:</i> <code>qes-verify document_signed.pdf</code>
+
+• <b>View CA Certificate Details:</b>
+  Right-click on .cer, .crt, .p7b ➔ <i>«📜 View CA Certificate Details»</i>
+  Displays certificate data with one-click clipboard copy buttons (Tax ID, USREOU, Details).
+  <i>CLI:</i> <code>qes-cert cert.cer</code> or <code>qes-cert --gui cert.cer</code>
+
+<b>3. OPTICAL CHARACTER RECOGNITION (OCR)</b>
+• <b>Pure English OCR (1-click):</b>
+  Right-click on scan/PDF ➔ <i>«👁️ OCR Text Recognition (🇬🇧 English)»</i>
+  Instantly processes English contracts and invoices into searchable PDFs.
+  <i>CLI:</i> <code>qes-ocr --eng contract.pdf</code> (or <code>-e</code>)
+
+• <b>Court OCR Wizard (Language Selector):</b>
+  Right-click ➔ <i>«👁️ OCR Text Recognition (Court PDF)»</i>
+  Allows selecting English, Ukrainian, or Bilingual (ukr+eng). Deskews and linearizes (<50MB).
+  <i>CLI:</i> <code>qes-ocr --sidecar file.pdf</code>
+
+<b>4. CRYPTO VAULT ENCRYPTION (DSTU 4145 / GOST 28147:89)</b>
+• <b>Personal Vault:</b>
+  Right-click ➔ <i>«🛡️ Encrypt to Personal Vault (.enc)»</i>
+  Encrypts files specifically for your own key. Only you can decrypt it.
+  <i>CLI:</i> <code>qes-encrypt private.pdf</code>
+
+• <b>Encrypt for Recipient:</b>
+  Right-click ➔ <i>«📨 Encrypt for Recipient (.enc)»</i>
+  Select recipient's public certificate (.cer/.crt).
+  <i>CLI:</i> <code>qes-encrypt -r client.cer lawsuit.pdf</code>
+
+• <b>Decryption:</b>
+  Right-click on .enc ➔ <i>«🔓 Decrypt with Personal Key»</i>
+  <i>CLI:</i> <code>qes-decrypt file.enc</code>
+
+<b>5. RAM PASSWORD CACHE & LANGUAGE SWITCHING</b>
+• Password is cached exclusively in memory (tmpfs 0600) for 15 minutes (Session TTL).
+• Right-click ➔ <i>«🔒 Lock Session (Clear Password Cache)»</i> or <code>qes-agent clear</code>.
+• Switch language anytime: <code>qes-config --lang en</code> or <code>qes-config --lang uk</code>.
+"
+TITLE="QES Tools — User Guide & Documentation"
+BTN_LABEL="Close"
+else
 HELP_TEXT="<span size='x-large' weight='bold' color='#1a5fb4'>📖 Повний посібник користувача QES Tools</span>
 <span size='small' color='#666666'>Автономний комплекс електронного підпису, шифрування та судового документообігу (ДСТУ 4145 / ГОСТ 28147:89)</span>
 
@@ -83,11 +170,15 @@ HELP_TEXT="<span size='x-large' weight='bold' color='#1a5fb4'>📖 Повний 
 • Щоб негайно скинути всі збережені паролі з пам'яті та заблокувати ключі:
   Правий клік ➔ <i>«🔒 Скинути кеш пароля (Заблокувати)»</i>
   <i>Термінал:</i> <code>qes-agent clear</code> (або <code>qes-agent status</code>)
+• Перемикання мови інтерфейсу: <code>qes-config --lang en</code> або <code>qes-config --lang uk</code>.
 "
+TITLE="Довідка та Інструкції — QES Tools"
+BTN_LABEL="Закрити"
+fi
 
 zenity --info \
-    --title="Довідка та Інструкції — QES Tools" \
+    --title="$TITLE" \
     --text="$HELP_TEXT" \
-    --ok-label="Закрити" \
+    --ok-label="$BTN_LABEL" \
     --width=720 \
     --height=580

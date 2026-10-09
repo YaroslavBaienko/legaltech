@@ -1,8 +1,18 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# 📦 Підписати (Пакетний контейнер ASiC-E)
+# 📦 Підписати (Пакетний контейнер ASiC-E) / Sign (Package Container ASiC-E)
 # ==============================================================================
 set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f "${SCRIPT_DIR}/.i18n.sh" ]]; then
+    source "${SCRIPT_DIR}/.i18n.sh"
+elif [[ -f "${SCRIPT_DIR}/_i18n.sh" ]]; then
+    source "${SCRIPT_DIR}/_i18n.sh"
+elif [[ -f "/usr/share/qes-tools/nautilus-scripts/_i18n.sh" ]]; then
+    source "/usr/share/qes-tools/nautilus-scripts/_i18n.sh"
+fi
+QES_LANG="${QES_LANG:-uk}"
 
 FILES=()
 if [[ -n "${NAUTILUS_SCRIPT_SELECTED_FILE_PATHS:-}" ]]; then
@@ -14,15 +24,21 @@ else
 fi
 
 if [[ ${#FILES[@]} -eq 0 ]]; then
-    zenity --warning --title="Пакетний КЕП (ASiC-E)" --text="Оберіть файли або папку для створення пакетного контейнера ASiC-E."
+    qes_warn_dialog \
+        "Пакетний КЕП (ASiC-E)" \
+        "Batch QES (ASiC-E)" \
+        "Оберіть файли або папку для створення пакетного контейнера ASiC-E." \
+        "Select files or folder to create an ASiC-E package container."
     exit 0
 fi
 
-# If multiple files selected, ask container name
 OUTPUT_FLAG=()
 if [[ ${#FILES[@]} -gt 1 && ! -d "${FILES[0]}" ]]; then
     PARENT_DIR="$(dirname "${FILES[0]}")"
-    PKG_NAME=$(zenity --entry --title="Назва пакету ASiC-E" --text="Вкажіть назву файлу архіву:" --entry-text="пакет_документів.asice")
+    title="$(qes_text "Назва пакету ASiC-E" "ASiC-E Package Name")"
+    prompt="$(qes_text "Вкажіть назву файлу архіву:" "Enter the archive filename:")"
+    default_name="$(qes_text "пакет_документів.asice" "document_package.asice")"
+    PKG_NAME=$(zenity --entry --title="$title" --text="$prompt" --entry-text="$default_name" 2>/dev/null || true)
     if [[ -z "$PKG_NAME" ]]; then
         exit 0
     fi
@@ -31,11 +47,15 @@ if [[ ${#FILES[@]} -gt 1 && ! -d "${FILES[0]}" ]]; then
 fi
 
 if qes-sign --asice --gui "${OUTPUT_FLAG[@]}" "${FILES[@]}"; then
-    notify-send -a "QES Tools" -i package-x-generic \
+    qes_notify "package-x-generic" \
         "✅ Створено архів ASiC-E" \
-        "Пакет документів успішно завірено європейським контейнером ASiC-E."
+        "✅ ASiC-E Archive Created" \
+        "Пакет документів успішно завірено європейським контейнером ASiC-E." \
+        "Document package successfully certified with European ASiC-E container."
 else
-    notify-send -a "QES Tools" -i dialog-error \
+    qes_notify "dialog-error" \
         "❌ Помилка створення ASiC-E" \
-        "Операцію скасовано або сталася помилка."
+        "❌ ASiC-E Creation Error" \
+        "Операцію скасовано або сталася помилка." \
+        "Operation was cancelled or an error occurred."
 fi
