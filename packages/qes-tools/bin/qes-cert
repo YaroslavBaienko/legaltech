@@ -840,6 +840,7 @@ def main():
 ================================================================================"""
     )
     parser.add_argument("files", nargs="*", default=[], help="Шлях до файлу(-ів) сертифікатів (.cer, .crt, .der, .pem, .p7b)")
+    parser.add_argument("-t", "--tokens", action="store_true", help="Перевірити наявність та статус апаратних токенів (ЗНОК: Алмаз-1К, Кристал-1К, SecureToken-337)")
     parser.add_argument("-j", "--json", action="store_true", help="Вивести результат у структурованому форматі JSON")
     parser.add_argument("-g", "--gui", action="store_true", help="Показати картку в графічному вікні GNOME (Zenity)")
     parser.add_argument("-r", "--raw", action="store_true", help="Вивести сертифікат(и) у відкритому текстовому форматі PEM")
@@ -847,6 +848,43 @@ def main():
     parser.add_argument("--no-color", action="store_true", help="Вимкнути ANSI кольори в терміналі")
 
     args = parser.parse_args()
+    use_color = not args.no_color and sys.stdout.isatty()
+
+    if args.tokens:
+        script_dir = Path(__file__).resolve().parent
+        node_code = """
+        const { detectHardwareTokens } = require('./src/providers');
+        console.log(JSON.stringify(detectHardwareTokens()));
+        """
+        try:
+            res = subprocess.run(["node", "-e", node_code], cwd=str(script_dir.parent), stdout=subprocess.PIPE, text=True, check=True)
+            tdata = json.loads(res.stdout.strip())
+            if args.json:
+                print(json.dumps(tdata, indent=2, ensure_ascii=False))
+                sys.exit(0)
+            if tdata.get("detected"):
+                print(colorize("✔ ЗНАЙДЕНО ПІДКЛЮЧЕНИЙ АПАРАТНИЙ НОСІЙ (ЗНОК):", CLR_GREEN + CLR_BOLD, use_color))
+                for i, tok in enumerate(tdata.get("tokens", []), 1):
+                    print(f"  [{i}] " + colorize(tok['name'], CLR_BOLD, use_color))
+                    print(f"      Виробник:    {tok['manufacturer']}")
+                    print(f"      Провайдер:   {tok['provider']}")
+                    print(f"      Тип носія:   {tok['type']}")
+                    print(f"      ID пристрою: {tok['vendorId']}:{tok['productId']}")
+                    if tok.get("driverPath"):
+                        drv_status = colorize("✔ встановлено", CLR_GREEN, use_color) if tok.get("driverInstalled") else "(інтегровано в пакет)"
+                        print(f"      Драйвер PKCS#11: {tok['driverPath']} {drv_status}")
+                print()
+                if tdata.get("pcscdRunning"):
+                    print(colorize("  🟢 Служба смарт-карт (pcscd) активна в системі.", CLR_GREEN, use_color))
+                else:
+                    print(colorize("  💡 Для прямої роботи з USB-токеном через PC/SC запустіть: sudo systemctl start pcscd", CLR_YELLOW, use_color))
+            else:
+                print(colorize("ℹ Апаратних токенів (Алмаз-1К, Кристал-1К, SecureToken-337) не виявлено.", CLR_YELLOW, use_color))
+                print("  Переконайтеся, що USB-токен надійно підключено до комп'ютера.")
+            sys.exit(0)
+        except Exception as e:
+            sys.stderr.write(f"Помилка опитування USB-токенів: {e}\n")
+            sys.exit(1)
 
     if not args.files:
         if args.gui:

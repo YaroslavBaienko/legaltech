@@ -1,122 +1,122 @@
-# 🌐 Посібник з розгортання та адміністрування APT-репозиторію на GitHub Pages
+# 🌐 Guide to Deploying & Administering an APT Repository on GitHub Pages
 
-Цей посібник описує архітектуру, налаштування та щоденне обслуговування власного статичного **APT-репозиторію** для Debian та Ubuntu на базі **GitHub Pages** та **GitHub Actions** в екосистемі **LegalTech**.
+This guide documents the architecture, configuration, and maintenance workflows for hosting a static **APT repository** for Debian and Ubuntu using **GitHub Pages** and **GitHub Actions** within the **LegalTech** ecosystem.
 
 ---
 
-## 🏗️ 1. Архітектура статичного APT-репозиторію
+## 🏗️ 1. Architecture of a Static APT Repository
 
-Менеджер пакетів `APT` не вимагає складного бекенду або бази даних. Він працює через звичайні статичні HTTP/HTTPS файли стандартизованої структури:
+The `APT` package manager does not require a complex backend service or database. It operates over standard static HTTP/HTTPS files adhering to a standardized layout:
 
 ```text
 https://yaroslavbaienko.github.io/legaltech/
 │
-├── .nojekyll                                  # Запобігає обробці Jekyll на GitHub Pages
-├── index.html                                 # Веб-вітрина репозиторію з інструкціями
-├── public.gpg / KEY.gpg                       # Відкритий GPG-ключ для верифікації
+├── .nojekyll                                  # Prevents Jekyll processing on GitHub Pages
+├── index.html                                 # Web portal with repository setup instructions
+├── public.gpg / KEY.gpg                       # Public GPG key for signature verification
 │
-├── pool/                                      # Каталог бінарних deb-пакетів
+├── pool/                                      # Binary .deb package storage
 │   └── main/
 │       ├── qes-tools_1.0.2_amd64.deb
 │       └── qes-tools_1.0.3_amd64.deb
 │
-└── dists/                                     # Метадані та індекси дистрибутивів
+└── dists/                                     # Distribution metadata and indices
     └── stable/
-        ├── InRelease                          # Маніфест з вбудованим цифровим GPG-підписом
-        ├── Release                            # Текстовий маніфест з контрольними сумами
-        ├── Release.gpg                        # Відокремлений цифровий GPG-підпис
+        ├── InRelease                          # Inline cryptographically signed manifest
+        ├── Release                            # Manifest containing package checksums
+        ├── Release.gpg                        # Detached GPG signature
         └── main/
             └── binary-amd64/
-                ├── Packages                   # Текстовий список доступних пакетів та версій
-                └── Packages.gz                # Стиснутий індекс для швидкого завантаження APT
+                ├── Packages                   # Plaintext index of available packages and versions
+                └── Packages.gz                # Compressed index for rapid APT download
 ```
 
-Завдяки цьому **GitHub Pages** працює як безкоштовний, відмовостійкий, глобально розподілений (CDN) APT-репозиторій із підтримкою HTTPS.
+This structure allows **GitHub Pages** to serve as a fast, highly available, CDN-backed APT repository over HTTPS at zero infrastructure cost.
 
 ---
 
-## 🔐 2. Безпека та криптографічний підпис (GPG)
+## 🔐 2. Security & Cryptographic Signing (GPG)
 
-Кожен реліз репозиторію підписується цифровим підписом.
+Every repository release is cryptographically signed.
 
-### Ізоляція ключів:
-- Особисті GPG-ключі розробника **не використовуються**.
-- Створено окрему 4096-бітну RSA пару ключів:
+### Key Isolation:
+- Personal developer GPG keys are **never used**.
+- A dedicated 4096-bit RSA key pair was provisioned:
   `LegalTech APT Repository <zerhug@gmail.com>` (ID: `C7E35514B6251C8B4E58A28BF8F3BF5DBA24A05A`).
-- **Закритий ключ** зберігається виключно в зашифрованих секретах GitHub Actions:
+- **Private key** is stored exclusively in encrypted GitHub Actions repository secrets:
   `Settings ➔ Secrets and variables ➔ Actions ➔ GPG_PRIVATE_KEY`.
-- Локальні копії приватного ключа безпечно видалені (`shred`).
-- **Відкритий ключ** зберігається у файлі `keys/public.gpg` та автоматично публікується на GitHub Pages як `public.gpg`.
+- Local copies of the private key have been securely wiped (`shred`).
+- **Public key** is tracked in `keys/public.gpg` and automatically published to GitHub Pages as `public.gpg`.
 
 ---
 
-## 🛠️ 3. Локальна генерація репозиторію (`build-apt-repo.sh`)
+## 🛠️ 3. Local Repository Generation (`build-apt-repo.sh`)
 
-У каталозі `tools/` створено автономний скрипт [`build-apt-repo.sh`](../tools/build-apt-repo.sh), який дозволяє зібрати та протестувати репозиторій локально або в CI/CD:
+The `tools/` directory contains an autonomous build script, [`build-apt-repo.sh`](../tools/build-apt-repo.sh), allowing repository testing locally or in CI/CD:
 
 ```bash
-# Запуск генератора (за замовчуванням створює дерево в dist-apt/)
-./tools/build-apt-repo.sh /шлях/до/папки/призначення
+# Run the generator (defaults to generating in dist-apt/)
+./tools/build-apt-repo.sh /path/to/target/directory
 ```
 
-### Що робить скрипт:
-1. Знаходить усі зібрані `.deb` файли в `packages/*/dist/` та копіює їх у `pool/main/`.
-2. Запускає утиліту `apt-ftparchive packages` для генерації `Packages` та `Packages.gz`.
-3. Запускає `apt-ftparchive release` для формування маніфесту `Release` з усіма контрольними сумами (MD5, SHA1, SHA256, SHA512).
-4. Якщо доступний GPG-ключ (змінна оточення `GPG_PRIVATE_KEY`), генерує цифрові підписи `Release.gpg` та `InRelease`.
-5. Створює файл `.nojekyll` та стильну веб-сторінку `index.html`.
+### Script Execution Steps:
+1. Scans for built `.deb` files in `packages/*/dist/` and copies them to `pool/main/`.
+2. Runs `apt-ftparchive packages` to generate `Packages` and `Packages.gz`.
+3. Runs `apt-ftparchive release` to generate the `Release` manifest with all checksum hashes (MD5, SHA1, SHA256, SHA512).
+4. If a GPG signing key is available (via the `GPG_PRIVATE_KEY` environment variable), produces `Release.gpg` and `InRelease`.
+5. Emits the `.nojekyll` marker and the modern `index.html` landing page.
 
 ---
 
-## 🤖 4. Автоматизація CI/CD в GitHub Actions
+## 🤖 4. CI/CD Automation with GitHub Actions
 
-Процес розгортання повністю автоматизовано у файлі [`.github/workflows/apt-repo.yml`](../.github/workflows/apt-repo.yml).
+The deployment workflow is fully automated in [`.github/workflows/apt-repo.yml`](../.github/workflows/apt-repo.yml).
 
-### Тригери запуску:
-1. **Створення релізного тегу**: `git push origin v1.0.4`
-2. **Публікація GitHub Release**: створення релізу в інтерфейсі GitHub.
-3. **Ручний запуск (Manual Dispatch)**: кнопка **Run workflow** у вкладці Actions або команда:
+### Workflow Triggers:
+1. **Pushing a release tag**: `git push origin v1.0.4`
+2. **Publishing a GitHub Release**: Creating a release in the GitHub UI.
+3. **Manual Trigger (workflow_dispatch)**: Clicking **Run workflow** in the Actions tab or running:
    ```bash
    gh workflow run "Update APT Repository"
    ```
 
-### Робочий процес GitHub Actions:
-1. Створює віртуальну машину `ubuntu-latest`.
-2. Встановлює системні утиліти пакування: `dpkg-dev`, `apt-utils`, `binutils`, `lintian`, `typst`.
-3. Збирає найновіші deb-пакети через `./packages/<пакет>/build.sh`.
-4. Підтягує попередні версії пакетів із гілки `gh-pages` (щоб старі версії не зникали з архіву).
-5. Викликає `./tools/build-apt-repo.sh`.
-6. Підписує репозиторій закритим ключем із секрету `GPG_PRIVATE_KEY`.
-7. Публікує результат у гілку **`gh-pages`**, після чого GitHub Pages миттєво оновлює сайт.
+### GitHub Actions Pipeline:
+1. Boots an `ubuntu-latest` virtual machine.
+2. Installs packaging toolchains: `dpkg-dev`, `apt-utils`, `binutils`, `lintian`, `typst`.
+3. Compiles package `.deb` artifacts via `./packages/<package>/build.sh`.
+4. Synchronizes historical packages from the `gh-pages` branch so previous versions remain available.
+5. Executes `./tools/build-apt-repo.sh`.
+6. Signs the repository using the `GPG_PRIVATE_KEY` secret.
+7. Publishes the updated repository tree to the **`gh-pages`** branch.
 
 ---
 
-## 🚀 5. Як випустити оновлення пакета (Крок за кроком)
+## 🚀 5. How to Release a Package Update (Step-by-Step)
 
-Коли ви внесли зміни в код пакета (наприклад, `qes-tools`):
+When updating package code (e.g. for `qes-tools`):
 
-### Крок 1. Підняти версію
-1. Оновіть `PKG_VERSION="1.0.4"` у `packages/qes-tools/build.sh`.
-2. Оновіть версію в `packages/qes-tools/debian/control`: `Version: 1.0.4`.
-3. Оновіть версію в `packages/qes-tools/package.json`: `"version": "1.0.4"`.
+### Step 1. Bump the Version
+1. Update `PKG_VERSION="1.0.4"` in `packages/qes-tools/build.sh`.
+2. Update the version in `packages/qes-tools/debian/control`: `Version: 1.0.4`.
+3. Update the version in `packages/qes-tools/package.json`: `"version": "1.0.4"`.
 
-### Крок 2. Зробити коміт та створити Git-тег
+### Step 2. Commit and Create a Git Tag
 ```bash
 git commit -am "chore(release): bump version to v1.0.4"
 git tag v1.0.4
 git push origin main --tags
 ```
 
-### Крок 3. Все решта — автоматично!
-- GitHub Actions запустить workflow `Update APT Repository`.
-- Новий файл `qes-tools_1.0.4_amd64.deb` потрапить у `pool/main/`.
-- Індекси `Packages.gz` та `InRelease` буде підписано та оновлено на GitHub Pages.
+### Step 3. Automatic Processing
+- GitHub Actions triggers the `Update APT Repository` workflow.
+- The new `qes-tools_1.0.4_amd64.deb` is published to `pool/main/`.
+- Updated `Packages.gz` and signed `InRelease` manifests are deployed to GitHub Pages.
 
 ---
 
-## 👥 6. Як користувачам підключити ваш репозиторій
+## 👥 6. How Users Connect to Your Repository
 
-Для кінцевих користувачів усе зводиться до 1 команди:
+End users can configure the repository with a single command:
 
 ```bash
 sudo mkdir -p /etc/apt/keyrings && \
@@ -127,4 +127,4 @@ sudo apt update && \
 sudo apt install -y qes-tools
 ```
 
-Детальнішу інформацію для користувачів дивіться у файлі [docs/INSTALLATION_GUIDE.md](INSTALLATION_GUIDE.md).
+For full setup documentation, see [docs/INSTALLATION_GUIDE.md](INSTALLATION_GUIDE.md).

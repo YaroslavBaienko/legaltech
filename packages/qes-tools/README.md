@@ -1,101 +1,101 @@
-# 🔐 QES Tools — Ukrainian Qualified Electronic Signature (КЕП / УЕП) & LegalTech Suite
+# 🔐 QES Tools — Ukrainian Qualified Electronic Signature (QES / AES) & LegalTech Suite
 
-**QES Tools** — це автономний (100% offline-first), конфіденційний комплекс інструментів для роботи з кваліфікованими електронними підписами України (ДСТУ 4145-2002, PKCS#7 / CAdES, PAdES, ASiC-E), шифруванням документів (ГОСТ 28147:89 / криптосейфи .enc), OCR розпізнаванням та оптимізацією PDF для підсистеми «Електронний суд».
+**QES Tools** is an autonomous (100% offline-first), confidential toolkit for working with Ukrainian Qualified and Advanced Electronic Signatures (DSTU 4145-2002, PKCS#7 / CAdES, PAdES, ASiC-E), document encryption (GOST 28147:89 / `.enc` crypto vaults), OCR processing, and PDF optimization for the Ukrainian "Electronic Court" e-filing system.
 
-Розроблено відповідно до вимог збереження **адвокатської таємниці**, Закону України «Про електронну ідентифікацію та електронні довірчі послуги» та європейського регламенту eIDAS.
-
----
-
-## 🌟 Основні можливості
-
-- **✍️ Підписання документів (CAdES / PAdES / ASiC-E)**:
-  - Формування відокремлених підписів `.p7s`.
-  - Вбудоване підписання PDF (PAdES) з офіційним графічним штампом та QR-кодом перевірки.
-  - Пакетні контейнери ETSI TS 102 918 (`.asice`) для справ і договорів.
-  - Паралельний мультипідпис (додавання другого і наступних підписів до вже підписаних PDF, ASiC-E та .p7s без порушення цілісності).
-- **🔍 Перевірка підписів та сертифікатів (`qes-verify`, `qes-cert`)**:
-  - Миттєва локальна валідація математичної цілісності підписів без відправки файлів на сторонні сервери.
-  - Детальний інспектор сертифікатів КНЕДП / АЦСК: ПІБ, РНОКПП (ДРФО), ЄДРПОУ, посада, термін дії, відкритий ключ.
-- **🛡️ Асиметричне шифрування та криптосейфи (`qes-encrypt`, `qes-decrypt`)**:
-  - Особистий сейф (`.enc`) на базі ДСТУ 4145 Діффі-Хеллмана та ГОСТ 28147:89.
-  - Шифрування для клієнта за його відкритим сертифікатом (`.cer`).
-- **👁️ Оптичне розпізнавання тексту OCR (`qes-ocr`)**:
-  - Двомовний режим (українська + англійська: `ukr+eng`).
-  - Спеціальний режим чистої англійської мови (`--eng` / `-e`) для міжнародних контрактів та інвойсів.
-  - Автоматичне вирівнювання сканів (deskew) та лінеаризація для судів.
-- **⚖️ Оптимізація PDF для «Електронного суду» (`qes-pdf-court`)**:
-  - Автоматична лінеаризація (Fast Web View) для миттєвого відкриття судом.
-  - Стиснення внутрішніх об'єктів та валідація технічного ліміту 50 МБ.
-- **🖱️ Повна інтеграція з GNOME Files (Nautilus)**:
-  - 15 готових сценаріїв у меню правої кнопки миші: **Скрипти ➔ 🔐 КЕП та Безпека**.
-  - Графічний вибір файлів через Zenity (`--gui`).
-- **🔒 Безпечне кешування пароля в оперативній пам'яті (`qes-agent`)**:
-  - Пароль запитується лише один раз за сесію і зберігається виключно в RAM (TTL 15–30 хв).
-  - Миттєве скидання кешу однією кнопкою або командою `qes-agent clear`.
+Engineered to preserve **attorney-client privilege**, complying with the Law of Ukraine "On Electronic Identification and Electronic Trust Services" and the European eIDAS regulation.
 
 ---
 
-## 📦 Встановлення deb-пакета
+## 🌟 Key Features
 
-### Швидке встановлення в Debian / Ubuntu:
+- **✍️ Document Signing (CAdES / PAdES / ASiC-E)**:
+  - Generate detached `.p7s` signatures.
+  - Embedded PDF signing (PAdES) with official visual stamp and verification QR code.
+  - Multi-file container bundles (ETSI TS 102 918 `.asice`) for legal cases and contracts.
+  - Multi-signature support (counter-signing existing PDF, ASiC-E, and `.p7s` files without breaking cryptographic integrity).
+- **🔍 Signature & Certificate Verification (`qes-verify`, `qes-cert`)**:
+  - Instant local validation of mathematical integrity without transmitting documents to third-party cloud services.
+  - Detailed QTSP / CA certificate inspector: Full Name, Tax ID (RNOKPP/DRFO), Company ID (EDRPOU), organization role, validity period, and public key parameters.
+- **🛡️ Asymmetric Encryption & Crypto Vaults (`qes-encrypt`, `qes-decrypt`)**:
+  - Personal encrypted vault (`.enc`) using DSTU 4145 Diffie-Hellman key agreement and GOST 28147:89 symmetric cipher.
+  - Public-key encryption for clients/counterparties using their X.509 certificate (`.cer`).
+- **👁️ Optical Character Recognition OCR (`qes-ocr`)**:
+  - Dual-language mode (Ukrainian + English: `ukr+eng`).
+  - Dedicated English mode (`--eng` / `-e`) for international contracts and invoices.
+  - Automatic scan deskewing and linearization for court admissibility.
+- **⚖️ PDF Optimization for "Electronic Court" (`qes-pdf-court`)**:
+  - Automated Fast Web View linearization for rapid opening in judicial portals.
+  - Object stream compression and validation against the 50 MB platform upload limit.
+- **🖱️ Full GNOME Files (Nautilus) Integration**:
+  - 16 ready-to-use actions in the desktop context menu: **Scripts ➔ 🔐 КЕП та Безпека**.
+  - Interactive GUI prompts with Zenity (`--gui`).
+- **🔒 Secure In-Memory Password Caching (`qes-agent`)**:
+  - Private key passwords requested once per session and stored exclusively in RAM (TTL 15–30 min).
+  - Instant memory wipe on demand via GUI button or CLI: `qes-agent clear`.
+
+---
+
+## 📦 Package Installation
+
+### Quick Installation on Debian / Ubuntu:
 
 ```bash
-sudo apt install ./dist/qes-tools_1.0.2_amd64.deb
+sudo apt install ./dist/qes-tools_1.0.3_amd64.deb
 ```
 
-Менеджер `apt` автоматично встановить усі необхідні системні залежності (`nodejs`, `python3-cryptography`, `openssl`, `zenity`, `qpdf`, `ocrmypdf`, `tesseract-ocr-ukr`, `tesseract-ocr-eng`, `libnotify-bin`).
+The `apt` package manager automatically resolves and installs all required dependencies (`nodejs`, `python3-cryptography`, `openssl`, `zenity`, `qpdf`, `ocrmypdf`, `tesseract-ocr-ukr`, `tesseract-ocr-eng`, `libnotify-bin`).
 
-Після встановлення:
-- Усі 9 CLI-команд стають доступними в терміналі.
-- У файловому менеджері Nautilus з'являється меню під час кліку правою кнопкою миші на файл.
+After installation:
+- All 9 CLI commands become available on the system `$PATH`.
+- The Nautilus context menu scripts are registered for the desktop environment.
 
 ---
 
-## 🛠️ Використання через консоль (CLI)
+## 🛠️ Command-Line Interface (CLI) Usage
 
 ```bash
-# 1. Підписання PDF зі штампом та QR-кодом
+# 1. Sign PDF with visual stamp and QR code
 qes-sign --pades lawsuit.pdf
 
-# 2. Додавання другого підпису (мультипідпис)
+# 2. Add an additional signature (multi-signature / counter-sign)
 qes-sign --append contract_signed.pdf
 
-# 3. Створення пакетного контейнера ASiC-E
+# 3. Create an ASiC-E archive container
 qes-sign --asice contract.pdf annex1.pdf -o case.asice
 
-# 4. Перевірка підпису (термінал або графічна картка)
+# 4. Verify signatures (terminal output or interactive GUI dialog)
 qes-verify document.pdf.p7s
 qes-verify --gui contract_signed.pdf
 
-# 5. Інспекція сертифіката КНЕДП
+# 5. Inspect QTSP certificate
 qes-cert my_certificate.cer
-qes-cert -j my_certificate.cer    # Вивід у JSON для скриптів
+qes-cert -j my_certificate.cer    # JSON output for scripting
 
-# 6. Оптимізація скану для Е-Суду з англійським OCR
+# 6. Optimize scanned document for E-Court with English OCR
 qes-pdf-court --eng contract_scan.pdf
 
-# 7. Шифрування та розшифрування
+# 7. Encrypt and decrypt files
 qes-encrypt confidential_file.pdf
 qes-decrypt confidential_file.pdf.enc
 
-# 8. Скидання пам'яті паролів
+# 8. Clear cached passwords from memory
 qes-agent clear
 ```
 
 ---
 
-## 🧪 Запуск тестів
+## 🧪 Running Tests
 
 ```bash
-# Юніт-тести рушія підпису (17 тестів)
+# Unit tests for the signing engine (17 tests)
 npm test
 
-# Комплексний наскрізний E2E тест (47 перевірок)
+# Comprehensive end-to-end test suite (47 verification checks)
 ./tests/e2e_all_scenarios.sh
 ```
 
 ---
 
-## ⚖️ Ліцензія
+## ⚖️ License
 
-Apache License 2.0. Дозволено вільне використання в юридичних фірмах, державних установах та приватних проєктах.
+Apache License 2.0. Free for use by law firms, government agencies, corporate legal departments, and open-source projects.

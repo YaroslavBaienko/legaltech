@@ -1,45 +1,45 @@
-# 📖 Практичний посібник з розробки та випуску Debian-пакетів (.deb)
+# 📖 Practical Guide to Debian Packaging (.deb)
 
-Цей посібник описує найкращі світові практики розробки, структурування, лінтингу та автоматизації релізів `.deb` пакетів для Debian та Ubuntu в рамках екосистеми **LegalTech**.
+This guide covers modern best practices for designing, structuring, linting, and automating releases of `.deb` packages for Debian and Ubuntu within the **LegalTech** ecosystem.
 
 ---
 
-## 1. Анатомія Debian-пакета
+## 1. Anatomy of a Debian Package
 
-Будь-який `.deb` файл — це насправді архів формату `ar`, що містить:
-1. `debian-binary` — версія формату (завжди `2.0`).
-2. `control.tar.xz` — метадані пакета, залежності та керуючі скрипти інсталятора.
-3. `data.tar.xz` — файли програми, що розгортаються у системні шляхи (`/usr/bin`, `/usr/lib`, `/usr/share`).
+Every `.deb` file is an `ar` archive containing three core components:
+1. `debian-binary` — Format version string (always `2.0`).
+2. `control.tar.xz` — Package metadata, dependency definitions, and maintainer installation scripts.
+3. `data.tar.xz` — Application files and binaries extracted to target filesystem paths (`/usr/bin`, `/usr/lib`, `/usr/share`).
 
-### Ключові керуючі файли в теці `debian/`:
+### Key Control Files in `debian/`:
 
-| Файл | Призначення |
+| File | Purpose |
 | :--- | :--- |
-| `control` | Основні метадані: назва, версія, архітектура, залежності (`Depends`, `Recommends`), контакти та опис. |
-| `copyright` | Машинозчитуваний опис ліцензій та авторів згідно з [Debian DEP-5](https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/). |
-| `changelog` | Журнал змін у стандартизованому форматі Debian: `pkg (1.0.0-1) unstable; urgency=medium`. |
-| `postinst` | Shell-скрипт, який запускається від імені `root` **після** розпакування файлів (налаштування прав, оновлення баз даних, перезапуск служб). |
-| `prerm` | Shell-скрипт, який виконується **перед** видаленням або оновленням пакета (зупинка служб, очищення). |
-| `postrm` | Shell-скрипт, який виконується **після** видалення (остаточне очищення конфігурацій при `purge`). |
+| `control` | Core metadata: package name, version, architecture, dependencies (`Depends`, `Recommends`, `Suggests`), maintainer contacts, and description. |
+| `copyright` | Machine-readable copyright and license details adhering to [Debian DEP-5 format](https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/). |
+| `changelog` | Version history formatted according to Debian standards: `pkg (1.0.0-1) unstable; urgency=medium`. |
+| `postinst` | Shell script executed as `root` **after** file unpacking (permissions setup, database updates, service initialization). |
+| `prerm` | Shell script executed **before** package removal or upgrade (stopping services, temporary cleanup). |
+| `postrm` | Shell script executed **after** removal (final cleanup of configuration files upon `purge`). |
 
 ---
 
-## 2. Стандарти FHS (Filesystem Hierarchy Standard)
+## 2. Filesystem Hierarchy Standard (FHS) Guidelines
 
-При пакуванні суворо дотримуйтесь розміщення файлів:
+When packaging applications, adhere strictly to Debian FHS directory locations:
 
-- **/usr/bin/** — тільки виконувані файли (бінарники або shell-обгортки). Жодних важких node_modules чи допоміжних скриптів тут бути не повинно!
-- **/usr/lib/\<package-name\>/** — приватний каталог програми: вихідний код, внутрішні модулі, бібліотеки, vendor-залежності.
-- **/usr/share/\<package-name\>/** — архітектурно-незалежні ресурси: шаблони, сертифікати, іконки.
-- **/usr/share/nautilus-scripts/** — скрипти контекстного меню GNOME Files (Nautilus).
-- **/usr/share/doc/\<package-name\>/** — обов'язкова документація: `copyright` та `changelog.Debian.gz`.
-- **/etc/\<package-name\>/** — конфігураційні файли, які адміністратор може редагувати вручну.
+- **/usr/bin/** — Only primary executables (binaries or thin wrapper shell scripts). Avoid placing heavy dependency folders (`node_modules`) or auxiliary scripts here.
+- **/usr/lib/\<package-name\>/** — Private application directory: core code, internal modules, runtime dependencies, and vendor assets.
+- **/usr/share/\<package-name\>/** — Architecture-independent data: templates, sample assets, certificates, icons.
+- **/usr/share/nautilus-scripts/** — Integration scripts for the GNOME Files (Nautilus) context menu.
+- **/usr/share/doc/\<package-name\>/** — Mandatory documentation: `copyright` and compressed `changelog.Debian.gz`.
+- **/etc/\<package-name\>/** — System configuration files editable by the system administrator.
 
 ---
 
-## 3. Керування залежностями (`control`)
+## 3. Dependency Management (`control`)
 
-Розрізняйте рівні залежностей:
+Define dependency severity appropriately:
 
 ```text
 Depends: nodejs (>= 18), python3-cryptography, openssl, qpdf
@@ -47,61 +47,61 @@ Recommends: wl-clipboard | xclip
 Suggests: tesseract-ocr-fra
 ```
 
-1. **`Depends`** — критичні залежності. Без них пакет фізично не може працювати. `apt` відмовиться встановлювати пакет, якщо хоча б однієї немає.
-2. **`Recommends`** — рекомендовані пакети. За замовчуванням `apt` встановлює їх разом із пакетом, але користувач може відмовитися через `--no-install-recommends`.
-3. **`Suggests`** — додаткові функції, які користувач може встановити вручну.
+1. **`Depends`** — Mandatory dependencies. The package cannot function without them; `apt` will refuse installation if any dependency is missing.
+2. **`Recommends`** — Recommended dependencies. Installed by default in standard `apt` installations, but users may opt out via `--no-install-recommends`.
+3. **`Suggests`** — Optional enhancements that provide extended capabilities.
 
 ---
 
-## 4. Створення нового пакета через генератор
+## 4. Creating a New Package with the Generator
 
-У репозиторії `legaltech` вбудовано швидкий генератор нового пакета:
+The `legaltech` repository includes a fast scaffolding tool:
 
 ```bash
-# Синтаксис:
-./tools/new-deb-package.sh <назва-пакета> "<короткий опис>" [версія] [архітектура]
+# Syntax:
+./tools/new-deb-package.sh <package-name> "<short description>" [version] [architecture]
 
-# Приклад:
-./tools/new-deb-package.sh court-fetcher "Завантажувач рішень судового реєстру" 1.0.0 all
+# Example:
+./tools/new-deb-package.sh court-fetcher "Registry court decision fetcher" 1.0.0 all
 ```
 
-Після виконання:
-1. Перейдіть у створену папку: `cd packages/court-fetcher`
-2. Додайте ваш код у `src/`
-3. Запустіть тести: `make test`
-4. Зберіть пакет: `make build`
-5. Готовий файл з'явиться в `dist/court-fetcher_1.0.0_all.deb`!
+After execution:
+1. Navigate to the new package directory: `cd packages/court-fetcher`
+2. Add your source code to `src/`
+3. Run tests: `make test`
+4. Build the package: `make build`
+5. The verified `.deb` package will be generated at `dist/court-fetcher_1.0.0_all.deb`!
 
 ---
 
-## 5. Валідація та перевірка через Lintian
+## 5. Validation and Quality Assurance with Lintian
 
-Перед публікацією завжди перевіряйте згенерований `.deb` пакет за допомогою офіційного лінтера **Lintian**:
+Always validate newly built packages with the official Debian package checker **Lintian**:
 
 ```bash
-# Встановлення лінтера
+# Install Lintian
 sudo apt install lintian
 
-# Запуск перевірки
+# Run validation
 lintian --no-tag-display-limit dist/qes-tools_1.0.2_amd64.deb
 ```
 
-Lintian виявляє:
-- Неправильні права доступу (наприклад, файли з правами `0777` або невиконувані бінарники).
-- Відсутність файлів ліцензії або журналу змін.
-- Помилки синтаксису в `control` та скриптах супроводу.
+Lintian inspects:
+- File permissions (e.g. flagging insecure `0777` permissions or non-executable scripts in `/usr/bin/`).
+- Missing copyright or changelog records.
+- Syntax discrepancies in `control` and maintainer scripts (`postinst`, `prerm`, `postrm`).
 
 ---
 
-## 6. Автоматизація релізів через GitHub Actions
+## 6. Release Automation with GitHub Actions
 
-У репозиторії налаштовано CI/CD пайплайни (`.github/workflows/`):
+The repository includes pre-configured CI/CD workflows (`.github/workflows/`):
 
-1. **`ci.yml`** — при кожному pull request або push у `main` запускає чисте оточення Ubuntu, встановлює системні залежності та ганяє 100% тестів.
-2. **`build-deb.yml`** — автоматично збирає `.deb` пакети та викладає їх у вкладку артефактів GitHub Actions.
-3. **`release.yml`** — автоматично створює офіційний **GitHub Release** при створенні git-тегу:
+1. **`ci.yml`** — Runs on every push or pull request to `main` inside a clean Ubuntu runner, verifying all unit and integration test suites.
+2. **`build-deb.yml`** — Builds `.deb` packages in isolated containers and archives them as workflow artifacts.
+3. **`release.yml`** — Automatically publishes an official **GitHub Release** whenever a version tag is pushed:
    ```bash
    git tag v1.0.2
    git push origin v1.0.2
    ```
-   Дія збирає підсумковий пакет, рахує контрольні суми `SHA256SUMS.txt` і публікує реліз, готовий до завантаження користувачами з усього світу!
+   The workflow builds the packages, computes checksums in `SHA256SUMS.txt`, and publishes the release assets.

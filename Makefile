@@ -1,24 +1,24 @@
 # ==============================================================================
-# Makefile — Головний диспетчер екосистеми LegalTech
+# Makefile — Main Dispatcher for the LegalTech Ecosystem
 # ==============================================================================
 
 .PHONY: all help test build new-package clean lint
 
 help:
 	@echo "LegalTech Debian Ecosystem Commands:"
-	@echo "  make test          — Запустити тести qes-tools (unit + e2e)"
-	@echo "  make build         — Зібрати deb-пакет qes-tools у packages/qes-tools/dist/"
-	@echo "  make new-package   — Створити новий deb-пакет з шаблону (NAME=my-tool)"
-	@echo "  make clean         — Очистити тимчасові каталоги build/ та dist/"
-	@echo "  make lint          — Перевірити скрипти через shellcheck (якщо встановлено)"
+	@echo "  make test          — Run qes-tools tests (unit + e2e)"
+	@echo "  make build         — Build qes-tools deb package in packages/qes-tools/dist/"
+	@echo "  make new-package   — Create a new deb package from template (NAME=my-tool)"
+	@echo "  make clean         — Clean temporary build/ and dist/ directories"
+	@echo "  make lint          — Check scripts with shellcheck (if installed)"
 
 test:
-	@echo "==> Запуск тестів qes-tools..."
+	@echo "==> Running qes-tools test suites..."
 	@cd packages/qes-tools && npm test
 	@cd packages/qes-tools && ./tests/e2e_all_scenarios.sh
 
 build:
-	@echo "==> Збірка deb-пакета qes-tools..."
+	@echo "==> Building qes-tools deb package..."
 	@cd packages/qes-tools && ./build.sh
 
 new-package:
@@ -29,8 +29,8 @@ clean:
 
 lint:
 	@if command -v shellcheck >/dev/null 2>&1; then \
-		echo "==> Перевірка shell скриптів через shellcheck..."; \
+		echo "==> Linting shell scripts with shellcheck..."; \
 		shellcheck tools/*.sh packages/qes-tools/build.sh packages/qes-tools/nautilus-scripts/*.sh; \
 	else \
-		echo "shellcheck не знайдено (встановіть: sudo apt install shellcheck)"; \
+		echo "shellcheck not found (install via: sudo apt install shellcheck)"; \
 	fi

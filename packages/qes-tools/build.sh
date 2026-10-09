@@ -8,7 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PKG_ROOT="${SCRIPT_DIR}"
 
 PKG_NAME="qes-tools"
-PKG_VERSION="1.0.4"
+PKG_VERSION="1.0.5"
 PKG_ARCH="amd64"
 DEB_FILENAME="${PKG_NAME}_${PKG_VERSION}_${PKG_ARCH}.deb"
 
@@ -37,11 +37,14 @@ echo -e "\n${CLR_YELLOW}[1/6] Підготовка дерева каталогі
 rm -rf "${BUILD_ROOT}"
 mkdir -p "${BUILD_ROOT}/DEBIAN"
 mkdir -p "${BUILD_ROOT}/usr/bin"
+mkdir -p "${BUILD_ROOT}/usr/lib/pkcs11"
 mkdir -p "${BUILD_ROOT}/usr/lib/qes-tools/bin"
 mkdir -p "${BUILD_ROOT}/usr/lib/qes-tools/src"
 mkdir -p "${BUILD_ROOT}/usr/lib/qes-tools/certs"
 mkdir -p "${BUILD_ROOT}/usr/share/doc/qes-tools"
 mkdir -p "${BUILD_ROOT}/usr/share/nautilus-scripts/🔐 КЕП та Безпека"
+mkdir -p "${BUILD_ROOT}/etc/udev/rules.d"
+mkdir -p "${BUILD_ROOT}/opt"
 mkdir -p "${DIST_DIR}"
 
 # 3. Копіювання керуючих файлів DEBIAN
@@ -96,6 +99,26 @@ elif command -v curl >/dev/null 2>&1 && command -v tar >/dev/null 2>&1; then
     fi
     rm -rf "$TMP_TYPST_DIR"
 fi
+
+# Копіювання бібліотек EUSW та правил udev для апаратних USB-токенів
+if [ -d "${PKG_ROOT}/opt/iit" ]; then
+    echo -e "  • Копіювання нативних криптомодулів EUSW (/opt/iit)..."
+    cp -r "${PKG_ROOT}/opt/iit" "${BUILD_ROOT}/opt/"
+    chmod 0755 "${BUILD_ROOT}/opt/iit/eu/sw/euscpnmh" 2>/dev/null || true
+fi
+
+if [ -d "${PKG_ROOT}/etc/udev/rules.d" ]; then
+    echo -e "  • Копіювання udev-правил для апаратних токенів (DepositSign, Алмаз-1К, Кристал-1К, Автор)..."
+    cp -r "${PKG_ROOT}/etc/udev/rules.d/"* "${BUILD_ROOT}/etc/udev/rules.d/"
+    chmod 0644 "${BUILD_ROOT}/etc/udev/rules.d/"* 2>/dev/null || true
+fi
+
+# Системні посилання для PKCS#11 та Native Messaging Host
+ln -sf /opt/iit/eu/sw/pkcs11.eka1c.so "${BUILD_ROOT}/usr/lib/pkcs11/pkcs11-almaz1k.so"
+ln -sf /opt/iit/eu/sw/pkcs11.ekc1.so "${BUILD_ROOT}/usr/lib/pkcs11/pkcs11-crystal1k.so"
+ln -sf /opt/iit/eu/sw/libav337p11d.so "${BUILD_ROOT}/usr/lib/pkcs11/pkcs11-securetoken337.so"
+ln -sf /opt/iit/eu/sw/euscp.so "${BUILD_ROOT}/usr/lib/pkcs11/libeuscpt.so"
+ln -sf /opt/iit/eu/sw/euscpnmh "${BUILD_ROOT}/usr/bin/euscpnmh"
 
 # 5. Створення глобальних системних обгорток у /usr/bin
 echo -e "${CLR_YELLOW}[4/6] Створення системних обгорток у /usr/bin...${CLR_RESET}"
@@ -160,8 +183,8 @@ exec /usr/lib/qes-tools/bin/qes-tool "$@"
 EOF
 
 
-chmod 0755 "${BUILD_ROOT}/usr/bin/"*
-chmod 0755 "${BUILD_ROOT}/usr/lib/qes-tools/bin/"*
+find "${BUILD_ROOT}/usr/bin" -type f -exec chmod 0755 {} +
+find "${BUILD_ROOT}/usr/lib/qes-tools/bin" -type f -exec chmod 0755 {} +
 
 # 6. Копіювання скриптів Nautilus
 echo -e "${CLR_YELLOW}[5/6] Копіювання скриптів меню Nautilus...${CLR_RESET}"
@@ -206,6 +229,10 @@ EOF
 # Нормалізація прав доступу
 find "${BUILD_ROOT}" -type d -exec chmod 0755 {} +
 find "${BUILD_ROOT}/usr/lib/qes-tools" -type f ! -path "*/bin/*" -exec chmod 0644 {} +
+if [ -d "${BUILD_ROOT}/opt/iit" ]; then
+    find "${BUILD_ROOT}/opt/iit" -type f -exec chmod 0644 {} +
+    chmod 0755 "${BUILD_ROOT}/opt/iit/eu/sw/euscpnmh"
+fi
 
 # 7. Збірка dpkg-deb
 echo -e "${CLR_YELLOW}[6/6] Компресія та збірка deb-пакета через dpkg-deb...${CLR_RESET}"

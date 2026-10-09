@@ -1,15 +1,23 @@
 Package: qes-tools
-Version: 1.0.4
+Version: 1.0.5
 Section: utils
 Priority: optional
 Architecture: amd64
 Maintainer: Yaroslav Baienko <zerhug@gmail.com>
-Depends: nodejs (>= 18), python3 (>= 3.10), python3-cryptography, openssl, zenity, libnotify-bin, qpdf, fonts-liberation, ocrmypdf, tesseract-ocr, tesseract-ocr-ukr, tesseract-ocr-eng, unpaper, xdg-utils
-Recommends: wl-clipboard | xclip
+Depends: nodejs (>= 18), python3 (>= 3.10), python3-cryptography, openssl, zenity, libnotify-bin, qpdf, fonts-liberation, ocrmypdf, tesseract-ocr, tesseract-ocr-ukr, tesseract-ocr-eng, unpaper, xdg-utils, libc6 (>= 2.14), libpcsclite1
+Recommends: wl-clipboard | xclip, pcscd, libccid, opensc
+Provides: eusw (= 1.3.1.109)
+Replaces: eusw
+Conflicts: eusw (<< 1.3.1.109)
 Homepage: https://github.com/YaroslavBaienko/legaltech
 Description: Ukrainian Qualified Electronic Signature & Encryption LegalTech Suite
  Offline-first CLI & GUI toolkit for signing, verifying, and encrypting documents
  conforming to Ukrainian DSTU 4145-2002, GOST 28147:89, PKCS#7/CAdES,
  ETSI ASiC-E containers, PAdES (embedded PDF signatures with official visual stamps),
  and asymmetric cryptographic envelopes (qes-encrypt, qes-decrypt).
+ Fully integrates IIT End-User CA-1 drivers (eusw, pkcs11.eka1c.so, pkcs11.ekc1.so,
+ libav337p11d.so) for native hardware USB tokens (DepositSign Almaz-1K, Crystal-1K,
+ SecureToken-337) and browser signing extension (Native Messaging Host).
+ Supports auto-discovery across all Ukrainian QTSPs (DepositSign, monobank, Diia,
+ Tax Service, PrivatBank, Vchasno, NAIS).
  Preserves attorney-client privilege with 100% offline cryptographic operations.

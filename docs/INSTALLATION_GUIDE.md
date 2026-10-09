@@ -1,19 +1,19 @@
-# 📦 Посібник зі встановлення та оновлення пакетів LegalTech
+# 📦 LegalTech Package Installation & Upgrade Guide
 
-Цей посібник містить повні, перевірені інструкції для встановлення, налаштування та автоматичного оновлення пакетів екосистеми **LegalTech** (зокрема флагманського пакета `qes-tools`) в операційних системах **Debian**, **Ubuntu**, **Linux Mint** та інших дистрибутивах на базі Debian.
+This guide provides comprehensive, verified instructions for installing, configuring, and automatically updating packages from the **LegalTech** ecosystem (including the flagship `qes-tools` suite) on **Debian**, **Ubuntu**, **Linux Mint**, and other Debian-based Linux distributions.
 
 ---
 
-## 🌟 Спосіб 1. Встановлення через офіційний APT-репозиторій (Рекомендовано)
+## 🌟 Method 1. Installation via the Official APT Repository (Recommended)
 
-Підключення офіційного APT-репозиторію забезпечує:
-- 🔄 **Автоматичні оновлення**: отримати нову версію можна стандартною системною командою `sudo apt update && sudo apt upgrade`.
-- 🛡️ **Криптографічний захист**: кожен реліз перевіряється офіційним цифровим GPG-підписом розробника.
-- 📦 **Автоматичне розв'язання залежностей**: системні бібліотеки (`nodejs`, `python3-cryptography`, `zenity`, `ocrmypdf`, `tesseract-ocr-ukr` тощо) завантажуються та встановлюються автоматично.
+Configuring the official APT repository provides:
+- 🔄 **Automatic updates**: Receive new versions with standard system commands: `sudo apt update && sudo apt upgrade`.
+- 🛡️ **Cryptographic security**: Every release is verified with the maintainer's official digital GPG signature.
+- 📦 **Automated dependency resolution**: System libraries (`nodejs`, `python3-cryptography`, `zenity`, `ocrmypdf`, `tesseract-ocr-ukr`, etc.) are downloaded and configured automatically.
 
-### Швидке підключення в 1 команду (One-Liner):
+### Quick One-Line Setup:
 
-Скопіюйте та виконайте в терміналі:
+Copy and run this command in your terminal:
 
 ```bash
 sudo mkdir -p /etc/apt/keyrings && \
@@ -26,10 +26,10 @@ sudo apt install -y qes-tools
 
 ---
 
-### Покрокове встановлення:
+### Step-by-Step Installation:
 
-#### Крок 1. Завантаження та збереження публічного GPG-ключа
-Для безпеки та сумісності з сучасними версіями Debian/Ubuntu ключ розміщується в ізольованому каталозі `/etc/apt/keyrings/`:
+#### Step 1. Download and Save the Public GPG Key
+For security and compatibility with modern Debian/Ubuntu releases, the key is placed in the isolated directory `/etc/apt/keyrings/`:
 
 ```bash
 sudo mkdir -p /etc/apt/keyrings
@@ -37,61 +37,61 @@ curl -fsSL https://yaroslavbaienko.github.io/legaltech/public.gpg | gpg --dearmo
 sudo chmod 644 /etc/apt/keyrings/legaltech.gpg
 ```
 
-*(Якщо ви працюєте з локальної копії репозиторію legaltech, ключ можна імпортувати без інтернету):*
+*(If you are working from a local clone of the `legaltech` repository, the key can be imported offline):*
 ```bash
 gpg --dearmor < keys/public.gpg | sudo tee /etc/apt/keyrings/legaltech.gpg > /dev/null
 sudo chmod 644 /etc/apt/keyrings/legaltech.gpg
 ```
 
-#### Крок 2. Додавання репозиторію в системні джерела APT
-Створіть конфігураційний файл `/etc/apt/sources.list.d/legaltech.list`:
+#### Step 2. Add the Repository to APT Sources
+Create the configuration file `/etc/apt/sources.list.d/legaltech.list`:
 
 ```bash
 echo "deb [signed-by=/etc/apt/keyrings/legaltech.gpg] https://yaroslavbaienko.github.io/legaltech stable main" | sudo tee /etc/apt/sources.list.d/legaltech.list
 ```
 
-#### Крок 3. Оновлення списку пакетів
+#### Step 3. Update Package Lists
 ```bash
 sudo apt update
 ```
 
-Ви повинні побачити рядок підтвердження:
+You should see confirmation output similar to:
 ```text
 Get:... https://yaroslavbaienko.github.io/legaltech stable InRelease [2,349 B]
 Hit:... https://yaroslavbaienko.github.io/legaltech stable/main amd64 Packages
 ```
 
-#### Крок 4. Встановлення пакета
+#### Step 4. Install the Package
 ```bash
 sudo apt install -y qes-tools
 ```
 
 ---
 
-## 💻 Спосіб 2. Локальне встановлення завантаженого `.deb` файлу
+## 💻 Method 2. Local Installation of a Downloaded `.deb` File
 
-Якщо вам потрібно встановити пакет офлайн або протестувати конкретну версію:
+If you need to install the package offline or test a specific build:
 
-1. Завантажте файл `.deb` зі сторінки [GitHub Releases](https://github.com/YaroslavBaienko/legaltech/releases).
-2. Встановіть його за допомогою менеджера `apt` (він сам завантажить системні залежності):
+1. Download the `.deb` file from [GitHub Releases](https://github.com/YaroslavBaienko/legaltech/releases).
+2. Install it using `apt` (which will resolve necessary system dependencies from your existing repositories):
 
 ```bash
 sudo apt install ./qes-tools_1.0.3_amd64.deb
 ```
 
-> ⚠️ **Зверніть увагу:** При локальному встановленні окремого файлу система не зможе автоматично оновлювати його через `apt upgrade`, доки не буде підключено офіційний APT-репозиторій (Спосіб 1).
+> ⚠️ **Note:** When installing a standalone file locally, the system will not receive automated updates via `apt upgrade` unless the official APT repository is configured (Method 1).
 
 ---
 
-## 🔍 Перевірка встановлення та джерела пакета
+## 🔍 Verifying the Installation & Package Source
 
-Щоб переконатися, яка версія встановлена і з якого саме репозиторію, виконайте:
+To inspect the installed version and verify the repository origin, run:
 
 ```bash
 apt policy qes-tools
 ```
 
-Зразковий вивід:
+Expected output:
 ```text
 qes-tools:
   Installed: 1.0.3
@@ -102,47 +102,47 @@ qes-tools:
         100 /var/lib/dpkg/status
 ```
 
-Також перевірте працездатність CLI-утиліт:
+Verify CLI utilities:
 ```bash
 qes-sign --help
 qes-agent status
 ```
 
-У файловому менеджері **Nautilus**: правий клік на будь-якому файлі ➔ меню **Скрипти** ➔ **`🔐 КЕП та Безпека`** (16 доступних сценаріїв).
+In **GNOME Files (Nautilus)**: Right-click any file ➔ **Scripts** ➔ **`🔐 КЕП та Безпека`** (16 actions available).
 
 ---
 
-## 🔄 Як працює автоматичне оновлення
+## 🔄 How Automatic Updates Work
 
-Коли розробники випускають оновлення (наприклад, версію `1.0.4`):
-1. Ви виконуєте стандартні команди обслуговування системи:
+When a new version is released (e.g., version `1.0.4`):
+1. Run standard system maintenance commands:
    ```bash
    sudo apt update
    sudo apt upgrade
    ```
-2. Менеджер `APT` виявляє, що версія на сервері новіша за встановлену:
+2. The `APT` package manager detects the newer version available on the server:
    ```text
    The following packages will be upgraded:
      qes-tools (1.0.3 => 1.0.4)
    ```
-3. Пакет оновлюється без втрати ваших персональних ключів, налаштувань чи сесій.
+3. The package updates seamlessly without affecting your personal keys, configurations, or sessions.
 
 ---
 
-## 🗑️ Видалення пакета з системи
+## 🗑️ Uninstalling Packages
 
-### 1. Звичайне видалення (збереження конфігурацій):
+### 1. Standard Removal (Preserving Configuration Files):
 ```bash
 sudo apt remove qes-tools
 ```
 
-### 2. Повне очищення (Purge):
-Видаляє пакет, усі системні бінарники з `/usr/bin/` та меню з файлового менеджера Nautilus:
+### 2. Complete Purge:
+Removes the package, system binaries from `/usr/bin/`, and desktop menu integrations from Nautilus:
 ```bash
 sudo apt purge qes-tools
 ```
 
-### 3. Відключення репозиторію (якщо більше не потрібен):
+### 3. Removing the APT Repository (If No Longer Needed):
 ```bash
 sudo rm -f /etc/apt/sources.list.d/legaltech.list
 sudo rm -f /etc/apt/keyrings/legaltech.gpg
@@ -151,11 +151,11 @@ sudo apt update
 
 ---
 
-## 🛠️ Вирішення можливих проблем (Troubleshooting)
+## 🛠️ Troubleshooting
 
-### 1. Помилка: `Failed to parse keyring "/etc/apt/keyrings/legaltech.gpg": No such file or directory`
-**Причина:** Джерело репозиторію було додано до `/etc/apt/sources.list.d/`, але файл публічного ключа ще не записався.
-**Рішення:**
+### 1. Error: `Failed to parse keyring "/etc/apt/keyrings/legaltech.gpg": No such file or directory`
+**Cause:** The repository file was added to `/etc/apt/sources.list.d/`, but the public key file has not been created or written yet.  
+**Solution:**
 ```bash
 sudo mkdir -p /etc/apt/keyrings
 curl -fsSL https://yaroslavbaienko.github.io/legaltech/public.gpg | gpg --dearmor | sudo tee /etc/apt/keyrings/legaltech.gpg > /dev/null
@@ -163,8 +163,8 @@ sudo chmod 644 /etc/apt/keyrings/legaltech.gpg
 sudo apt update
 ```
 
-### 2. Debian 13 (Trixie) та рушій `sqv` (Sequoia PGP)
-У Debian 13 валідація підписів здійснюється новим рушієм `sqv`. Він вимагає:
-- Суворе дотримання формату binary keyring (`gpg --dearmor`).
-- Права доступу `0644` на файл ключа (користувач `_apt` повинен мати доступ до читання).
-Виконання команд із цього посібника гарантує повну сумісність як з Debian 12 (Bookworm), так і з Debian 13 (Trixie) та Ubuntu 24.04 LTS.
+### 2. Debian 13 (Trixie) and the `sqv` (Sequoia PGP) Engine
+Debian 13 performs signature verification using the `sqv` engine, which strictly enforces:
+- Proper binary keyring format (`gpg --dearmor`).
+- `0644` read permissions on the keyring file so the unprivileged `_apt` user can read it.  
+Following the commands in this guide ensures full compatibility across Debian 12 (Bookworm), Debian 13 (Trixie), Ubuntu 24.04 LTS, and Ubuntu 22.04 LTS.

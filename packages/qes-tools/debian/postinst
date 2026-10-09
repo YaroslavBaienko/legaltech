@@ -75,8 +75,57 @@ if [ "$1" = "configure" ]; then
         pkill -x nautilus 2>/dev/null || true
     fi
 
+    # 1. Реєстрація Native Messaging Host для роботи з токенами у браузерах (Дія, Е-Суд, ДПС, DepositSign)
+    if [ -x /opt/iit/eu/sw/euscpnmh ]; then
+        /opt/iit/eu/sw/euscpnmh /install 2>/dev/null || true
+
+        # Додатково гарантуємо наявність маніфестів для Chrome, Chromium, Brave, Edge та Firefox
+        nmh_dirs=(
+            "/etc/opt/chrome/native-messaging-hosts"
+            "/etc/chromium/native-messaging-hosts"
+            "/usr/lib/mozilla/native-messaging-hosts"
+            "/etc/brave/native-messaging-hosts"
+            "/etc/opt/edge/native-messaging-hosts"
+        )
+        for d in "${nmh_dirs[@]}"; do
+            mkdir -p "$d" 2>/dev/null || true
+            cat << 'EOF_NMH' > "$d/ua.com.iit.eusign.nmh.json"
+{
+  "name": "ua.com.iit.eusign.nmh",
+  "description": "IIT End User CA-1. Sign (web)",
+  "path": "/opt/iit/eu/sw/euscpnmh",
+  "type": "stdio",
+  "allowed_origins": [
+    "chrome-extension://jffafkigfgmjafhpkoibhfefeaebmccg/"
+  ],
+  "allowed_extensions": [
+    "eusw@iit.com.ua"
+  ]
+}
+EOF_NMH
+            chmod 0644 "$d/ua.com.iit.eusign.nmh.json" 2>/dev/null || true
+        done
+
+        # Плагін NPAPI для Mozilla (якщо існує каталог)
+        if [ -f /opt/iit/eu/sw/npeuscp.so ]; then
+            mkdir -p /usr/lib/mozilla/plugins 2>/dev/null || true
+            ln -sf /opt/iit/eu/sw/npeuscp.so /usr/lib/mozilla/plugins/npeuscp.so 2>/dev/null || true
+        fi
+    fi
+
+    # 2. Оновлення правил udev для доступу користувачів до USB-токенів без root
+    if command -v udevadm >/dev/null 2>&1; then
+        udevadm control --reload-rules 2>/dev/null || true
+        udevadm trigger --subsystem-match=usb 2>/dev/null || true
+    fi
+
+    # 3. Активація сокета pcscd для роботи смарт-карт CCID (якщо встановлено systemd)
+    if command -v systemctl >/dev/null 2>&1 && systemctl is-system-running >/dev/null 2>&1; then
+        systemctl enable --now pcscd.socket 2>/dev/null || true
+    fi
+
     echo "================================================================================"
-    echo " 🇺🇦 Встановлено комплекс електронного підпису та шифрування qes-tools v1.0.4"
+    echo " 🇺🇦 Встановлено комплекс електронного підпису та шифрування qes-tools v1.0.5"
     echo " • qes-sign        — підписання (CAdES .p7s, PAdES .pdf, ASiC-E .asice, мультипідпис)"
     echo " • qes-verify      — перевірка підписів (.p7s, .pdf, .asice) та сертифікатів"
     echo " • qes-cert        — швидкий інспектор сертифікатів КНЕДП / АЦСК (X.509, ДСТУ 4145)"
@@ -87,6 +136,8 @@ if [ "$1" = "configure" ]; then
     echo " • qes-export-cert — експорт відкритого сертифіката (.cer)"
     echo " • qes-agent       — менеджер пам'яті паролів сесії (Session TTL)"
     echo " • qes-config      — керування мовою (UA/EN) та меню Nautilus (qes-config --lang uk|en|auto)"
+    echo " • qes-tool token  — діагностика апаратних токенів (DepositSign, Алмаз-1К, Кристал-1К, Автор)"
+    echo " • qes-tool providers — реєстр КНЕДП та автопошук сертифікатів (DepositSign, Дія, ДПС, Приват, mono)"
     echo " 🖱️ Інтегровано у файловий менеджер GNOME (правий клік -> Скрипти -> 🔐 КЕП та Безпека / QES & Security)"
     echo "================================================================================"
 fi

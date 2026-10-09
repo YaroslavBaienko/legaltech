@@ -518,7 +518,7 @@ log_test "CLI qes-tool: прапорець --version, довідка --help та
 
 # Перевірка прапорця --version
 tool_ver=$(qes-tool --version)
-if [[ "$tool_ver" == *"qes-tools v1.0.4"* ]]; then
+if [[ "$tool_ver" == *"qes-tools v1.0.5"* ]]; then
     assert_ok "qes-tool --version повертає коректний номер версії ($tool_ver)"
 else
     echo "Помилка qes-tool --version: $tool_ver" >&2; exit 1
@@ -526,7 +526,7 @@ fi
 
 # Перевірка синоніма qes-tools -v
 tools_ver=$(qes-tools -v)
-if [[ "$tools_ver" == *"qes-tools v1.0.4"* ]]; then
+if [[ "$tools_ver" == *"qes-tools v1.0.5"* ]]; then
     assert_ok "qes-tools -v працює ідентично через аліас ($tools_ver)"
 else
     echo "Помилка qes-tools -v: $tools_ver" >&2; exit 1
@@ -556,12 +556,78 @@ else
     echo "Помилка диспетчеризації: $dispatch_res" >&2; exit 1
 fi
 
+echo -e "\n${CLR_CYAN}════════════════════════════════════════════════════════════════════════════════${CLR_RESET}"
+echo -e "${CLR_BOLD}[ТЕСТ 40] Діагностика апаратних токенів (DepositSign, Алмаз-1К) та реєстр КНЕДП${CLR_RESET}"
+echo -e "${CLR_CYAN}════════════════════════════════════════════════════════════════════════════════${CLR_RESET}"
+
+# Перевірка qes-tool token
+tok_out=$(qes-tool token)
+if [[ "$tok_out" == *"Апаратн"* || "$tok_out" == *"Алмаз"* || "$tok_out" == *"ЗНОК"* ]]; then
+    assert_ok "qes-tool token коректно виконує діагностику USB-токенів"
+else
+    echo "Помилка qes-tool token: $tok_out" >&2; exit 1
+fi
+
+# Перевірка qes-tool providers
+prov_out=$(qes-tool providers)
+if [[ "$prov_out" == *"РЕЄСТР КВАЛІФІКОВАНИХ НАДАВАЧІВ"* && "$prov_out" == *"ДЕПОЗИТ САЙН"* && "$prov_out" == *"monobank"* ]]; then
+    assert_ok "qes-tool providers виводить повний національний реєстр КНЕДП України"
+else
+    echo "Помилка qes-tool providers: $prov_out" >&2; exit 1
+fi
+
+# Перевірка qes-cert --tokens
+cert_tok_out=$(qes-cert --tokens)
+if [[ "$cert_tok_out" == *"Апаратн"* || "$cert_tok_out" == *"Алмаз"* || "$cert_tok_out" == *"ЗНОК"* ]]; then
+    assert_ok "qes-cert --tokens успішно опитує підключені апаратні носії"
+else
+    echo "Помилка qes-cert --tokens: $cert_tok_out" >&2; exit 1
+fi
+
+# Перевірка наявності національного бандлу ua-all-cas.p7b
+if [[ -f "$PACKAGE_DIR/certs/ua-all-cas.p7b" && $(stat -c%s "$PACKAGE_DIR/certs/ua-all-cas.p7b") -gt 50000 ]]; then
+    assert_ok "Національний бандл ua-all-cas.p7b сформовано та валідовано (>50 КБ)"
+else
+    echo "Помилка: файл ua-all-cas.p7b відсутній або замалий" >&2; exit 1
+fi
+
+echo -e "\n${CLR_CYAN}════════════════════════════════════════════════════════════════════════════════${CLR_RESET}"
+echo -e "${CLR_BOLD}[ТЕСТ 41] Інтегровані бібліотеки EUSW (ІІТ), драйвери ЗНОК та правила udev${CLR_RESET}"
+echo -e "${CLR_CYAN}════════════════════════════════════════════════════════════════════════════════${CLR_RESET}"
+
+# Перевірка наявності нативних модулів EUSW у дереві пакету
+if [[ -d "$PACKAGE_DIR/opt/iit/eu/sw" && -f "$PACKAGE_DIR/opt/iit/eu/sw/pkcs11.eka1c.so" && -f "$PACKAGE_DIR/opt/iit/eu/sw/libav337p11d.so" ]]; then
+    assert_ok "Нативні бібліотеки PKCS#11 (Алмаз-1К, Кристал-1К, SecureToken-337) присутні в opt/iit"
+else
+    echo "Помилка: бібліотеки EUSW не знайдені в opt/iit/eu/sw" >&2; exit 1
+fi
+
+if [[ -x "$PACKAGE_DIR/opt/iit/eu/sw/euscpnmh" ]]; then
+    assert_ok "Браузерний демон Native Messaging Host (euscpnmh) має права на виконання (0755)"
+else
+    echo "Помилка: euscpnmh не має прав на виконання" >&2; exit 1
+fi
+
+if [[ -f "$PACKAGE_DIR/etc/udev/rules.d/60-iit-e-keys.rules" ]]; then
+    assert_ok "Системні udev-правила 60-iit-e-keys.rules присутні для безпарольного доступу до токенів"
+else
+    echo "Помилка: 60-iit-e-keys.rules відсутні" >&2; exit 1
+fi
+
+# Перевірка динамічного завантаження PKCS#11 бібліотек через Python ctypes
+python3 -c "
+import ctypes
+c1 = ctypes.CDLL('$PACKAGE_DIR/opt/iit/eu/sw/pkcs11.eka1c.so')
+assert hasattr(c1, 'C_GetFunctionList'), 'C_GetFunctionList missing in pkcs11.eka1c.so'
+c2 = ctypes.CDLL('$PACKAGE_DIR/opt/iit/eu/sw/libav337p11d.so')
+assert hasattr(c2, 'C_GetFunctionList'), 'C_GetFunctionList missing in libav337p11d.so'
+"
+assert_ok "Бібліотеки PKCS#11 (pkcs11.eka1c.so, libav337p11d.so) валідовані та успішно завантажені через ctypes"
+
 # Очищення тимчасового тестового ключа з ~/.secure_keys
 rm -f "$TEST_LINK" "$TEST_LINK_CER"
-
-
 
 echo -e "\n${CLR_BOLD}${CLR_GREEN}==============================================================================${CLR_RESET}"
 echo -e "${CLR_BOLD}${CLR_GREEN} 🎉 ВСІ $PASSED_COUNT ТЕСТІВ ТА СЦЕНАРІЇВ УСПІШНО ПРОЙДЕНО БЕЗ ЖОДНОЇ ПОМИЛКИ!${CLR_RESET}"
 echo -e "${CLR_BOLD}${CLR_GREEN}==============================================================================${CLR_RESET}"
-echo -e "Покриття: 100% CLI утиліт, 100% Nautilus скриптів (16/16), PAdES (зі штампом і без)/CAdES/ASiC-E/OCR/Vault."
+echo -e "Покриття: 100% CLI утиліт, 100% Nautilus скриптів (16/16), EUSW/PKCS#11, PAdES/CAdES/ASiC-E/OCR/Vault."

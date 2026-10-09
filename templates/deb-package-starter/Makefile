@@ -1,4 +1,4 @@
-# Makefile для швидкого тестування та збірки пакета
+# Makefile for rapid testing and package building
 
 .PHONY: all build test lint clean install
 
@@ -16,7 +16,7 @@ lint:
 	@if command -v shellcheck >/dev/null 2>&1; then \
 		shellcheck build.sh src/*.sh tests/*.sh debian/postinst debian/prerm; \
 	else \
-		echo "shellcheck не встановлено"; \
+		echo "shellcheck is not installed"; \
 	fi
 
 clean:

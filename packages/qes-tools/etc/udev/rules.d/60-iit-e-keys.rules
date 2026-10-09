@@ -1,0 +1,17 @@
+# /etc/udev/rules.d/60-iit-e-keys.rules
+# Hardware USB Token access rules for Ukrainian Qualified Electronic Signatures (QES / ЗНОК)
+# Preserves non-root access for desktop users and CCID smartcard daemons.
+
+# 1. ПрАТ «ІІТ» — Е-ключі «Алмаз-1К» та «Кристал-1К» (ТОВ «ДЕПОЗИТ САЙН», ДПС, НАІС, ПриватБанк)
+SUBSYSTEM=="usb", ATTR{idVendor}=="03eb", ATTR{idProduct}=="9301", MODE="0666", GROUP="plugdev", TAG+="uaccess", ENV{ID_SMARTCARD_READER}="1"
+SUBSYSTEM=="usb", ATTR{idVendor}=="03eb", ATTR{idProduct}=="9308", MODE="0666", GROUP="plugdev", TAG+="uaccess", ENV{ID_SMARTCARD_READER}="1"
+SUBSYSTEM=="usb", ATTR{idVendor}=="03eb", ATTR{idProduct}=="9324", MODE="0666", GROUP="plugdev", TAG+="uaccess", ENV{ID_SMARTCARD_READER}="1"
+SUBSYSTEM=="usb", ATTR{idVendor}=="03eb", ATTR{idProduct}=="9325", MODE="0666", GROUP="plugdev", TAG+="uaccess", ENV{ID_SMARTCARD_READER}="1"
+
+# 2. ТОВ «Автор» — «SecureToken-337» та «CryptoCard-337» (Дія, МВС, Казначейство, Ощадбанк)
+SUBSYSTEM=="usb", ATTR{idVendor}=="0483", ATTR{idProduct}=="5740", MODE="0666", GROUP="plugdev", TAG+="uaccess", ENV{ID_SMARTCARD_READER}="1"
+SUBSYSTEM=="usb", ATTR{idVendor}=="0483", ATTR{idProduct}=="5741", MODE="0666", GROUP="plugdev", TAG+="uaccess", ENV{ID_SMARTCARD_READER}="1"
+SUBSYSTEM=="usb", ATTR{idVendor}=="0483", ATTR{idProduct}=="5720", MODE="0666", GROUP="plugdev", TAG+="uaccess", ENV{ID_SMARTCARD_READER}="1"
+
+# 3. Thales / SafeNet eToken 5110 (Міжнародні банки)
+SUBSYSTEM=="usb", ATTR{idVendor}=="0529", ATTR{idProduct}=="0620", MODE="0666", GROUP="plugdev", TAG+="uaccess", ENV{ID_SMARTCARD_READER}="1"

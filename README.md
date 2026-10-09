@@ -1,100 +1,100 @@
 # 🇺🇦 LegalTech — Open Source Debian Packaging Ecosystem
 
-Відкрита екосистема інструментів **LegalTech** та професійне середовище розробки `.deb` пакетів для Debian та Ubuntu.
+An open-source **LegalTech** tooling ecosystem and professional `.deb` packaging workspace for Debian and Ubuntu.
 
-Проєкт створено для юристів, адвокатів, арбітражних керуючих, ІТ-фахівців та дослідників. Усі інструменти проєкту сповідують фундаментальний принцип: **100% Offline-First, нульова телеметрія, захист персональних даних та суворе збереження адвокатської таємниці**.
+Designed for lawyers, attorneys, insolvency officers, legal IT specialists, and researchers. All ecosystem tools adhere to a fundamental principle: **100% Offline-First, zero telemetry, personal data protection, and strict preservation of attorney-client privilege**.
 
 ---
 
-## 🏛️ Пакети в екосистемі
+## 🏛️ Packages in the Ecosystem
 
-| Пакет | Опис | Статус | Документація |
+| Package | Description | Status | Documentation |
 | :--- | :--- | :---: | :---: |
-| **`qes-tools`** | Автономний комплекс КЕП/УЕП (ДСТУ 4145, CAdES, PAdES зі штампом та без штампа, QR, ASiC-E, ГОСТ шифрування, OCR для судів, 16 сценаріїв у Nautilus). | **v1.0.3** (Stable) | [README пакета](packages/qes-tools/README.md) |
-| **`deb-package-starter`** | Універсальний стартовий шаблон для швидкої розробки будь-якого нового deb-пакета. | **Template** | [README шаблону](templates/deb-package-starter/README.md) |
+| **`qes-tools`** | Standalone QES/AES suite (DSTU 4145-2002, CAdES, stamped & unstamped PAdES, QR, ASiC-E, GOST encryption, court-ready OCR, 16 Nautilus scripts). | **v1.0.3** (Stable) | [Package README](packages/qes-tools/README.md) |
+| **`deb-package-starter`** | Universal starter template for rapid development of new Debian packages. | **Template** | [Template README](templates/deb-package-starter/README.md) |
 
 ---
 
-## ⚡ Швидке встановлення та автоматичні оновлення
+## ⚡ Quick Installation & Automated Updates
 
-### 🌟 Офіційний APT-репозиторій (Рекомендовано для отримання `sudo apt upgrade`):
+### 🌟 Official APT Repository (Recommended for `sudo apt upgrade`):
 
-Підключіть репозиторій один раз у своєму терміналі:
+Configure the repository once in your terminal:
 
 ```bash
-# 1. Додати публічний GPG-ключ репозиторію
+# 1. Add the repository's public GPG key
 curl -fsSL https://yaroslavbaienko.github.io/legaltech/public.gpg | sudo gpg --dearmor -o /etc/apt/keyrings/legaltech.gpg
 
-# 2. Додати репозиторій LegalTech у список джерел APT
+# 2. Add the LegalTech repository to APT sources
 echo "deb [signed-by=/etc/apt/keyrings/legaltech.gpg] https://yaroslavbaienko.github.io/legaltech stable main" | sudo tee /etc/apt/sources.list.d/legaltech.list
 
-# 3. Оновити індекси та встановити qes-tools
+# 3. Update indices and install qes-tools
 sudo apt update
 sudo apt install qes-tools
 ```
 
-Після цього будь-які нові версії будуть автоматично оновлюватися системною командою:
+Once installed, future updates will be applied automatically via standard system upgrades:
 ```bash
 sudo apt update && sudo apt upgrade
 ```
 
 ---
 
-### Або локальне встановлення готового `.deb` файлу:
+### Or Local Installation of a Pre-built `.deb` Package:
 
-Завантажте останній релізний `.deb` пакет з [Releases](https://github.com/YaroslavBaienko/legaltech/releases) та встановіть його:
+Download the latest release `.deb` package from [Releases](https://github.com/YaroslavBaienko/legaltech/releases) and install it:
 
 ```bash
 sudo apt install ./packages/qes-tools/dist/qes-tools_1.0.3_amd64.deb
 ```
 
-Менеджер пакетів `apt` автоматично розв'яже всі системні залежності. Після встановлення всі функції доступні:
-- **У файловому менеджері GNOME (Nautilus)**: правий клік на будь-який файл ➔ **Скрипти** ➔ **`🔐 КЕП та Безпека`** (16 зручних сценаріїв).
-- **У терміналі**: `qes-sign`, `qes-verify`, `qes-cert`, `qes-ocr`, `qes-pdf-court`, `qes-encrypt`, `qes-decrypt`, `qes-export-cert`, `qes-agent`.
+The `apt` package manager will automatically resolve and install all system dependencies. After installation, all features are ready:
+- **In GNOME Files (Nautilus)**: Right-click any file ➔ **Scripts** ➔ **`🔐 КЕП та Безпека`** (16 convenient actions).
+- **In the Terminal**: `qes-sign`, `qes-verify`, `qes-cert`, `qes-ocr`, `qes-pdf-court`, `qes-encrypt`, `qes-decrypt`, `qes-export-cert`, `qes-agent`.
 
 ---
 
-## 🛠️ Середовище розробки та створення нових пакетів
+## 🛠️ Development Workspace & Creating New Packages
 
-Цей репозиторій спроєктовано як **фабрику розробки deb-пакетів** (Debian Packaging Workspace).
+This repository is designed as a **Debian packaging workspace** (factory for `.deb` packages).
 
-### Як створити новий пакет за 10 секунд:
+### How to Create a New Package in 10 Seconds:
 
-1. Запустіть вбудований CLI-генератор:
+1. Run the built-in CLI generator:
    ```bash
-   ./tools/new-deb-package.sh my-legal-tool "Швидкий інструмент для судових справ"
+   ./tools/new-deb-package.sh my-legal-tool "Fast tool for court proceedings"
    ```
-2. Генератор автоматично створить каталог `packages/my-legal-tool` з усіма стандартами Debian Policy (`control`, `copyright`, `changelog`, `build.sh`, `Makefile`, `tests/`).
-3. Додайте свій вихідний код у `packages/my-legal-tool/src/`.
-4. Запустіть тести та збірку:
+2. The generator will create the `packages/my-legal-tool` directory following Debian Policy standards (`control`, `copyright`, `changelog`, `build.sh`, `Makefile`, `tests/`).
+3. Add your source code to `packages/my-legal-tool/src/`.
+4. Run tests and build:
    ```bash
    cd packages/my-legal-tool
    make test
    make build
    ```
-5. Ваш новий `.deb` пакет готовий у папці `dist/`!
+5. Your new `.deb` package is ready in the `dist/` directory!
 
 ---
 
-## 📚 Документація
+## 📚 Documentation
 
-- [📦 Посібник зі встановлення та оновлення пакетів](docs/INSTALLATION_GUIDE.md) — як користувачу підключити APT-репозиторій, встановити та оновлювати пакети через `sudo apt upgrade`.
-- [📖 Практичний посібник з розробки Debian-пакетів](docs/DEB_PACKAGING_GUIDE.md) — анатомія `.deb`, FHS стандарти, правила `control`, робота з `lintian`.
-- [🌐 Адміністрування та розгортання APT-репозиторію](docs/APT_REPOSITORY_GUIDE.md) — архітектура GitHub Pages репозиторію, автоматизація збірки та випуску оновлень.
-- [🔐 Документація QES Tools](packages/qes-tools/README.md) — повний мануал по всіх 16 сценаріях та командах КЕП.
-
----
-
-## 🧪 CI/CD та автоматизація
-
-Усі пакети покриті наскрізними тестами та автоматизованими робочими процесами GitHub Actions:
-- **`ci.yml`**: автоматичний запуск unit-тестів та E2E сценаріїв на чистому образі Ubuntu при кожному коміті.
-- **`build-deb.yml`**: ізольована збірка `.deb` пакетів та збереження артефактів.
-- **`apt-repo.yml`**: автоматична збірка, індексація, цифровий GPG-підпис та публікація APT-репозиторію на GitHub Pages.
-- **`release.yml`**: автоматичний реліз та публікація бінарників при створенні git-тегу (`git tag v1.0.3 && git push origin v1.0.3`).
+- [📦 Installation & Upgrade Guide](docs/INSTALLATION_GUIDE.md) — How to configure the APT repository, install, and update packages via `sudo apt upgrade`.
+- [📖 Practical Debian Packaging Guide](docs/DEB_PACKAGING_GUIDE.md) — Anatomy of `.deb`, FHS standards, `control` syntax, and linting with `lintian`.
+- [🌐 APT Repository Administration Guide](docs/APT_REPOSITORY_GUIDE.md) — GitHub Pages repository architecture, build automation, and release workflows.
+- [🔐 QES Tools Documentation](packages/qes-tools/README.md) — Complete manual covering all CLI commands and workflows.
 
 ---
 
-## ⚖️ Ліцензія
+## 🧪 CI/CD & Automation
 
-Вихідний код поширюється під ліцензією [Apache 2.0](LICENSE). Вільне використання, модифікація та розповсюдження.
+All packages are covered by end-to-end test suites and automated GitHub Actions workflows:
+- **`ci.yml`**: Automatically runs unit tests and E2E scenarios on a clean Ubuntu environment for every commit and pull request.
+- **`build-deb.yml`**: Isolated build of `.deb` packages and artifact archiving.
+- **`apt-repo.yml`**: Automated build, indexing, GPG signing, and publication of the APT repository to GitHub Pages.
+- **`release.yml`**: Automated release and binary publication upon pushing a git tag (`git tag v1.0.3 && git push origin v1.0.3`).
+
+---
+
+## ⚖️ License
+
+Source code is released under the [Apache 2.0 License](LICENSE). Free for use, modification, and distribution.

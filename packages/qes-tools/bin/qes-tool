@@ -49,7 +49,7 @@ get_version() {
             fi
         fi
     done
-    echo "1.0.4"
+    echo "1.0.5"
 }
 
 VERSION="$(get_version)"
@@ -365,6 +365,51 @@ case "$ACTION" in
         ;;
     -h|--help|help)
         show_help
+        exit 0
+        ;;
+    token|tokens)
+        node -e "
+        const { detectHardwareTokens } = require('${REAL_PKG_DIR}/src/providers');
+        const res = detectHardwareTokens();
+        if (res.detected) {
+            console.log('\x1b[1m\x1b[32m✔ ЗНАЙДЕНО ПІДКЛЮЧЕНИЙ АПАРАТНИЙ НОСІЙ (ЗНОК):\x1b[0m');
+            res.tokens.forEach((t, i) => {
+                console.log('  [' + (i + 1) + '] \x1b[1m' + t.name + '\x1b[0m');
+                console.log('      Виробник:    ' + t.manufacturer);
+                console.log('      Провайдер:   ' + t.provider);
+                console.log('      Тип носія:   ' + t.type);
+                console.log('      ID пристрою: ' + t.vendorId + ':' + t.productId);
+                if (t.driverPath) {
+                    const drvStatus = t.driverInstalled ? '\x1b[32m✔ встановлено\x1b[0m' : '\x1b[33m(інтегровано в пакет)\x1b[0m';
+                    console.log('      Драйвер PKCS#11: ' + t.driverPath + ' ' + drvStatus);
+                }
+            });
+            console.log('');
+            if (res.pcscdRunning) {
+                console.log('  🟢 Служба смарт-карт (pcscd) активна в системі.');
+            } else {
+                console.log('  💡 Для прямої роботи з USB-токеном через PC/SC запустіть: sudo systemctl start pcscd');
+            }
+        } else {
+            console.log('\x1b[33mℹ Апаратних токенів (Алмаз-1К, Кристал-1К, SecureToken-337) не виявлено.\x1b[0m');
+            console.log('  Переконайтеся, що USB-токен підключено до комп\'ютера.');
+        }
+        "
+        exit 0
+        ;;
+    providers)
+        node -e "
+        const { PROVIDERS } = require('${REAL_PKG_DIR}/src/providers');
+        console.log('\x1b[1m\x1b[36m🏛️ РЕЄСТР КВАЛІФІКОВАНИХ НАДАВАЧІВ ДОВІРЧИХ ПОСЛУГ УКРАЇНИ (КНЕДП):\x1b[0m\n');
+        Object.values(PROVIDERS).forEach((p, i) => {
+            console.log('  ' + (i + 1) + '. \x1b[1m' + p.name + '\x1b[0m');
+            console.log('     ЄДРПОУ: ' + p.edrpou + ' | Домен: ' + p.domains.join(', '));
+            console.log('     CMP (автопошук): ' + (p.cmp ? p.cmp[0] : '—'));
+            console.log('     TSP (мітка часу): ' + (p.tsp ? p.tsp[0] : '—'));
+            console.log('     OCSP (онлайн):   ' + (p.ocsp ? p.ocsp[0] : '—'));
+            console.log('');
+        });
+        "
         exit 0
         ;;
     sign|verify|encrypt|decrypt|export-cert|cert|agent|config|pdf-court|ocr)

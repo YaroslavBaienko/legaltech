@@ -362,11 +362,14 @@ ${CLR_BOLD}ПЕРЕВІРКА ПІДПИСІВ:${CLR_RESET}
   console.log(`${CLR_CYAN}║ Ключ:   ${path.basename(keyPath)}${CLR_RESET}`);
   console.log(`${CLR_CYAN}╚═══════════════════════════════════════════════════════════════════════════════════════╝${CLR_RESET}`);
 
-  // Load monobank CA bundle if available
-  const caBundlePath = path.join(__dirname, '..', 'certs', 'mono.p7b');
+  // Load national CA bundle (all 21 accredited Ukrainian QTSPs) if available
+  const caBundlePath = path.join(__dirname, '..', 'certs', 'ua-all-cas.p7b');
+  const fallbackCaBundlePath = path.join(__dirname, '..', 'certs', 'mono.p7b');
   let casBuffer = null;
   if (fs.existsSync(caBundlePath)) {
     casBuffer = fs.readFileSync(caBundlePath);
+  } else if (fs.existsSync(fallbackCaBundlePath)) {
+    casBuffer = fs.readFileSync(fallbackCaBundlePath);
   }
 
   if (clearCacheFirst) {

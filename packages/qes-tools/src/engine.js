@@ -7,13 +7,26 @@
 const fs = require('fs');
 const path = require('path');
 const jk = require('jkurwa');
+const os = require('os');
 const { queryAdapter, getAlgos, safeBoxSign } = require('./adapter');
+const { getCmpEndpoints, detectProvider, detectHardwareTokens } = require('./providers');
+
+const DEFAULT_CA_PATH = path.join(__dirname, '..', 'certs', 'ua-all-cas.p7b');
+const FALLBACK_CA_PATH = path.join(__dirname, '..', 'certs', 'mono.p7b');
 
 class QESEngine {
   constructor(options = {}) {
     this.algo = getAlgos();
-    this.casBuffer = options.casBuffer || null;
-    this.cmpUrl = options.cmpUrl || 'http://ca.monobank.ua/services/cmp/';
+    let caBuf = options.casBuffer;
+    if (!caBuf) {
+      if (fs.existsSync(DEFAULT_CA_PATH)) {
+        caBuf = fs.readFileSync(DEFAULT_CA_PATH);
+      } else if (fs.existsSync(FALLBACK_CA_PATH)) {
+        caBuf = fs.readFileSync(FALLBACK_CA_PATH);
+      }
+    }
+    this.casBuffer = caBuf;
+    this.cmpUrl = options.cmpUrl || null;
   }
 
   /**
@@ -95,34 +108,74 @@ class QESEngine {
       }
     }
 
-    // 4. Try fetching via CMP if not found offline
+    // 4. Check persistent user cache directory ~/.cache/qes-tools/certs/
+    const userCacheDir = path.join(os.homedir(), '.cache', 'qes-tools', 'certs');
+    if (!certFound && fs.existsSync(userCacheDir)) {
+      try {
+        const cachedFiles = fs.readdirSync(userCacheDir);
+        for (const cf of cachedFiles) {
+          if (cf.endsWith('.cer') || cf.endsWith('.crt')) {
+            const fullCp = path.join(userCacheDir, cf);
+            try {
+              const cBuf = fs.readFileSync(fullCp);
+              box.add({ cert: jk.Certificate.from_asn1(cBuf) }, this.algo);
+              box._indexKeys();
+              const matched = box.keys.find((k) => k.cert);
+              if (matched) {
+                console.log(`  [Cache] Сертифікат завантажено з кешу: ${cf}`);
+                certFound = true;
+                break;
+              }
+            } catch (_) {}
+          }
+        }
+      } catch (_) {}
+    }
+
+    // 5. Try auto-discovery via CMP endpoints of Ukrainian QTSPs
     if (!certFound) {
       const cmpUrls = [
         ...new Set([
           this.cmpUrl,
-          'http://ca.monobank.ua/services/cmp/',
-          'http://zc.bank.gov.ua/services/cmp/',
+          ...getCmpEndpoints(),
         ].filter(Boolean))
       ];
       for (const url of cmpUrls) {
         try {
-          console.log(`  [CMP] Запит сертифіката до ${url}...`);
+          console.log(`  [Auto-Discovery] Опитування каталогу сертифікатів: ${url}...`);
           const added = await box.loadCertsCmp(url);
-          console.log(`  [CMP] Отримано сертифікатів: ${added}`);
           if (added > 0) {
             certFound = true;
-            // Cache the cert for offline operations
-            const parsedPath = path.parse(pfxPath);
-            const cachePath = path.join(parsedPath.dir, `${parsedPath.name}.cer`);
+            box._indexKeys();
             const keyInfo = box.keys.find((k) => k.cert);
-            if (keyInfo && keyInfo.cert && !fs.existsSync(cachePath)) {
-              fs.writeFileSync(cachePath, keyInfo.cert.as_asn1());
-              console.log(`  [CMP] Сертифікат збережено локально: ${cachePath}`);
+            if (keyInfo && keyInfo.cert) {
+              const prov = detectProvider(keyInfo.cert);
+              console.log(`  [Auto-Discovery] ✅ Сертифікат успішно знайдено (${prov ? prov.name : 'КНЕДП'})!`);
+
+              // Cache adjacent to key file if writable
+              try {
+                const parsedPath = path.parse(pfxPath);
+                const cachePath = path.join(parsedPath.dir, `${parsedPath.name}.cer`);
+                if (!fs.existsSync(cachePath)) {
+                  fs.writeFileSync(cachePath, keyInfo.cert.as_asn1());
+                  console.log(`  [Cache] Сертифікат збережено поруч із ключем: ${cachePath}`);
+                }
+              } catch (_) {}
+
+              // Cache in user cache directory ~/.cache/qes-tools/certs/
+              try {
+                fs.mkdirSync(userCacheDir, { recursive: true });
+                const keyId = keyInfo.cert.extension?.subjectKeyIdentifier?.toString('hex') || Date.now().toString();
+                const persistentCacheFile = path.join(userCacheDir, `${keyId}.cer`);
+                if (!fs.existsSync(persistentCacheFile)) {
+                  fs.writeFileSync(persistentCacheFile, keyInfo.cert.as_asn1());
+                }
+              } catch (_) {}
             }
             break;
           }
         } catch (cmpErr) {
-          console.log(`  [CMP] Помилка від ${url}:`, cmpErr.reason || cmpErr.message || cmpErr);
+          // Continue to next provider
         }
       }
     }

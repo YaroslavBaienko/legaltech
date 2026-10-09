@@ -11,6 +11,8 @@ const path = require('path');
 const os = require('os');
 const { spawnSync } = require('child_process');
 const { QESEngine } = require('../src/engine');
+const jk = require('jkurwa');
+const { getAlgos } = require('../src/adapter');
 
 test('CLI prints help message properly', () => {
   const cliPath = path.join(__dirname, '..', 'bin', 'qes-sign.js');
@@ -625,12 +627,12 @@ test('qes-tool master CLI supports --version, --help and subcommand dispatching'
   // Test --version
   const resVer = spawnSync('bash', [toolBin, '--version'], { encoding: 'utf-8' });
   assert.strictEqual(resVer.status, 0);
-  assert.match(resVer.stdout, /qes-tools v1\.0\.4/);
+  assert.match(resVer.stdout, /qes-tools v1\.0\.\d+/);
 
   // Test -v
   const resShortVer = spawnSync('bash', [toolBin, '-v'], { encoding: 'utf-8' });
   assert.strictEqual(resShortVer.status, 0);
-  assert.match(resShortVer.stdout, /qes-tools v1\.0\.4/);
+  assert.match(resShortVer.stdout, /qes-tools v1\.0\.\d+/);
 
   // Test --help UK
   const resHelpUk = spawnSync('bash', [toolBin, '--help'], {
@@ -652,4 +654,146 @@ test('qes-tool master CLI supports --version, --help and subcommand dispatching'
   assert.match(resHelpEn.stdout, /COMMAND EXAMPLES/);
   assert.match(resHelpEn.stdout, /qes-sign --pades/);
 });
+
+test('National CA bundle ua-all-cas.p7b exists and loads all Ukrainian CAs into jkurwa Box', () => {
+  const allCasPath = path.join(__dirname, '..', 'certs', 'ua-all-cas.p7b');
+  assert.strictEqual(fs.existsSync(allCasPath), true, 'ua-all-cas.p7b exists');
+  const buf = fs.readFileSync(allCasPath);
+  assert.ok(buf.length > 50000, 'ua-all-cas.p7b contains substantial certificate bundle');
+
+  const engine = new QESEngine();
+  assert.ok(engine.casBuffer, 'QESEngine automatically loaded default CA bundle');
+  assert.ok(engine.casBuffer.length > 50000);
+
+  const box = new jk.Box({ algo: getAlgos(), casBuffer: buf });
+  const caCount = Object.keys(box.cas).length;
+  assert.ok(caCount >= 100, `Box loaded ${caCount} CAs from ua-all-cas.p7b`);
+});
+
+test('providers module provides all Ukrainian QTSPs with valid CMP, TSP, OCSP endpoints', () => {
+  const { PROVIDERS, getCmpEndpoints, getTspEndpoints, getOcspEndpoints, detectProvider, detectHardwareTokens } = require('../src/providers');
+
+  assert.ok(PROVIDERS.depositsign, 'DepositSign provider exists');
+  assert.strictEqual(PROVIDERS.depositsign.edrpou, '43005049');
+  assert.ok(PROVIDERS.depositsign.cmp.length > 0);
+  assert.ok(PROVIDERS.depositsign.tsp.length > 0);
+  assert.ok(PROVIDERS.depositsign.ocsp.length > 0);
+
+  assert.ok(PROVIDERS.monobank, 'monobank provider exists');
+  assert.ok(PROVIDERS.diia, 'Diia provider exists');
+  assert.ok(PROVIDERS.dps, 'DPS provider exists');
+  assert.ok(PROVIDERS.privatbank, 'PrivatBank provider exists');
+  assert.ok(PROVIDERS.vchasno, 'Vchasno provider exists');
+  assert.ok(PROVIDERS.nais, 'NAIS provider exists');
+  assert.ok(PROVIDERS.czo, 'CZO provider exists');
+
+  const cmpList = getCmpEndpoints();
+  assert.ok(cmpList.length >= 10, 'At least 10 CMP lookup endpoints configured');
+  assert.ok(cmpList.includes('https://ca.depositsign.com/services/cmp/'), 'DepositSign CMP is included');
+
+  const tspList = getTspEndpoints();
+  assert.ok(tspList.length >= 5, 'At least 5 TSP endpoints configured');
+
+  const ocspList = getOcspEndpoints();
+  assert.ok(ocspList.length >= 5, 'At least 5 OCSP endpoints configured');
+
+  // Test detectProvider
+  const pDeposit = detectProvider('CN=QTSP of the DEPOSIT SIGN LLC, O=DEPOSIT SIGN LLC, 2.5.4.97=NTRUA-43005049');
+  assert.ok(pDeposit, 'Detects DepositSign provider');
+  assert.strictEqual(pDeposit.id, 'depositsign');
+
+  const pMono = detectProvider('CN=QTSP monobank | Universal Bank, O=JSC UNIVERSAL BANK');
+  assert.ok(pMono, 'Detects monobank provider');
+  assert.strictEqual(pMono.id, 'monobank');
+
+  // Test detectHardwareTokens
+  const tokRes = detectHardwareTokens();
+  assert.strictEqual(typeof tokRes.detected, 'boolean');
+  assert.ok(Array.isArray(tokRes.tokens));
+});
+
+test('qes-tool token and qes-tool providers CLI commands execute with formatted output', () => {
+  const toolBin = path.join(__dirname, '..', 'bin', 'qes-tool');
+
+  const resTok = spawnSync('bash', [toolBin, 'token'], { encoding: 'utf-8' });
+  assert.strictEqual(resTok.status, 0);
+  assert.match(resTok.stdout, /Апаратн|Алмаз|SecureToken|ЗНОК/);
+
+  const resProv = spawnSync('bash', [toolBin, 'providers'], { encoding: 'utf-8' });
+  assert.strictEqual(resProv.status, 0);
+  assert.match(resProv.stdout, /РЕЄСТР КВАЛІФІКОВАНИХ НАДАВАЧІВ/);
+  assert.match(resProv.stdout, /ДЕПОЗИТ САЙН/);
+  assert.match(resProv.stdout, /monobank/);
+  assert.match(resProv.stdout, /Дія/);
+  assert.match(resProv.stdout, /Податков/i);
+});
+
+test('qes-cert --tokens CLI flag inspects connected hardware tokens in text and json modes', () => {
+  const certBin = path.join(__dirname, '..', 'bin', 'qes-cert');
+
+  const resTxt = spawnSync(certBin, ['--tokens'], { encoding: 'utf-8' });
+  assert.strictEqual(resTxt.status, 0);
+  assert.match(resTxt.stdout, /Апаратн|Алмаз|SecureToken|ЗНОК/);
+
+  const resJson = spawnSync(certBin, ['--tokens', '--json'], { encoding: 'utf-8' });
+  assert.strictEqual(resJson.status, 0);
+  const parsed = JSON.parse(resJson.stdout);
+  assert.strictEqual(typeof parsed.detected, 'boolean');
+  assert.ok(Array.isArray(parsed.tokens));
+});
+
+test('integrated EUSW native modules and udev rules exist and satisfy Linux binary security standards', () => {
+  const iitDir = path.join(__dirname, '..', 'opt', 'iit', 'eu', 'sw');
+  assert.strictEqual(fs.existsSync(iitDir), true, 'opt/iit/eu/sw directory exists');
+
+  const requiredLibs = [
+    'pkcs11.eka1c.so',
+    'pkcs11.ekc1.so',
+    'libav337p11d.so',
+    'euscp.so',
+    'euscpnmh',
+  ];
+
+  for (const lib of requiredLibs) {
+    const p = path.join(iitDir, lib);
+    assert.strictEqual(fs.existsSync(p), true, `Required EUSW asset ${lib} exists`);
+  }
+
+  // Check udev rules
+  const udevPath = path.join(__dirname, '..', 'etc', 'udev', 'rules.d', '60-iit-e-keys.rules');
+  assert.strictEqual(fs.existsSync(udevPath), true, '60-iit-e-keys.rules exists');
+  const udevContent = fs.readFileSync(udevPath, 'utf-8');
+  assert.match(udevContent, /ATTRS?\{idVendor\}=="03eb"/, 'Covers IIT vendor 03eb');
+  assert.match(udevContent, /ATTRS?\{idVendor\}=="0483"/, 'Covers Author vendor 0483');
+  assert.match(udevContent, /ATTRS?\{idVendor\}=="0529"/, 'Covers SafeNet vendor 0529');
+  assert.match(udevContent, /TAG\+="uaccess"/, 'Sets uaccess tag for non-root desktop access');
+  assert.match(udevContent, /MODE="0666"/, 'Sets mode 0666');
+
+  // Check that libav337p11d.so has non-executable PT_GNU_STACK (flags == 6 / RW)
+  const av337Path = path.join(iitDir, 'libav337p11d.so');
+  const buf = fs.readFileSync(av337Path);
+  const phoff = Number(buf.readBigInt64LE(32));
+  const phentsize = buf.readUInt16LE(54);
+  const phnum = buf.readUInt16LE(56);
+  let stackFlags = -1;
+  for (let i = 0; i < phnum; i++) {
+    const off = phoff + i * phentsize;
+    const pType = buf.readUInt32LE(off);
+    if (pType === 0x6474e551) { // PT_GNU_STACK
+      stackFlags = buf.readUInt32LE(off + 4);
+      break;
+    }
+  }
+  assert.strictEqual(stackFlags, 6, 'libav337p11d.so PT_GNU_STACK is RW (flags=6), not RWE (flags=7)');
+
+  // Verify hardware token detection includes driver status
+  const { detectHardwareTokens } = require('../src/providers');
+  const tokRes = detectHardwareTokens();
+  if (tokRes.detected) {
+    const firstTok = tokRes.tokens[0];
+    assert.ok(firstTok.driverPath, 'Detected token has driverPath assigned');
+    assert.strictEqual(firstTok.driverInstalled, true, 'Driver is verified as installed');
+  }
+});
+
 

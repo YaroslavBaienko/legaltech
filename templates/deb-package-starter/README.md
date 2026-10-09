@@ -1,45 +1,45 @@
 # 🚀 Debian Package Starter Template (Boilerplate)
 
-Універсальний стартовий шаблон для розробки будь-якого нового `.deb` пакета для Debian / Ubuntu відповідно до стандартів Debian Policy.
+Universal starter boilerplate for developing new `.deb` packages for Debian and Ubuntu adhering to Debian Policy standards.
 
 ---
 
-## 📁 Структура каталогу
+## 📁 Directory Structure
 
 ```text
 .
 ├── debian/
-│   ├── control       # Залежності, назва, архітектура, опис
-│   ├── copyright     # Ліцензія та автори (machine-readable dep5)
-│   ├── changelog     # Журнал версій
-│   ├── rules         # Сценарій debhelper (опціонально)
-│   ├── postinst      # Дії після інсталяції (налаштування прав, демони)
-│   └── prerm         # Дії перед видаленням
-├── src/              # Вихідний код вашого інструменту
-├── bin/              # Бінарні лаунчери для /usr/bin/
-├── tests/            # Автоматичні тести
-├── build.sh          # Скрипт автоматичної збірки через dpkg-deb
-├── Makefile          # Зручні команди (make build, make test, make clean)
+│   ├── control       # Dependencies, package name, architecture, description
+│   ├── copyright     # License and authorship (machine-readable DEP-5)
+│   ├── changelog     # Version history
+│   ├── rules         # Debhelper rules script (optional)
+│   ├── postinst      # Post-installation script (permissions, daemons)
+│   └── prerm         # Pre-removal script
+├── src/              # Source code of your tool
+├── bin/              # Binary launchers deployed to /usr/bin/
+├── tests/            # Automated test suite
+├── build.sh          # Packaging build script using dpkg-deb
+├── Makefile          # Developer shortcuts (make build, make test, make clean)
 └── README.md
 ```
 
 ---
 
-## ⚡ Як створити новий пакет
+## ⚡ How to Create a New Package
 
-### Варіант 1. Автоматично через генератор:
-З кореня репозиторію `legaltech`:
+### Option 1. Automatically via the Generator:
+From the root of the `legaltech` repository:
 ```bash
-./tools/new-deb-package.sh my-cool-tool "Короткий опис інструмента"
+./tools/new-deb-package.sh my-cool-tool "Short description of the tool"
 ```
 
-### Варіант 2. Вручну:
-1. Скопіюйте каталог `templates/deb-package-starter` у `packages/<назва-пакета>`.
-2. Замініть змінні `{{PACKAGE_NAME}}`, `{{VERSION}}`, `{{MAINTAINER_NAME}}` у `debian/control`, `debian/changelog`, `debian/copyright`.
-3. Додайте ваш вихідний код у `src/`.
-4. Запустіть тестування та збірку:
+### Option 2. Manually:
+1. Copy the `templates/deb-package-starter` directory to `packages/<package-name>`.
+2. Replace variables `{{PACKAGE_NAME}}`, `{{VERSION}}`, `{{MAINTAINER_NAME}}` in `debian/control`, `debian/changelog`, and `debian/copyright`.
+3. Add your source code to `src/`.
+4. Run tests and build:
    ```bash
    make test
    make build
    ```
-5. Готовий `.deb` буде створено в `dist/<назва-пакета>_<версія>_<архітектура>.deb`.
+5. The ready-to-deploy `.deb` will be generated at `dist/<package-name>_<version>_<architecture>.deb`.

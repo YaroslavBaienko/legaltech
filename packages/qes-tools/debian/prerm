@@ -2,6 +2,17 @@
 set -e
 
 if [ "$1" = "remove" ] || [ "$1" = "purge" ] || [ "$1" = "deconfigure" ]; then
+    # Деінсталяція Native Messaging Host для веб-браузерів
+    if [ -x "/opt/iit/eu/sw/euscpnmh" ]; then
+        /opt/iit/eu/sw/euscpnmh /unistall 2>/dev/null || true
+    fi
+    rm -f /etc/opt/chrome/native-messaging-hosts/ua.com.iit.eusign.nmh.json \
+          /etc/chromium/native-messaging-hosts/ua.com.iit.eusign.nmh.json \
+          /usr/lib/mozilla/native-messaging-hosts/ua.com.iit.eusign.nmh.json \
+          /etc/brave/native-messaging-hosts/ua.com.iit.eusign.nmh.json \
+          /etc/opt/edge/native-messaging-hosts/ua.com.iit.eusign.nmh.json 2>/dev/null || true
+    rm -f /usr/lib/mozilla/plugins/npeuscp.so 2>/dev/null || true
+
     # Видалення глобальних бінарних обгорток
     rm -f /usr/bin/qes-sign \
           /usr/bin/qes-verify \
@@ -14,7 +25,14 @@ if [ "$1" = "remove" ] || [ "$1" = "purge" ] || [ "$1" = "deconfigure" ]; then
           /usr/bin/qes-ocr \
           /usr/bin/qes-config \
           /usr/bin/qes-tool \
-          /usr/bin/qes-tools 2>/dev/null || true
+          /usr/bin/qes-tools \
+          /usr/bin/euscpnmh 2>/dev/null || true
+
+    # Видалення системних PKCS#11 посилань
+    rm -f /usr/lib/pkcs11/pkcs11-almaz1k.so \
+          /usr/lib/pkcs11/pkcs11-crystal1k.so \
+          /usr/lib/pkcs11/pkcs11-securetoken337.so \
+          /usr/lib/pkcs11/libeuscpt.so 2>/dev/null || true
 
     # Видалення скриптів Nautilus з /etc/skel
     rm -rf "/etc/skel/.local/share/nautilus/scripts/🔐 КЕП та Безпека" \
