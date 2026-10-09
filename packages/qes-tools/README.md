@@ -26,9 +26,19 @@ Engineered to preserve **attorney-client privilege**, complying with the Law of 
 - **⚖️ PDF Optimization for "Electronic Court" (`qes-pdf-court`)**:
   - Automated Fast Web View linearization for rapid opening in judicial portals.
   - Object stream compression and validation against the 50 MB platform upload limit.
+- **🔑 Hardware Security Tokens (ЗНОК) & EUSW Integration**:
+  - Full native driver integration for **DepositSign / IIT «Алмаз-1К»** (`03eb:9324`), **«Кристал-1К»** (`03eb:9325`), **Author «SecureToken-337»** (`0483:5740`), and **SafeNet eToken 5110**.
+  - Bundles all 30 native crypto modules from IIT End-User CA-1 (`eusw` v1.3.1.109) in `/opt/iit/eu/sw/`.
+  - Non-root user USB device access via `/etc/udev/rules.d/60-iit-e-keys.rules`.
+  - Native Messaging Host daemon (`euscpnmh`) automatically configured for Chrome, Chromium, Brave, Edge, and Firefox for web e-filing (Дія, Е-Суд, ДПС, ProZorro).
+  - Diagnostic tools: `qes-tool token` and `qes-cert --tokens`.
+- **🏛️ National QTSP Registry & Universal CA Bundle**:
+  - Registry of all 21 accredited Ukrainian trust service providers (`providers.js`) with auto-discovery and live CMP/TSP/OCSP endpoints.
+  - Universal national certificate bundle `ua-all-cas.p7b` (175 certificates from CZO Trusted List).
 - **🖱️ Full GNOME Files (Nautilus) Integration**:
-  - 16 ready-to-use actions in the desktop context menu: **Scripts ➔ 🔐 КЕП та Безпека**.
+  - 16 ready-to-use actions in the desktop context menu: **Scripts ➔ 🔐 КЕП та Безпека / QES & Security**.
   - Interactive GUI prompts with Zenity (`--gui`).
+  - Dynamic language switching: `qes-config --lang uk|en|auto`.
 - **🔒 Secure In-Memory Password Caching (`qes-agent`)**:
   - Private key passwords requested once per session and stored exclusively in RAM (TTL 15–30 min).
   - Instant memory wipe on demand via GUI button or CLI: `qes-agent clear`.
@@ -40,13 +50,14 @@ Engineered to preserve **attorney-client privilege**, complying with the Law of 
 ### Quick Installation on Debian / Ubuntu:
 
 ```bash
-sudo apt install ./dist/qes-tools_1.0.3_amd64.deb
+sudo apt install ./dist/qes-tools_1.0.6_amd64.deb
 ```
 
-The `apt` package manager automatically resolves and installs all required dependencies (`nodejs`, `python3-cryptography`, `openssl`, `zenity`, `qpdf`, `ocrmypdf`, `tesseract-ocr-ukr`, `tesseract-ocr-eng`, `libnotify-bin`).
+The `apt` package manager automatically resolves and installs all required dependencies (`nodejs`, `python3-cryptography`, `openssl`, `zenity`, `qpdf`, `ocrmypdf`, `tesseract-ocr-ukr`, `tesseract-ocr-eng`, `libnotify-bin`, `libpcsclite1`).
 
 After installation:
-- All 9 CLI commands become available on the system `$PATH`.
+- All master and subcommand CLI utilities become available on `$PATH`: `qes-tool`, `qes-sign`, `qes-verify`, `qes-cert`, `qes-ocr`, `qes-pdf-court`, `qes-encrypt`, `qes-decrypt`, `qes-export-cert`, `qes-agent`, `qes-config`.
+- Hardware token drivers and browser extension daemon are pre-configured.
 - The Nautilus context menu scripts are registered for the desktop environment.
 
 ---
@@ -54,31 +65,37 @@ After installation:
 ## 🛠️ Command-Line Interface (CLI) Usage
 
 ```bash
-# 1. Sign PDF with visual stamp and QR code
+# 1. Master CLI umbrella and diagnostics
+qes-tool --help
+qes-tool token                    # Diagnose connected hardware tokens (DepositSign, Almaz-1K, etc.)
+qes-tool providers                # Display accredited national QTSP registry
+
+# 2. Sign PDF with visual stamp and QR code
 qes-sign --pades lawsuit.pdf
 
-# 2. Add an additional signature (multi-signature / counter-sign)
+# 3. Add an additional signature (multi-signature / counter-sign)
 qes-sign --append contract_signed.pdf
 
-# 3. Create an ASiC-E archive container
+# 4. Create an ASiC-E archive container
 qes-sign --asice contract.pdf annex1.pdf -o case.asice
 
-# 4. Verify signatures (terminal output or interactive GUI dialog)
+# 5. Verify signatures (terminal output or interactive GUI dialog)
 qes-verify document.pdf.p7s
 qes-verify --gui contract_signed.pdf
 
-# 5. Inspect QTSP certificate
+# 6. Inspect QTSP certificate or connected tokens
 qes-cert my_certificate.cer
+qes-cert --tokens                 # Inspect connected hardware USB tokens
 qes-cert -j my_certificate.cer    # JSON output for scripting
 
-# 6. Optimize scanned document for E-Court with English OCR
+# 7. Optimize scanned document for E-Court with English OCR
 qes-pdf-court --eng contract_scan.pdf
 
-# 7. Encrypt and decrypt files
+# 8. Encrypt and decrypt files
 qes-encrypt confidential_file.pdf
 qes-decrypt confidential_file.pdf.enc
 
-# 8. Clear cached passwords from memory
+# 9. Clear cached passwords from memory
 qes-agent clear
 ```
 
@@ -87,10 +104,10 @@ qes-agent clear
 ## 🧪 Running Tests
 
 ```bash
-# Unit tests for the signing engine (17 tests)
+# Unit tests for the signing engine & token drivers (25 tests)
 npm test
 
-# Comprehensive end-to-end test suite (47 verification checks)
+# Comprehensive end-to-end test suite (65 verification checks)
 ./tests/e2e_all_scenarios.sh
 ```
 

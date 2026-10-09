@@ -10,7 +10,7 @@ Designed for lawyers, attorneys, insolvency officers, legal IT specialists, and 
 
 | Package | Description | Status | Documentation |
 | :--- | :--- | :---: | :---: |
-| **`qes-tools`** | Standalone QES/AES suite (DSTU 4145-2002, CAdES, stamped & unstamped PAdES, QR, ASiC-E, GOST encryption, court-ready OCR, 16 Nautilus scripts). | **v1.0.3** (Stable) | [Package README](packages/qes-tools/README.md) |
+| **`qes-tools`** | Standalone QES/AES suite (DSTU 4145-2002, CAdES, stamped & unstamped PAdES, QR, ASiC-E, GOST encryption, court-ready OCR, 16 Nautilus scripts, hardware tokens: DepositSign / Almaz-1K / Crystal-1K / SecureToken-337, official EUSW drivers & browser extension daemon). | **v1.0.6** (Stable) | [Package README](packages/qes-tools/README.md) |
 | **`deb-package-starter`** | Universal starter template for rapid development of new Debian packages. | **Template** | [Template README](templates/deb-package-starter/README.md) |
 
 ---
@@ -45,12 +45,14 @@ sudo apt update && sudo apt upgrade
 Download the latest release `.deb` package from [Releases](https://github.com/YaroslavBaienko/legaltech/releases) and install it:
 
 ```bash
-sudo apt install ./packages/qes-tools/dist/qes-tools_1.0.3_amd64.deb
+sudo apt install ./packages/qes-tools/dist/qes-tools_1.0.6_amd64.deb
 ```
 
 The `apt` package manager will automatically resolve and install all system dependencies. After installation, all features are ready:
 - **In GNOME Files (Nautilus)**: Right-click any file ➔ **Scripts** ➔ **`🔐 КЕП та Безпека`** (16 convenient actions).
-- **In the Terminal**: `qes-sign`, `qes-verify`, `qes-cert`, `qes-ocr`, `qes-pdf-court`, `qes-encrypt`, `qes-decrypt`, `qes-export-cert`, `qes-agent`.
+- **In the Terminal**: `qes-tool`, `qes-sign`, `qes-verify`, `qes-cert`, `qes-ocr`, `qes-pdf-court`, `qes-encrypt`, `qes-decrypt`, `qes-export-cert`, `qes-agent`, `qes-config`.
+- **Hardware USB Tokens (ЗНОК)**: Out-of-the-box drivers and udev rules for DepositSign / IIT («Алмаз-1К», «Кристал-1К»), Author («SecureToken-337»), and SafeNet. Run `qes-tool token` to inspect connected tokens.
+- **Web Browser E-Filing**: Automated Native Messaging Host (`euscpnmh`) integration for Chrome, Chromium, Brave, Microsoft Edge, and Mozilla Firefox (Дія, Електронний суд, ДПС, ProZorro).
 
 ---
 
