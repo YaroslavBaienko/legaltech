@@ -1,0 +1,42 @@
+-----BEGIN PGP SIGNED MESSAGE-----
+Hash: SHA512
+
+Architectures: amd64
+Codename: stable
+Components: main
+Date: Sat, 10 Oct 2026 16:13:43 +0000
+Label: LegalTech APT Repository
+Origin: LegalTech
+Suite: stable
+MD5Sum:
+ 3d9e1c4246a8d5471568876d158c25c3              157 Release
+ f6a6c34f3d7efec3f15f132355d4762b             1755 main/binary-amd64/Packages
+ 7c5d7ca1c5dcbce40c4be10fb9a9260d             1145 main/binary-amd64/Packages.gz
+SHA1:
+ 274d058317e37970cd9e8c36dad5c7c3ae246c24              157 Release
+ fed1edce4aa49ffd306b87aab6388ebaea388ae9             1755 main/binary-amd64/Packages
+ c064b8f116c1d0743b34dc8e734cf9a0cbefeed2             1145 main/binary-amd64/Packages.gz
+SHA256:
+ de5260555f350611ce2192919f7af1eab8b2e28c9a7ae6a529c48bc67670be0f              157 Release
+ ebb0b45bfa8330b31aba0b0e38b357d8b424d94ca4c1f08e632b647d7175822a             1755 main/binary-amd64/Packages
+ fe86f04d8e64483dcfa1a43d3bfefab8d62b9bdecc3ce262685596da1d2ade20             1145 main/binary-amd64/Packages.gz
+SHA512:
+ a534cedfc631f32e5b9d3a441666d6b41ee4dfc189d30e978cc80cae405329ba14b1b49b6c135af984c8a8ff0c0faf04b15635486b046047adacf031dae56360              157 Release
+ 470b1f84c2332028b9a1a367e497f409e0feea87be5026777002b21f70250e35a090895995bfca18b99d20dad43961958da9caae0876c765dd93fac961285d1d             1755 main/binary-amd64/Packages
+ cf5374b7938538561c7941fa6dfb19d8855508259348f89edaa4207ccb4255c1eff3fef1d51356329de608ebe5de074e166b934bd258ae077680c76975cb33dc             1145 main/binary-amd64/Packages.gz
+-----BEGIN PGP SIGNATURE-----
+
+iQIzBAEBCgAdFiEESd7bVCbPsc3kLQeobHniffT+1swFAmrKZDgACgkQbHniffT+
+1szPxRAAjBbgaQcMM1ljSfy8m5WH4gtULWFt4kvEVFQkK4B5qcTS2tdiADN1y1XN
+doNSZsJED5at5/UC9Htgf4yYWcI9UloWFwCnKvnLeGBcW9Nw5xMX5yAzVKRemF13
+QCBcOQX90ht3wcRAt+hD1H9P88W0ysPHp9vbBUL+h2R8fJwTj/NAzxLE/ewWfn2V
+AdXDNrujA95dQ8enY2MIJuQ5lFi6Zei6+0pTGggckt3eYJ5/za9QJJYvC59ZtLMu
+04a+m5MuLUyeeWJ/9go/hOcgFmDzPh02ApCPrqAcQi2XDlBSUNhw4vTdvkbsyKC8
+P5laJ4opsH38ie8L3wRyxTVTTBNnMKmmiidDAMwqWfShAMyWqif+xSSPHWrF2Bbb
+Napc6MyybrbtS2NnRXo2cbF2igJMbkoq51yARo0EidZTq37uaZ7F3lTbggrbceGJ
+HOJ1XHR4O7jrmKjjYEFtIYD0MttYQWyAkXZRmO1SUMejWn6hWspF+a3AMOOitVj+
+KT9HhE/AeONmUD5MJFfIEJuRCkuiWnLBPXp1jSr7B/o16NpVzTgkU5sN2kPZcrdQ
+qqAq9+m2j2HdPRiBibasvaWIeFcpV+q0K3SNyJNlZ7ImebrdsquonulIyY/xMGIn
+3h7ZLdN0A9XmTOVJflmII/NaUDEOSj8KhrbfIZbreciBEvY6Mik=
+=/edK
+-----END PGP SIGNATURE-----

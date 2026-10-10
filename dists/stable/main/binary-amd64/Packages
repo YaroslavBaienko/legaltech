@@ -1,0 +1,30 @@
+Package: qes-tools
+Architecture: amd64
+Version: 1.0.12
+Priority: optional
+Section: utils
+Maintainer: Yaroslav Baienko <zerhug@gmail.com>
+Provides: eusw (= 1.3.1.109)
+Depends: nodejs (>= 18), python3 (>= 3.10), python3-cryptography, openssl, zenity, libnotify-bin, qpdf, fonts-liberation, ocrmypdf, tesseract-ocr, tesseract-ocr-ukr, tesseract-ocr-eng, unpaper, xdg-utils, libc6 (>= 2.14), libpcsclite1
+Recommends: wl-clipboard | xclip, pcscd, libccid, opensc
+Conflicts: eusw (<< 1.3.1.109)
+Replaces: eusw
+Filename: pool/main/qes-tools_1.0.12_amd64.deb
+Size: 21983100
+MD5sum: 1b0120678074f3f028af8f838bba8ddf
+SHA1: 39d00e0661a748475de2e4e7d5e85c415745165a
+SHA256: cf63f9e5670951cbe9db10607e747c84cc9028966f5fb56997164ce2a4afe8bc
+SHA512: 96caffb7567d41829f9032feb947374329d5083178ef64e867a7466e552acbcbd6b573d24d5be4b5c0a3114cfe9dae19df5d38d292122d87c04aad17938b8f5e
+Homepage: https://github.com/YaroslavBaienko/legaltech
+Description: Ukrainian Qualified Electronic Signature & Encryption LegalTech Suite
+ Offline-first CLI & GUI toolkit for signing, verifying, and encrypting documents
+ conforming to Ukrainian DSTU 4145-2002, GOST 28147:89, PKCS#7/CAdES,
+ ETSI ASiC-E containers, PAdES (embedded PDF signatures with official visual stamps),
+ and asymmetric cryptographic envelopes (qes-encrypt, qes-decrypt).
+ Fully integrates IIT End-User CA-1 drivers (eusw, pkcs11.eka1c.so, pkcs11.ekc1.so,
+ libav337p11d.so) for native hardware USB tokens (DepositSign Almaz-1K, Crystal-1K,
+ SecureToken-337) and browser signing extension (Native Messaging Host).
+ Supports auto-discovery across all Ukrainian QTSPs (DepositSign, monobank, Diia,
+ Tax Service, PrivatBank, Vchasno, NAIS).
+ Preserves attorney-client privilege with 100% offline cryptographic operations.
+
