@@ -49,7 +49,7 @@ get_version() {
             fi
         fi
     done
-    echo "1.0.10"
+    echo "1.0.11"
 }
 
 VERSION="$(get_version)"

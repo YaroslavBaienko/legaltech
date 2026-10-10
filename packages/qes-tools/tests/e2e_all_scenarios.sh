@@ -528,7 +528,7 @@ log_test "CLI qes-tool: прапорець --version, довідка --help та
 
 # Перевірка прапорця --version
 tool_ver=$(qes-tool --version)
-if [[ "$tool_ver" == *"qes-tools v1.0.10"* ]]; then
+if [[ "$tool_ver" == *"qes-tools v1.0.11"* ]]; then
     assert_ok "qes-tool --version повертає коректний номер версії ($tool_ver)"
 else
     echo "Помилка qes-tool --version: $tool_ver" >&2; exit 1
@@ -536,7 +536,7 @@ fi
 
 # Перевірка синоніма qes-tools -v
 tools_ver=$(qes-tools -v)
-if [[ "$tools_ver" == *"qes-tools v1.0.10"* ]]; then
+if [[ "$tools_ver" == *"qes-tools v1.0.11"* ]]; then
     assert_ok "qes-tools -v працює ідентично через аліас ($tools_ver)"
 else
     echo "Помилка qes-tools -v: $tools_ver" >&2; exit 1
