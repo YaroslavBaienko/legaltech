@@ -676,8 +676,12 @@ def show_gui_report(results: List[Dict[str, Any]], file_path: str):
             "--width=650",
             "--height=460",
         ]
-        if os.path.isfile("/home/attor/.local/share/icons/Papirus/48x48/mimetypes/application-certificate.svg"):
-            cmd.append("--window-icon=/home/attor/.local/share/icons/Papirus/48x48/mimetypes/application-certificate.svg")
+        user_icon = os.path.expanduser("~/.local/share/icons/Papirus/48x48/mimetypes/application-certificate.svg")
+        sys_icon = "/usr/share/icons/Papirus/48x48/mimetypes/application-certificate.svg"
+        if os.path.isfile(user_icon):
+            cmd.append(f"--window-icon={user_icon}")
+        elif os.path.isfile(sys_icon):
+            cmd.append(f"--window-icon={sys_icon}")
         if is_asice:
             cmd.extend([f"--extra-button={extract_btn}"])
         cmd.extend(["--extra-button=📖 Help / Довідка"])
@@ -748,7 +752,7 @@ def main():
     parser = argparse.ArgumentParser(
         description="""================================================================================
   qes-verify — автономний валідатор КЕП/УЕП (.p7s, .asice, .pdf)
-  Версія 1.0.13 | 100% Offline-First | Захист адвокатської таємниці
+  Версія 1.0.14 | 100% Offline-First | Захист адвокатської таємниці
 ================================================================================
 
 ОПИС:

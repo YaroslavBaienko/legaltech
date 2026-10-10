@@ -89,11 +89,9 @@ async function chooseSigningMedium(options = {}) {
   // --- GUI MODE (Zenity) ---
   if (useGui || process.env.DISPLAY || process.env.WAYLAND_DISPLAY) {
     if (useGui) {
-      const PAPIRUS_CERT_ICON = fs.existsSync('/home/attor/.local/share/icons/Papirus/48x48/mimetypes/application-certificate.svg')
-        ? '/home/attor/.local/share/icons/Papirus/48x48/mimetypes/application-certificate.svg'
-        : (fs.existsSync('/usr/share/icons/Papirus/48x48/mimetypes/application-certificate.svg')
-          ? '/usr/share/icons/Papirus/48x48/mimetypes/application-certificate.svg'
-          : null);
+      const userIcon = path.join(process.env.HOME || '', '.local/share/icons/Papirus/48x48/mimetypes/application-certificate.svg');
+      const sysIcon = '/usr/share/icons/Papirus/48x48/mimetypes/application-certificate.svg';
+      const PAPIRUS_CERT_ICON = fs.existsSync(userIcon) ? userIcon : (fs.existsSync(sysIcon) ? sysIcon : null);
 
       const title = lang === 'en'
         ? 'Select Signature Medium — QES Tools'

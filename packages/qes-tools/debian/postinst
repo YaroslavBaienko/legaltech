@@ -41,9 +41,27 @@ if [ "$1" = "configure" ]; then
     if [ -x /usr/bin/qes-config ]; then
         /usr/bin/qes-config --all-users --lang auto 2>/dev/null || true
     elif [ -d /usr/share/nautilus-scripts ]; then
+        # Визначення мови за замовчуванням із /etc/default/locale
+        target_lang="en"
+        target_folder="🔐 QES & Security"
+        other_folder="🔐 КЕП та Безпека"
+        if [ -f /etc/default/locale ]; then
+            if grep -Eq '^(LANG|LC_MESSAGES)=.*uk' /etc/default/locale 2>/dev/null; then
+                target_lang="uk"
+                target_folder="🔐 КЕП та Безпека"
+                other_folder="🔐 QES & Security"
+            fi
+        fi
+
         mkdir -p /etc/skel/.local/share/nautilus/scripts/
-        rm -rf "/etc/skel/.local/share/nautilus/scripts/🔐 КЕП та Безпека"
-        cp -r "/usr/share/nautilus-scripts/🔐 КЕП та Безпека" /etc/skel/.local/share/nautilus/scripts/ 2>/dev/null || true
+        rm -rf "/etc/skel/.local/share/nautilus/scripts/$other_folder"
+        if [ -d "/usr/share/nautilus-scripts/$target_folder" ]; then
+            cp -r "/usr/share/nautilus-scripts/$target_folder" /etc/skel/.local/share/nautilus/scripts/ 2>/dev/null || true
+        else
+            cp -r "/usr/share/nautilus-scripts/🔐 КЕП та Безпека" /etc/skel/.local/share/nautilus/scripts/ 2>/dev/null || true
+        fi
+        mkdir -p /etc/skel/.config/qes/
+        echo "{\"lang\": \"auto\"}" > /etc/skel/.config/qes/config.json 2>/dev/null || true
 
         for user_home in /home/*; do
             if [ -d "$user_home" ]; then
@@ -51,10 +69,19 @@ if [ "$1" = "configure" ]; then
                 if id "$u" >/dev/null 2>&1; then
                     user_scripts="$user_home/.local/share/nautilus/scripts"
                     mkdir -p "$user_scripts"
-                    rm -rf "$user_scripts/🔐 КЕП та Безпека"
-                    cp -r "/usr/share/nautilus-scripts/🔐 КЕП та Безпека" "$user_scripts/" 2>/dev/null || true
-                    chmod -R 0755 "$user_scripts/🔐 КЕП та Безпека" 2>/dev/null || true
-                    chown -R "$u:" "$user_scripts/🔐 КЕП та Безпека" 2>/dev/null || true
+                    rm -rf "$user_scripts/$other_folder"
+                    if [ -d "/usr/share/nautilus-scripts/$target_folder" ]; then
+                        cp -r "/usr/share/nautilus-scripts/$target_folder" "$user_scripts/" 2>/dev/null || true
+                        chmod -R 0755 "$user_scripts/$target_folder" 2>/dev/null || true
+                        chown -R "$u:" "$user_scripts/$target_folder" 2>/dev/null || true
+                    else
+                        cp -r "/usr/share/nautilus-scripts/🔐 КЕП та Безпека" "$user_scripts/" 2>/dev/null || true
+                        chmod -R 0755 "$user_scripts/🔐 КЕП та Безпека" 2>/dev/null || true
+                        chown -R "$u:" "$user_scripts/🔐 КЕП та Безпека" 2>/dev/null || true
+                    fi
+                    mkdir -p "$user_home/.config/qes/"
+                    echo "{\"lang\": \"auto\"}" > "$user_home/.config/qes/config.json" 2>/dev/null || true
+                    chown -R "$u:" "$user_home/.config/qes" 2>/dev/null || true
                 fi
             fi
         done
@@ -64,10 +91,15 @@ if [ "$1" = "configure" ]; then
             if [ -n "$sudo_home" ] && [ -d "$sudo_home" ]; then
                 sudo_scripts="$sudo_home/.local/share/nautilus/scripts"
                 mkdir -p "$sudo_scripts"
-                rm -rf "$sudo_scripts/🔐 КЕП та Безпека"
-                cp -r "/usr/share/nautilus-scripts/🔐 КЕП та Безпека" "$sudo_scripts/" 2>/dev/null || true
-                chmod -R 0755 "$sudo_scripts/🔐 КЕП та Безпека" 2>/dev/null || true
-                chown -R "$SUDO_USER:" "$sudo_scripts/🔐 КЕП та Безпека" 2>/dev/null || true
+                rm -rf "$sudo_scripts/$other_folder"
+                if [ -d "/usr/share/nautilus-scripts/$target_folder" ]; then
+                    cp -r "/usr/share/nautilus-scripts/$target_folder" "$sudo_scripts/" 2>/dev/null || true
+                    chmod -R 0755 "$sudo_scripts/$target_folder" 2>/dev/null || true
+                    chown -R "$SUDO_USER:" "$sudo_scripts/$target_folder" 2>/dev/null || true
+                fi
+                mkdir -p "$sudo_home/.config/qes/"
+                echo "{\"lang\": \"auto\"}" > "$sudo_home/.config/qes/config.json" 2>/dev/null || true
+                chown -R "$SUDO_USER:" "$sudo_home/.config/qes" 2>/dev/null || true
             fi
         fi
 
@@ -195,7 +227,7 @@ EOF_NMH_FX
     done
 
     echo "================================================================================"
-    echo " 🇺🇦 Встановлено комплекс електронного підпису та шифрування qes-tools v1.0.13"
+    echo " 🇺🇦 Встановлено комплекс електронного підпису та шифрування qes-tools v1.0.14"
     echo " • qes-sign        — підписання (CAdES .p7s, PAdES .pdf, ASiC-E .asice, мультипідпис)"
     echo " • qes-verify      — перевірка підписів (.p7s, .pdf, .asice) та сертифікатів"
     echo " • qes-cert        — швидкий інспектор сертифікатів КНЕДП / АЦСК (X.509, ДСТУ 4145)"

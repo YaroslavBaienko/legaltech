@@ -31,9 +31,9 @@ function askPassword(promptText, forceGui = false) {
     if ((forceGui || !process.stdin.isTTY) && (process.env.DISPLAY || process.env.WAYLAND_DISPLAY)) {
       const cleanPrompt = (promptText || t('enterPassword')).replace(/\x1b\[[0-9;]*m/g, '');
       const pangoText = `<span size="larger" weight="bold" color="#2a75d3">🛡️ Захист особистого сейфа (.enc)</span>\n\n${cleanPrompt}\n<span size="small" color="#666666">Шифрування здійснюється за стандартом ДСТУ 4145 / ГОСТ 28147:89</span>`;
-      const PAPIRUS_VAULT_ICON = fs.existsSync('/home/attor/.local/share/icons/Papirus/48x48/emblems/emblem-encrypted-locked.svg')
-        ? '/home/attor/.local/share/icons/Papirus/48x48/emblems/emblem-encrypted-locked.svg'
-        : null;
+      const userVaultIcon = path.join(process.env.HOME || '', '.local/share/icons/Papirus/48x48/emblems/emblem-encrypted-locked.svg');
+      const sysVaultIcon = '/usr/share/icons/Papirus/48x48/emblems/emblem-encrypted-locked.svg';
+      const PAPIRUS_VAULT_ICON = fs.existsSync(userVaultIcon) ? userVaultIcon : (fs.existsSync(sysVaultIcon) ? sysVaultIcon : null);
 
       const zenArgs = [
         '--password',

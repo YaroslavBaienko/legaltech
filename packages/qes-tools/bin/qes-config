@@ -62,6 +62,7 @@ find_source_scripts_dir() {
     bin_parent="$(cd "$(dirname "$real_bin")/.." 2>/dev/null && pwd || true)"
 
     local candidate_dirs=(
+        "${QES_SOURCE_SCRIPTS_DIR:-}"
         "$bin_parent/nautilus-scripts"
         "$bin_parent/../nautilus-scripts"
         "$(cd "$(dirname "${BASH_SOURCE[0]}")/../nautilus-scripts" 2>/dev/null && pwd || true)"
@@ -293,6 +294,8 @@ main() {
         local eff_skel
         eff_skel=$(get_effective_lang "$target_lang")
         deploy_nautilus_scripts_for_dir "/etc/skel" "$eff_skel" "$src_dir"
+        mkdir -p "/etc/skel/.config/qes"
+        echo "{\"lang\": \"$target_lang\"}" > "/etc/skel/.config/qes/config.json"
 
         for u_home in /home/*; do
             if [[ -d "$u_home" ]]; then
@@ -303,6 +306,9 @@ main() {
                     eff_u=$(get_effective_lang "$target_lang")
                     deploy_nautilus_scripts_for_dir "$u_home" "$eff_u" "$src_dir"
                     chown -R "$u:" "$u_home/.local/share/nautilus/scripts" 2>/dev/null || true
+                    mkdir -p "$u_home/.config/qes"
+                    echo "{\"lang\": \"$target_lang\"}" > "$u_home/.config/qes/config.json"
+                    chown -R "$u:" "$u_home/.config/qes" 2>/dev/null || true
                 fi
             fi
         done

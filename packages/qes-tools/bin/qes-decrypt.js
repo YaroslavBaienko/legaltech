@@ -30,9 +30,9 @@ function askPassword(promptText, forceGui = false) {
     if ((forceGui || !process.stdin.isTTY) && (process.env.DISPLAY || process.env.WAYLAND_DISPLAY)) {
       const cleanPrompt = (promptText || t('enterPassword')).replace(/\x1b\[[0-9;]*m/g, '');
       const pangoText = `<span size="larger" weight="bold" color="#2a75d3">🔓 Розшифрування особистим КЕП</span>\n\n${cleanPrompt}\n<span size="small" color="#666666">Введіть пароль вашого особистого ключа для відкриття зашифрованого файлу (.enc):</span>`;
-      const PAPIRUS_UNLOCK_ICON = fs.existsSync('/home/attor/.local/share/icons/Papirus/48x48/emblems/emblem-unlocked.svg')
-        ? '/home/attor/.local/share/icons/Papirus/48x48/emblems/emblem-unlocked.svg'
-        : null;
+      const userUnlockIcon = path.join(process.env.HOME || '', '.local/share/icons/Papirus/48x48/emblems/emblem-unlocked.svg');
+      const sysUnlockIcon = '/usr/share/icons/Papirus/48x48/emblems/emblem-unlocked.svg';
+      const PAPIRUS_UNLOCK_ICON = fs.existsSync(userUnlockIcon) ? userUnlockIcon : (fs.existsSync(sysUnlockIcon) ? sysUnlockIcon : null);
 
       const zenArgs = [
         '--password',

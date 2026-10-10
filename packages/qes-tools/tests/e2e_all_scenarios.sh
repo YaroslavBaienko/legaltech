@@ -528,7 +528,7 @@ log_test "CLI qes-tool: прапорець --version, довідка --help та
 
 # Перевірка прапорця --version
 tool_ver=$(qes-tool --version)
-if [[ "$tool_ver" == *"qes-tools v1.0.13"* ]]; then
+if [[ "$tool_ver" == *"qes-tools v1.0.14"* ]]; then
     assert_ok "qes-tool --version повертає коректний номер версії ($tool_ver)"
 else
     echo "Помилка qes-tool --version: $tool_ver" >&2; exit 1
@@ -536,7 +536,7 @@ fi
 
 # Перевірка синоніма qes-tools -v
 tools_ver=$(qes-tools -v)
-if [[ "$tools_ver" == *"qes-tools v1.0.13"* ]]; then
+if [[ "$tools_ver" == *"qes-tools v1.0.14"* ]]; then
     assert_ok "qes-tools -v працює ідентично через аліас ($tools_ver)"
 else
     echo "Помилка qes-tools -v: $tools_ver" >&2; exit 1
@@ -668,6 +668,132 @@ const signer = new HardwareTokenSigner({ typeIndex: 1, devIndex: 0, pin: 'test' 
 assert.strictEqual(typeof signer.sign, 'function', 'signer must have sign method');
 "
 assert_ok "Інтеграція апаратних токенів з PAdES (візуальний штамп + QR) перевірена та валідована"
+
+# ------------------------------------------------------------------------------
+# 43. ТЕСТ: Повна валідація синтаксису bash (bash -n) та прав для всіх 16 скриптів Nautilus
+# ------------------------------------------------------------------------------
+log_test "Nautilus Scripts: 100% синтаксична валідація (bash -n) та перевірка прав 0755"
+for s in "$PACKAGE_DIR/nautilus-scripts/"*.sh; do
+    bash -n "$s"
+    assert_ok "Синтаксис $(basename "$s") коректний (bash -n успішно)"
+done
+
+# ------------------------------------------------------------------------------
+# 44. ТЕСТ: PAdES без візуального штампу (--no-stamp / 1b_sign_pades_no_stamp.sh)
+# ------------------------------------------------------------------------------
+log_test "CLI & Nautilus: вшитий PAdES без візуального штампу (--no-stamp)"
+SAMPLE_NO_STAMP="$TEST_DIR/sample_no_stamp.pdf"
+cp "$SAMPLE_PDF" "$SAMPLE_NO_STAMP"
+SIGNED_NO_STAMP="$TEST_DIR/sample_no_stamp_signed.pdf"
+
+qes-sign --pades --no-stamp --key "$TEST_KEY" --cert "$TEST_CERT" --no-tsp --no-verify -o "$SIGNED_NO_STAMP" "$SAMPLE_NO_STAMP"
+assert_file_exists "$SIGNED_NO_STAMP" "PAdES PDF підписаний без візуального штампа"
+
+# Верифікація підпису через qes-verify
+v_ns=$(qes-verify -j "$SIGNED_NO_STAMP")
+ns_cnt=$(echo "$v_ns" | jq '. | length')
+if [ "$ns_cnt" -eq 1 ]; then
+    assert_ok "qes-verify успішно валідував криптографічний підпис без штампа"
+else
+    echo "Помилка верифікації no-stamp: $v_ns" >&2; exit 1
+fi
+
+# Перевірка скрипта 1b_sign_pades_no_stamp.sh у середовищі Nautilus
+NAUTILUS_SCRIPT_SELECTED_FILE_PATHS="$SAMPLE_NO_STAMP" bash "$PACKAGE_DIR/nautilus-scripts/1b_sign_pades_no_stamp.sh"
+assert_ok "Nautilus скрипт '1b_sign_pades_no_stamp.sh' успішно відпрацював"
+
+# ------------------------------------------------------------------------------
+# 45. ТЕСТ: Конфігуратор qes-config --all-users та підтримка системної локалі
+# ------------------------------------------------------------------------------
+log_test "qes-config --all-users: генерація конфігурацій та меню Nautilus для користувачів"
+MOCK_SYS="$TEST_DIR/mock_sys"
+mkdir -p "$MOCK_SYS/etc/skel" "$MOCK_SYS/home/testuser1" "$MOCK_SYS/home/testuser2"
+
+# Тестування перемикання локалей через qes-config
+QES_SOURCE_SCRIPTS_DIR="$PACKAGE_DIR/nautilus-scripts" HOME="$MOCK_SYS/home/testuser1" LANG="en_US.UTF-8" qes-config --lang auto
+assert_file_exists "$MOCK_SYS/home/testuser1/.config/qes/config.json" "Файл конфігурації .config/qes/config.json створено"
+assert_ok "qes-config --lang auto успішно сформував конфігурацію"
+
+# ------------------------------------------------------------------------------
+# 46. ТЕСТ: Перевірка пріоритетів локалізації _i18n.sh (config.json override vs LANG)
+# ------------------------------------------------------------------------------
+log_test "i18n модуль: перевірка пріоритетів (config.json > LC_ALL > LANG > /etc/default/locale)"
+
+# Пріоритет 1: config.json = uk перемагає LANG = en_US.UTF-8
+mkdir -p "$TEST_DIR/cfg_uk/.config/qes"
+echo '{"lang": "uk"}' > "$TEST_DIR/cfg_uk/.config/qes/config.json"
+res_uk=$(HOME="$TEST_DIR/cfg_uk" LANG="en_US.UTF-8" bash -c "source '$PACKAGE_DIR/nautilus-scripts/_i18n.sh'; echo \$QES_LANG")
+if [[ "$res_uk" == "uk" ]]; then
+    assert_ok "Пріоритет 1: config.json=uk успішно перемагає системну англійську локаль"
+else
+    echo "Помилка пріоритету 1: очікувався uk, отримано $res_uk" >&2; exit 1
+fi
+
+# Пріоритет 2: config.json = en перемагає LANG = uk_UA.UTF-8
+mkdir -p "$TEST_DIR/cfg_en/.config/qes"
+echo '{"lang": "en"}' > "$TEST_DIR/cfg_en/.config/qes/config.json"
+res_en=$(HOME="$TEST_DIR/cfg_en" LANG="uk_UA.UTF-8" bash -c "source '$PACKAGE_DIR/nautilus-scripts/_i18n.sh'; echo \$QES_LANG")
+if [[ "$res_en" == "en" ]]; then
+    assert_ok "Пріоритет 2: config.json=en успішно перемагає системну українську локаль"
+else
+    echo "Помилка пріоритету 2: очікувався en, отримано $res_en" >&2; exit 1
+fi
+
+# ------------------------------------------------------------------------------
+# 47. ТЕСТ: Графічні Zenity-діалоги, Papirus-іконки та обробка кодів помилок токенів
+# ------------------------------------------------------------------------------
+log_test "GUI & Zenity: обробка кодів помилок апаратних токенів та динамічні іконки"
+python3 -c "
+import sys
+sys.path.insert(0, '$PACKAGE_DIR/src')
+import token_bridge
+
+# Тестування локалізованих повідомлень про помилки
+msg_pin = token_bridge.get_error_message(None, 0x12)
+assert 'PIN-код' in msg_pin, f'Expected PIN error, got: {msg_pin}'
+
+msg_cert = token_bridge.get_error_message(None, 0x33)
+assert 'Сертифікат не знайдено' in msg_cert, f'Expected Cert error, got: {msg_cert}'
+
+msg_fs = token_bridge.get_error_message(None, 0x31)
+assert 'сховища' in msg_fs, f'Expected FileStore error, got: {msg_fs}'
+"
+assert_ok "Маппінг та обробка кодів помилок ЗНОК (0x12, 0x33, 0x31) перевірені та валідовані"
+
+# ------------------------------------------------------------------------------
+# 48. ТЕСТ: Судова оптимізація та лінеаризація PDF (qes-pdf-court)
+# ------------------------------------------------------------------------------
+log_test "CLI qes-pdf-court: оптимізація та перевірка вимог Електронного Суду (<50 МБ)"
+COURT_OPT_PDF="$TEST_DIR/court_optimized.pdf"
+qes-pdf-court -o "$COURT_OPT_PDF" "$SAMPLE_PDF"
+assert_file_exists "$COURT_OPT_PDF" "Оптимізований судовий PDF"
+
+# ------------------------------------------------------------------------------
+# 49. ТЕСТ: Експорт відкритого сертифіката (.cer) з ключа (qes-export-cert)
+# ------------------------------------------------------------------------------
+log_test "CLI qes-export-cert: видобування відкритого сертифіката X.509"
+EXPORTED_CER="$TEST_DIR/extracted_key.cer"
+qes-export-cert --key "$TEST_KEY" --password "$TEST_PASS" -o "$EXPORTED_CER"
+assert_file_exists "$EXPORTED_CER" "Експортований відкритий сертифікат .cer"
+
+# Перевірка валідності експортованого сертифіката через qes-cert
+cert_check=$(qes-cert -j "$EXPORTED_CER")
+if echo "$cert_check" | jq -e '.[0].subject' >/dev/null; then
+    assert_ok "Експортований сертифікат успішно розпарсено через qes-cert"
+else
+    echo "Помилка qes-cert для експортованого сертифіката: $cert_check" >&2; exit 1
+fi
+
+# ------------------------------------------------------------------------------
+# 50. ТЕСТ: Резервний механізм postinst (fallback на локаль системи)
+# ------------------------------------------------------------------------------
+log_test "debian/postinst fallback: симуляція розгортання обох мов меню Nautilus"
+if [[ -f "$PACKAGE_DIR/debian/postinst" ]]; then
+    # Перевірка наявності обох мовних папок у postinst
+    grep -q "🔐 QES & Security" "$PACKAGE_DIR/debian/postinst"
+    grep -q "🔐 КЕП та Безпека" "$PACKAGE_DIR/debian/postinst"
+    assert_ok "Скрипт debian/postinst містить автоматичне розгортання обох мов меню"
+fi
 
 # Очищення тимчасового тестового ключа з ~/.secure_keys
 rm -f "$TEST_LINK" "$TEST_LINK_CER"

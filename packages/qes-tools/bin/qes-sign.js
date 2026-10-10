@@ -54,9 +54,9 @@ function askPassword(promptText, forceGui = false) {
 
         const pangoText = `<span size="larger" weight="bold" color="#2a75d3">${header}</span>\n\n${cleanPrompt}\n<span size="small" color="#666666">${sub}</span>`;
 
-        const PAPIRUS_LOCK_ICON = fs.existsSync('/home/attor/.local/share/icons/Papirus/48x48/status/stock_lock.svg')
-          ? '/home/attor/.local/share/icons/Papirus/48x48/status/stock_lock.svg'
-          : null;
+        const userLockIcon = path.join(process.env.HOME || '', '.local/share/icons/Papirus/48x48/status/stock_lock.svg');
+        const sysLockIcon = '/usr/share/icons/Papirus/48x48/status/stock_lock.svg';
+        const PAPIRUS_LOCK_ICON = fs.existsSync(userLockIcon) ? userLockIcon : (fs.existsSync(sysLockIcon) ? sysLockIcon : null);
 
         const zenArgs = [
           '--password',
@@ -155,7 +155,7 @@ async function main() {
     console.log(`
 ${CLR_BOLD}${CLR_CYAN}================================================================================${CLR_RESET}
 ${CLR_BOLD}${CLR_CYAN}  qes-sign — автономний інструмент підписання КЕП (ДСТУ 4145-2002 / PAdES / CAdES)${CLR_RESET}
-${CLR_BOLD}${CLR_CYAN}  Версія 1.0.13 | 100% Offline-First | Захист адвокатської таємниці${CLR_RESET}
+${CLR_BOLD}${CLR_CYAN}  Версія 1.0.14 | 100% Offline-First | Захист адвокатської таємниці${CLR_RESET}
 ${CLR_BOLD}${CLR_CYAN}================================================================================${CLR_RESET}
 
 ${CLR_BOLD}ОПИС:${CLR_RESET}

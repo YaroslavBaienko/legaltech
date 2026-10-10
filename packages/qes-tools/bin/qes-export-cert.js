@@ -30,9 +30,9 @@ function askPassword(promptText, forceGui = false) {
     if ((forceGui || !process.stdin.isTTY) && (process.env.DISPLAY || process.env.WAYLAND_DISPLAY)) {
       const cleanPrompt = (promptText || t('enterPassword')).replace(/\x1b\[[0-9;]*m/g, '');
       const pangoText = `<span size="larger" weight="bold" color="#2a75d3">📤 Експорт відкритого сертифіката (.cer)</span>\n\n${cleanPrompt}\n<span size="small" color="#666666">Введіть пароль для безпечного видобування відкритого сертифіката з контейнера КЕП:</span>`;
-      const PAPIRUS_CERT_ICON = fs.existsSync('/home/attor/.local/share/icons/Papirus/48x48/mimetypes/application-certificate.svg')
-        ? '/home/attor/.local/share/icons/Papirus/48x48/mimetypes/application-certificate.svg'
-        : null;
+      const userCertIcon = path.join(process.env.HOME || '', '.local/share/icons/Papirus/48x48/mimetypes/application-certificate.svg');
+      const sysCertIcon = '/usr/share/icons/Papirus/48x48/mimetypes/application-certificate.svg';
+      const PAPIRUS_CERT_ICON = fs.existsSync(userCertIcon) ? userCertIcon : (fs.existsSync(sysCertIcon) ? sysCertIcon : null);
 
       const zenArgs = [
         '--password',

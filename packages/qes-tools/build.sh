@@ -8,7 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PKG_ROOT="${SCRIPT_DIR}"
 
 PKG_NAME="qes-tools"
-PKG_VERSION="1.0.13"
+PKG_VERSION="$(grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' "${PKG_ROOT}/package.json" 2>/dev/null | cut -d'"' -f4 || echo "1.0.14")"
 PKG_ARCH="amd64"
 DEB_FILENAME="${PKG_NAME}_${PKG_VERSION}_${PKG_ARCH}.deb"
 
@@ -232,6 +232,28 @@ cp "${PKG_ROOT}/nautilus-scripts/0_help.sh" "$NAUTILUS_TARGET/16. 📖 Дові�
 cp "${PKG_ROOT}/nautilus-scripts/_i18n.sh" "$NAUTILUS_TARGET/.i18n.sh"
 chmod 0755 "$NAUTILUS_TARGET/"*
 chmod 0755 "$NAUTILUS_TARGET/.i18n.sh"
+
+NAUTILUS_TARGET_EN="${BUILD_ROOT}/usr/share/nautilus-scripts/🔐 QES & Security"
+mkdir -p "$NAUTILUS_TARGET_EN"
+cp "${PKG_ROOT}/nautilus-scripts/1_sign_pades.sh" "$NAUTILUS_TARGET_EN/01. ✍️ Sign (PAdES PDF with Stamp & QR)"
+cp "${PKG_ROOT}/nautilus-scripts/1b_sign_pades_no_stamp.sh" "$NAUTILUS_TARGET_EN/02. ✍️ Sign (PAdES PDF without Stamp & QR)"
+cp "${PKG_ROOT}/nautilus-scripts/2_sign_p7s.sh" "$NAUTILUS_TARGET_EN/03. ✍️ Sign (Detached Signature .p7s)"
+cp "${PKG_ROOT}/nautilus-scripts/3_sign_asice.sh" "$NAUTILUS_TARGET_EN/04. 📦 Sign (Package Container ASiC-E)"
+cp "${PKG_ROOT}/nautilus-scripts/10_append_signature.sh" "$NAUTILUS_TARGET_EN/05. ✍️ Add Secondary Signature (Multi-Sign)"
+cp "${PKG_ROOT}/nautilus-scripts/4_verify.sh" "$NAUTILUS_TARGET_EN/06. 🔍 Verify QES Signature"
+cp "${PKG_ROOT}/nautilus-scripts/13_view_cert.sh" "$NAUTILUS_TARGET_EN/07. 📜 View CA Certificate Details"
+cp "${PKG_ROOT}/nautilus-scripts/8_export_cert.sh" "$NAUTILUS_TARGET_EN/08. 📤 Export Public Certificate (.cer)"
+cp "${PKG_ROOT}/nautilus-scripts/5_encrypt_self.sh" "$NAUTILUS_TARGET_EN/09. 🛡️ Encrypt to Personal Vault (.enc)"
+cp "${PKG_ROOT}/nautilus-scripts/6_encrypt_recipient.sh" "$NAUTILUS_TARGET_EN/10. 📨 Encrypt for Recipient (.enc)"
+cp "${PKG_ROOT}/nautilus-scripts/7_decrypt.sh" "$NAUTILUS_TARGET_EN/11. 🔓 Decrypt with Personal Key"
+cp "${PKG_ROOT}/nautilus-scripts/9_pdf_court.sh" "$NAUTILUS_TARGET_EN/12. ⚖️ Optimize PDF for Court"
+cp "${PKG_ROOT}/nautilus-scripts/12_ocr_court.sh" "$NAUTILUS_TARGET_EN/13. 👁️ OCR Text Recognition (Court PDF)"
+cp "${PKG_ROOT}/nautilus-scripts/14_ocr_english.sh" "$NAUTILUS_TARGET_EN/14. 👁️ OCR Text Recognition (🇬🇧 English)"
+cp "${PKG_ROOT}/nautilus-scripts/11_lock_session.sh" "$NAUTILUS_TARGET_EN/15. 🔒 Lock Session (Clear Password Cache)"
+cp "${PKG_ROOT}/nautilus-scripts/0_help.sh" "$NAUTILUS_TARGET_EN/16. 📖 Help & QES Documentation"
+cp "${PKG_ROOT}/nautilus-scripts/_i18n.sh" "$NAUTILUS_TARGET_EN/.i18n.sh"
+chmod 0755 "$NAUTILUS_TARGET_EN/"*
+chmod 0755 "$NAUTILUS_TARGET_EN/.i18n.sh"
 
 # 7. Встановлення юніта systemd --user для qes-agent
 if [ -f "${PKG_ROOT}/systemd/qes-agent.service" ]; then

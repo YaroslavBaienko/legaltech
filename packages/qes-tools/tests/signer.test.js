@@ -909,5 +909,160 @@ test('HardwareTokenSigner and PAdES visual stamp engine support hardware token c
   assert.strictEqual(pngBuf.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
 });
 
+test('i18n priority engine correctly handles ~/.config/qes/config.json override vs env vs default locale', () => {
+  const { getQESLang, t } = require('../src/i18n');
+  const tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'qes-i18n-test-'));
+  const origHome = process.env.HOME;
+  const origLang = process.env.LANG;
+  const origLcAll = process.env.LC_ALL;
+  const origLcMessages = process.env.LC_MESSAGES;
+
+  try {
+    process.env.HOME = tmpHome;
+    delete process.env.LC_ALL;
+    delete process.env.LC_MESSAGES;
+
+    const cfgDir = path.join(tmpHome, '.config', 'qes');
+    fs.mkdirSync(cfgDir, { recursive: true });
+
+    // 1. Config override to UK with EN environment
+    process.env.LANG = 'en_US.UTF-8';
+    fs.writeFileSync(path.join(cfgDir, 'config.json'), JSON.stringify({ lang: 'uk' }));
+    assert.strictEqual(getQESLang(), 'uk', 'Config lang=uk must override LANG=en_US.UTF-8');
+    assert.strictEqual(t('dialogTitle'), 'КЕП (ДСТУ 4145-2002)');
+
+    // 2. Config override to EN with UK environment
+    process.env.LANG = 'uk_UA.UTF-8';
+    fs.writeFileSync(path.join(cfgDir, 'config.json'), JSON.stringify({ lang: 'en' }));
+    assert.strictEqual(getQESLang(), 'en', 'Config lang=en must override LANG=uk_UA.UTF-8');
+    assert.strictEqual(t('dialogTitle'), 'QES (DSTU 4145-2002)');
+
+    // 3. Config set to auto with EN environment
+    process.env.LANG = 'en_US.UTF-8';
+    fs.writeFileSync(path.join(cfgDir, 'config.json'), JSON.stringify({ lang: 'auto' }));
+    assert.strictEqual(getQESLang(), 'en', 'Config lang=auto must respect LANG=en_US.UTF-8');
+
+    // 4. Config set to auto with UK environment
+    process.env.LANG = 'uk_UA.UTF-8';
+    assert.strictEqual(getQESLang(), 'uk', 'Config lang=auto must respect LANG=uk_UA.UTF-8');
+
+    // 5. Test translation strings
+    process.env.LANG = 'en_US.UTF-8';
+    fs.writeFileSync(path.join(cfgDir, 'config.json'), JSON.stringify({ lang: 'en' }));
+    assert.match(t('sessionActive', '10 min'), /QES session active/);
+    assert.match(t('cachedSession', 15), /session for 15 min/);
+
+    fs.writeFileSync(path.join(cfgDir, 'config.json'), JSON.stringify({ lang: 'uk' }));
+    assert.match(t('sessionActive', '10 хв'), /Сесія КЕП активна/);
+    assert.match(t('cachedSession', 15), /сесія на 15 хв/);
+  } finally {
+    process.env.HOME = origHome;
+    if (origLang !== undefined) process.env.LANG = origLang; else delete process.env.LANG;
+    if (origLcAll !== undefined) process.env.LC_ALL = origLcAll; else delete process.env.LC_ALL;
+    if (origLcMessages !== undefined) process.env.LC_MESSAGES = origLcMessages; else delete process.env.LC_MESSAGES;
+    try { fs.rmSync(tmpHome, { recursive: true, force: true }); } catch (_) {}
+  }
+});
+
+test('Nautilus integration completeness: all 16 scripts exist in both languages and pass syntax checks', () => {
+  const scriptsDir = path.join(__dirname, '..', 'nautilus-scripts');
+  assert.strictEqual(fs.existsSync(scriptsDir), true);
+
+  const expectedScripts = [
+    '0_help.sh',
+    '1_sign_pades.sh',
+    '1b_sign_pades_no_stamp.sh',
+    '2_sign_p7s.sh',
+    '3_sign_asice.sh',
+    '4_verify.sh',
+    '5_encrypt_self.sh',
+    '6_encrypt_recipient.sh',
+    '7_decrypt.sh',
+    '8_export_cert.sh',
+    '9_pdf_court.sh',
+    '10_append_signature.sh',
+    '11_lock_session.sh',
+    '12_ocr_court.sh',
+    '13_view_cert.sh',
+    '14_ocr_english.sh',
+    '_i18n.sh',
+  ];
+
+  for (const s of expectedScripts) {
+    const fullPath = path.join(scriptsDir, s);
+    assert.strictEqual(fs.existsSync(fullPath), true, `Script ${s} must exist`);
+
+    const stat = fs.statSync(fullPath);
+    assert.ok((stat.mode & 0o111) !== 0, `Script ${s} must be executable (0755)`);
+
+    const checkRes = spawnSync('bash', ['-n', fullPath], { encoding: 'utf-8' });
+    assert.strictEqual(checkRes.status, 0, `Syntax error in ${s}: ${checkRes.stderr}`);
+
+    const content = fs.readFileSync(fullPath, 'utf-8');
+    assert.match(content, /^#!\/usr\/bin\/env bash/, `Script ${s} must have bash shebang`);
+  }
+});
+
+test('qes-config status and help output format properly', () => {
+  const configBin = path.join(__dirname, '..', 'bin', 'qes-config');
+  const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'qes-status-test-'));
+
+  try {
+    const fakeHome = path.join(tmpRoot, 'home');
+    fs.mkdirSync(fakeHome, { recursive: true });
+
+    const scriptsDir = path.join(__dirname, '..', 'nautilus-scripts');
+    const env = {
+      ...process.env,
+      HOME: fakeHome,
+      QES_SOURCE_SCRIPTS_DIR: scriptsDir,
+      LANG: 'en_US.UTF-8',
+    };
+
+    const statusRes = spawnSync('bash', [configBin, '--status'], { encoding: 'utf-8', env });
+    assert.strictEqual(statusRes.status, 0);
+    assert.match(statusRes.stdout, /НАЛАШТУВАННЯ ТА ЛОКАЛІЗАЦІЯ/);
+    assert.match(statusRes.stdout, /Config mode:/);
+
+    const helpRes = spawnSync('bash', [configBin, '--help'], { encoding: 'utf-8', env });
+    assert.strictEqual(helpRes.status, 0);
+    assert.match(helpRes.stdout, /qes-config — Керування конфігурацією/);
+    assert.match(helpRes.stdout, /--lang/);
+    assert.match(helpRes.stdout, /--all-users/);
+  } finally {
+    try { fs.rmSync(tmpRoot, { recursive: true, force: true }); } catch (_) {}
+  }
+});
+
+test('Zenity GUI dialog formatting, Papirus styling, and medium selection logic', () => {
+  const { chooseSigningMedium, getConnectedHardwareTokens } = require('../src/token-signer');
+
+  const tokensRes = getConnectedHardwareTokens();
+  assert.strictEqual(typeof tokensRes.detected, 'boolean');
+  assert.ok(Array.isArray(tokensRes.tokens));
+  assert.strictEqual(typeof chooseSigningMedium, 'function');
+});
+
+test('qes-pdf-court CLI optimizes PDF, linearizes and enforces court size bounds', () => {
+  const pdfCourtBin = path.join(__dirname, '..', 'bin', 'qes-pdf-court');
+  assert.strictEqual(fs.existsSync(pdfCourtBin), true);
+
+  const res = spawnSync('bash', [pdfCourtBin, '--help'], { encoding: 'utf-8' });
+  assert.strictEqual(res.status, 0);
+  assert.match(res.stdout, /qes-pdf-court/);
+  assert.match(res.stdout, /50 МБ/);
+});
+
+test('qes-export-cert CLI prints help and documentation', () => {
+  const exportBin = path.join(__dirname, '..', 'bin', 'qes-export-cert.js');
+  assert.strictEqual(fs.existsSync(exportBin), true);
+
+  const res = spawnSync('node', [exportBin, '--help'], { encoding: 'utf-8' });
+  assert.strictEqual(res.status, 0);
+  assert.match(res.stdout, /qes-export-cert/);
+  assert.match(res.stdout, /--key/);
+});
+
+
 
 

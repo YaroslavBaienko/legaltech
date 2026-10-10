@@ -216,8 +216,12 @@ show_ocr_help_dialog() {
 if [[ "$USE_GUI" = true && "$LANG_SPECIFIED" = false ]]; then
     while true; do
         PAPIRUS_DOC_ICON=""
-        if [[ -f "/home/attor/.local/share/icons/Papirus/48x48/mimetypes/application-certificate.svg" ]]; then
-            PAPIRUS_DOC_ICON="/home/attor/.local/share/icons/Papirus/48x48/mimetypes/application-certificate.svg"
+        user_icon="$HOME/.local/share/icons/Papirus/48x48/mimetypes/application-certificate.svg"
+        sys_icon="/usr/share/icons/Papirus/48x48/mimetypes/application-certificate.svg"
+        if [[ -f "$user_icon" ]]; then
+            PAPIRUS_DOC_ICON="$user_icon"
+        elif [[ -f "$sys_icon" ]]; then
+            PAPIRUS_DOC_ICON="$sys_icon"
         fi
 
         ZEN_OCR_ARGS=(
