@@ -162,13 +162,40 @@ EOF_NMH_FX
         udevadm trigger --subsystem-match=usb 2>/dev/null || true
     fi
 
-    # 3. Активація сокета pcscd для роботи смарт-карт CCID (якщо встановлено systemd)
-    if command -v systemctl >/dev/null 2>&1 && systemctl is-system-running >/dev/null 2>&1; then
-        systemctl enable --now pcscd.socket 2>/dev/null || true
+    # 4. Ініціалізація загальносистемного сховища сертифікатів КНЕДП та сумісності з ІІТ (/data/certificates)
+    mkdir -p /var/lib/qes-tools/certificates 2>/dev/null || true
+    chmod 0777 /var/lib/qes-tools/certificates 2>/dev/null || true
+
+    # Створюємо символічне посилання для сумісності з дефолтним шляхом ІІТ (/data/certificates)
+    if [ ! -d /data ]; then
+        mkdir -p /data 2>/dev/null || true
+    fi
+    ln -sfn /var/lib/qes-tools/certificates /data/certificates 2>/dev/null || true
+
+    # Копіюємо всі сертифікати КНЕДП у системне сховище
+    if [ -d /usr/lib/qes-tools/certs ]; then
+        cp -rn /usr/lib/qes-tools/certs/*.cer /var/lib/qes-tools/certificates/ 2>/dev/null || true
+        chmod -R 0666 /var/lib/qes-tools/certificates/*.cer 2>/dev/null || true
     fi
 
+    # Налаштовуємо сховище в домашній директорії користувачів
+    for user_home in /home/*; do
+        if [ -d "$user_home" ]; then
+            u=$(basename "$user_home")
+            if id "$u" >/dev/null 2>&1; then
+                u_store="$user_home/.local/share/qes-tools/certificates"
+                mkdir -p "$u_store" 2>/dev/null || true
+                cp -rn /var/lib/qes-tools/certificates/*.cer "$u_store/" 2>/dev/null || true
+                if [ -d "$user_home/.secure_keys" ]; then
+                    cp -rn "$user_home/.secure_keys"/*.cer "$u_store/" 2>/dev/null || true
+                fi
+                chown -R "$u:" "$user_home/.local/share/qes-tools" 2>/dev/null || true
+            fi
+        fi
+    done
+
     echo "================================================================================"
-    echo " 🇺🇦 Встановлено комплекс електронного підпису та шифрування qes-tools v1.0.11"
+    echo " 🇺🇦 Встановлено комплекс електронного підпису та шифрування qes-tools v1.0.12"
     echo " • qes-sign        — підписання (CAdES .p7s, PAdES .pdf, ASiC-E .asice, мультипідпис)"
     echo " • qes-verify      — перевірка підписів (.p7s, .pdf, .asice) та сертифікатів"
     echo " • qes-cert        — швидкий інспектор сертифікатів КНЕДП / АЦСК (X.509, ДСТУ 4145)"

@@ -10,7 +10,7 @@ Designed for lawyers, attorneys, insolvency officers, legal IT specialists, and 
 
 | Package | Description | Status | Documentation |
 | :--- | :--- | :---: | :---: |
-| **`qes-tools`** | Standalone QES/AES suite (DSTU 4145-2002, CAdES, stamped & unstamped PAdES, QR, ASiC-E, GOST encryption, court-ready OCR, 16 Nautilus scripts with Papirus UI & 01..16 ordering, contextual key/token selector modal, hardware tokens: DepositSign / Almaz-1K / Crystal-1K / SecureToken-337, official EUSW drivers & browser extension daemon, Web Sign Agent HTTP:8081 / HTTPS:8083). | **v1.0.11** (Stable) | [Package README](packages/qes-tools/README.md) |
+| **`qes-tools`** | Standalone QES/AES suite (DSTU 4145-2002, CAdES, stamped & unstamped PAdES, QR, ASiC-E, GOST encryption, court-ready OCR, 16 Nautilus scripts with Papirus UI & 01..16 ordering, contextual key/token selector modal, hardware tokens: DepositSign / Almaz-1K / Crystal-1K / SecureToken-337, official EUSW drivers & browser extension daemon, Web Sign Agent HTTP:8081 / HTTPS:8083). | **v1.0.12** (Stable) | [Package README](packages/qes-tools/README.md) |
 | **`deb-package-starter`** | Universal starter template for rapid development of new Debian packages. | **Template** | [Template README](templates/deb-package-starter/README.md) |
 
 ---
@@ -45,7 +45,7 @@ sudo apt update && sudo apt upgrade
 Download the latest release `.deb` package from [Releases](https://github.com/YaroslavBaienko/legaltech/releases) and install it:
 
 ```bash
-sudo apt install ./packages/qes-tools/dist/qes-tools_1.0.11_amd64.deb
+sudo apt install ./packages/qes-tools/dist/qes-tools_1.0.12_amd64.deb
 ```
 
 The `apt` package manager will automatically resolve and install all system dependencies. After installation, all features are ready:

@@ -9,6 +9,7 @@ import os
 import json
 import base64
 import ctypes
+import shutil
 from pathlib import Path
 
 # Paths to IIT native libraries
@@ -49,13 +50,55 @@ TOKEN_TYPES = {
     "0529:0620": 29, # SafeNet eToken 5110
 }
 
+def init_eusign(lib):
+    """
+    Initializes EUSign library with a user-writable configuration directory
+    and synchronized certificate store. Calling EUSetSettingsFilePath BEFORE
+    EUInitialize is required to avoid read-only failures on /opt/iit/eu/sw/osplm.ini.
+    """
+    cfg_dir = Path.home() / ".local/share/qes-tools"
+    cfg_dir.mkdir(parents=True, exist_ok=True)
+    user_ini = cfg_dir / "osplm.ini"
+    stock_ini = Path("/opt/iit/eu/sw/osplm.ini")
+
+    if not user_ini.exists():
+        if stock_ini.exists():
+            try:
+                shutil.copy(stock_ini, user_ini)
+            except Exception:
+                pass
+        if not user_ini.exists():
+            try:
+                store_dir = cfg_dir / "certificates"
+                user_ini.write_text(f"""[\\SOFTWARE\\Institute of Informational Technologies\\Certificate Authority-1.3\\End User]
+[\\SOFTWARE\\Institute of Informational Technologies\\Certificate Authority-1.3\\End User\\FileStore]
+ExpireTime=3600
+SaveLoadedCerts=1
+AutoDownloadCRLs=0
+FullAndDeltaCRLs=1
+OnlyOwnCRLs=1
+AutoRefresh=0
+CheckCRLs=0
+Path={store_dir}
+""")
+            except Exception:
+                pass
+
+    try:
+        lib.EUSetSettingsFilePath(str(cfg_dir).encode("utf-8"))
+    except Exception:
+        pass
+
+    lib.EUInitialize()
+    ensure_filestore_initialized(lib)
+
 def detect_tokens():
     lib = load_euscp_lib()
     devices = []
     if not lib:
         return {"detected": False, "tokens": [], "error": "Бібліотека euscp.so не знайдена"}
 
-    lib.EUInitialize()
+    init_eusign(lib)
     buf = ctypes.create_string_buffer(256)
 
     # Check known hardware token types
@@ -91,18 +134,52 @@ def ensure_filestore_initialized(lib):
     store_dir = Path.home() / ".local/share/qes-tools/certificates"
     store_dir.mkdir(parents=True, exist_ok=True)
 
-    user_keys_dir = Path.home() / ".secure_keys"
-    if user_keys_dir.is_dir():
-        for cf in user_keys_dir.glob("*.cer"):
-            dest = store_dir / cf.name
-            if not dest.exists():
+    # Search user certificates across ~/.secure_keys, ~/test_kep, and system locations
+    search_dirs = [
+        Path.home() / ".secure_keys",
+        Path.home() / "test_kep",
+        Path("/usr/lib/qes-tools/certs"),
+        Path("/var/lib/qes-tools/certificates"),
+        Path(__file__).resolve().parent.parent / "certs",
+    ]
+
+    for sdir in search_dirs:
+        if sdir.is_dir():
+            for cf in sdir.glob("*.cer"):
+                dest = store_dir / cf.name
+                if not dest.exists() or dest.stat().st_size == 0:
+                    try:
+                        dest.write_bytes(cf.read_bytes())
+                    except Exception:
+                        pass
+
+    # If store has few certificates, unpack from ua-all-cas.p7b
+    if len(list(store_dir.glob("*.cer"))) < 20:
+        for p7b_cand in [
+            Path("/usr/lib/qes-tools/certs/ua-all-cas.p7b"),
+            Path(__file__).resolve().parent.parent / "certs" / "ua-all-cas.p7b",
+        ]:
+            if p7b_cand.is_file():
                 try:
-                    dest.write_bytes(cf.read_bytes())
+                    from cryptography.hazmat.primitives.serialization import pkcs7
+                    from cryptography.hazmat.primitives import serialization
+                    certs = pkcs7.load_der_pkcs7_certificates(p7b_cand.read_bytes())
+                    for c in certs:
+                        c_name = f"ca_{c.serial_number:X}.cer"
+                        dest = store_dir / c_name
+                        if not dest.exists():
+                            dest.write_bytes(c.public_bytes(serialization.Encoding.DER))
                 except Exception:
                     pass
 
     try:
         lib.EUSetFileStoreSettings(str(store_dir).encode("utf-8"), 0, 0, 1, 1, 0, 1, 3600)
+    except Exception:
+        pass
+
+    try:
+        if hasattr(lib, "EURefreshFileStore"):
+            lib.EURefreshFileStore()
     except Exception:
         pass
 
@@ -117,6 +194,10 @@ def ensure_filestore_initialized(lib):
 def get_error_message(lib, rv):
     if rv in (18, 0x12):
         return "Невірний PIN-код доступу до апаратного токена (помилка 0x12)."
+    if rv in (51, 0x33):
+        return "Сертифікат не знайдено (код 0x33). Переконайтеся, що файл .cer завантажено у ~/.secure_keys/ або ~/.local/share/qes-tools/certificates/."
+    if rv in (49, 0x31):
+        return "Помилка файлового сховища сертифікатів (код 0x31)."
     try:
         lib.EUGetErrorLangDesc.restype = ctypes.c_char_p
         lib.EUGetErrorLangDesc.argtypes = [ctypes.c_uint64, ctypes.c_uint64]
@@ -132,8 +213,7 @@ def verify_pin(type_index, pin, dev_index=0):
     if not lib:
         return {"success": False, "error": "Бібліотека euscp.so не знайдена"}
 
-    lib.EUInitialize()
-    ensure_filestore_initialized(lib)
+    init_eusign(lib)
     km = EU_KEY_MEDIA()
     km.typeIndex = int(type_index)
     km.devIndex = int(dev_index)
@@ -157,8 +237,7 @@ def sign_file(type_index, pin, input_path, output_path, dev_index=0, is_append=F
     if not os.path.isfile(input_path):
         return {"success": False, "error": f"Вхідний файл не існує: {input_path}"}
 
-    lib.EUInitialize()
-    ensure_filestore_initialized(lib)
+    init_eusign(lib)
     km = EU_KEY_MEDIA()
     km.typeIndex = int(type_index)
     km.devIndex = int(dev_index)
@@ -203,8 +282,7 @@ def sign_data(type_index, pin, data_b64, dev_index=0, is_append=False):
 
     data_bytes = base64.b64decode(data_b64)
 
-    lib.EUInitialize()
-    ensure_filestore_initialized(lib)
+    init_eusign(lib)
     km = EU_KEY_MEDIA()
     km.typeIndex = int(type_index)
     km.devIndex = int(dev_index)

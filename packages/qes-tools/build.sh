@@ -8,7 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PKG_ROOT="${SCRIPT_DIR}"
 
 PKG_NAME="qes-tools"
-PKG_VERSION="1.0.11"
+PKG_VERSION="1.0.12"
 PKG_ARCH="amd64"
 DEB_FILENAME="${PKG_NAME}_${PKG_VERSION}_${PKG_ARCH}.deb"
 
@@ -63,6 +63,24 @@ chmod 0755 "${BUILD_ROOT}/DEBIAN/prerm"
 echo -e "${CLR_YELLOW}[3/6] Копіювання вихідного коду, модулів та сертифікатів...${CLR_RESET}"
 cp -r "${PKG_ROOT}/src/"* "${BUILD_ROOT}/usr/lib/qes-tools/src/"
 cp -r "${PKG_ROOT}/certs/"* "${BUILD_ROOT}/usr/lib/qes-tools/certs/"
+
+# Розпакування повного національного реєстру сертифікатів КНЕДП ЦЗО (.cer) для офлайн сховища
+if [ -f "${BUILD_ROOT}/usr/lib/qes-tools/certs/ua-all-cas.p7b" ]; then
+    echo -e "  • Експорт повного національного реєстру сертифікатів КНЕДП ЦЗО України..."
+    python3 -c "
+from pathlib import Path
+from cryptography.hazmat.primitives.serialization import pkcs7
+from cryptography.hazmat.primitives import serialization
+cdir = Path('${BUILD_ROOT}/usr/lib/qes-tools/certs')
+p7b = cdir / 'ua-all-cas.p7b'
+if p7b.is_file():
+    certs = pkcs7.load_der_pkcs7_certificates(p7b.read_bytes())
+    for c in certs:
+        fname = f'ca_{c.serial_number:X}.cer'
+        (cdir / fname).write_bytes(c.public_bytes(serialization.Encoding.DER))
+" 2>/dev/null || true
+fi
+
 cp "${PKG_ROOT}/package.json" "${BUILD_ROOT}/usr/lib/qes-tools/"
 if [ -f "${PKG_ROOT}/package-lock.json" ]; then
     cp "${PKG_ROOT}/package-lock.json" "${BUILD_ROOT}/usr/lib/qes-tools/"

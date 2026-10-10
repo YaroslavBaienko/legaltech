@@ -25,7 +25,7 @@ get_version() {
     if [[ -z "$v" && -f "${SCRIPT_DIR}/../package.json" ]]; then
         v=$(grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' "${SCRIPT_DIR}/../package.json" 2>/dev/null | head -n1 | cut -d'"' -f4 || true)
     fi
-    echo "${v:-1.0.11}"
+    echo "${v:-1.0.12}"
 }
 VERSION="$(get_version)"
 [[ "$VERSION" != v* ]] && VERSION="v${VERSION}"
