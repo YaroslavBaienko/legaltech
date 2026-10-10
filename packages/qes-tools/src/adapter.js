@@ -131,6 +131,17 @@ async function safeBoxSign(box, dataBuffer, ...args) {
   try {
     return await box.sign(dataBuffer, role, unusedCert, effectiveOpts);
   } catch (err) {
+    if (effectiveOpts.includeChain && err.message && err.message.includes('getCompleteChain')) {
+      const noChainOpts = { ...effectiveOpts, includeChain: false };
+      try {
+        return await box.sign(dataBuffer, role, unusedCert, noChainOpts);
+      } catch (innerErr) {
+        if (shouldTsp) {
+          return await box.sign(dataBuffer, role, unusedCert, { ...noChainOpts, tsp: false });
+        }
+        throw innerErr;
+      }
+    }
     if (shouldTsp) {
       const fallbackOpts = { ...effectiveOpts, tsp: false };
       return await box.sign(dataBuffer, role, unusedCert, fallbackOpts);

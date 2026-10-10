@@ -47,11 +47,24 @@ if [[ ${#FILES[@]} -gt 1 && ! -d "${FILES[0]}" ]]; then
 fi
 
 if qes-sign --asice --gui "${OUTPUT_FLAG[@]}" "${FILES[@]}"; then
-    qes_notify "package-x-generic" \
-        "✅ Створено архів ASiC-E" \
-        "✅ ASiC-E Archive Created" \
-        "Пакет документів успішно завірено європейським контейнером ASiC-E." \
-        "Document package successfully certified with European ASiC-E container."
+    created=false
+    if [[ ${#OUTPUT_FLAG[@]} -eq 2 && -f "${OUTPUT_FLAG[1]}" ]]; then
+        created=true
+    else
+        for f in "${FILES[@]}"; do
+            if [[ -f "${f}.asice" || ( -d "$f" && -f "${f%/}.asice" ) ]]; then
+                created=true
+                break
+            fi
+        done
+    fi
+    if [[ "$created" = true ]]; then
+        qes_notify "package-x-generic" \
+            "✅ Створено архів ASiC-E" \
+            "✅ ASiC-E Archive Created" \
+            "Пакет документів успішно завірено європейським контейнером ASiC-E." \
+            "Document package successfully certified with European ASiC-E container."
+    fi
 else
     qes_notify "dialog-error" \
         "❌ Помилка створення ASiC-E" \

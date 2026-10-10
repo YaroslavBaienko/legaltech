@@ -11,7 +11,7 @@ const readline = require('readline');
 const { spawnSync } = require('child_process');
 const { QESEngine } = require('../src/engine');
 const { getOrPromptPassword, sendAgentMessage } = require('../src/session');
-const { t } = require('../src/i18n');
+const { t, getQESLang } = require('../src/i18n');
 const {
   chooseSigningMedium,
   getConnectedHardwareTokens,
@@ -155,7 +155,7 @@ async function main() {
     console.log(`
 ${CLR_BOLD}${CLR_CYAN}================================================================================${CLR_RESET}
 ${CLR_BOLD}${CLR_CYAN}  qes-sign — автономний інструмент підписання КЕП (ДСТУ 4145-2002 / PAdES / CAdES)${CLR_RESET}
-${CLR_BOLD}${CLR_CYAN}  Версія 1.0.9 | 100% Offline-First | Захист адвокатської таємниці${CLR_RESET}
+${CLR_BOLD}${CLR_CYAN}  Версія 1.0.10 | 100% Offline-First | Захист адвокатської таємниці${CLR_RESET}
 ${CLR_BOLD}${CLR_CYAN}================================================================================${CLR_RESET}
 
 ${CLR_BOLD}ОПИС:${CLR_RESET}
@@ -320,7 +320,7 @@ ${CLR_BOLD}ПЕРЕВІРКА ПІДПИСІВ:${CLR_RESET}
       ], { encoding: 'utf8' });
       const chosen = selProc.stdout ? selProc.stdout.trim() : '';
       if (!chosen) {
-        process.exit(0);
+        process.exit(1);
       }
       inputFiles.push(path.resolve(chosen));
     } else {
@@ -387,11 +387,12 @@ ${CLR_BOLD}ПЕРЕВІРКА ПІДПИСІВ:${CLR_RESET}
       defaultKeyPath: defaultCand,
       inputFiles,
       askPasswordFn: askPassword,
+      isPades: usePades,
     });
 
     if (mediumRes.cancelled) {
       console.log(`${CLR_YELLOW}Операцію підписання скасовано.${CLR_RESET}`);
-      process.exit(0);
+      process.exit(1);
     }
 
     if (mediumRes.type === 'token') {
@@ -429,11 +430,11 @@ ${CLR_BOLD}ПЕРЕВІРКА ПІДПИСІВ:${CLR_RESET}
       pin = await askPassword(`Введіть PIN-код доступу до токена (${activeTok.displayName}):`, useGui);
     } catch (e) {
       console.log(`${CLR_YELLOW}Операцію введення PIN-коду скасовано.${CLR_RESET}`);
-      process.exit(0);
+      process.exit(1);
     }
 
     if (!pin) {
-      process.exit(0);
+      process.exit(1);
     }
 
     for (let fIdx = 0; fIdx < inputFiles.length; fIdx++) {

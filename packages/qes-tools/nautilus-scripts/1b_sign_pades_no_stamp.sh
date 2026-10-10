@@ -48,11 +48,21 @@ fi
 
 # Run signing with GUI password dialog and --no-stamp
 if qes-sign --pades --no-stamp --gui "${PDF_FILES[@]}"; then
-    qes_notify "document-edit" \
-        "✅ Підписано КЕП (PAdES без штампа)" \
-        "✅ Signed with QES (PAdES without stamp)" \
-        "Успішно підписано ${#PDF_FILES[@]} PDF-документ(ів) (чистий вшитий цифровий підпис без візуального штампа)." \
-        "Successfully signed ${#PDF_FILES[@]} PDF document(s) (clean embedded signature without visual stamp)."
+    created_count=0
+    for f in "${PDF_FILES[@]}"; do
+        d="$(dirname "$f")"
+        base="$(basename "$f" .pdf)"
+        if [[ -f "${d}/${base}_signed.pdf" || -f "${d}/${base}_multisigned.pdf" || -f "${f}.p7s" ]]; then
+            created_count=$((created_count + 1))
+        fi
+    done
+    if [[ $created_count -gt 0 ]]; then
+        qes_notify "document-edit" \
+            "✅ Підписано КЕП (PAdES без штампа)" \
+            "✅ Signed with QES (PAdES without stamp)" \
+            "Успішно підписано ${created_count} PDF-документ(ів) (чистий вшитий цифровий підпис без візуального штампа)." \
+            "Successfully signed ${created_count} PDF document(s) (clean embedded signature without visual stamp)."
+    fi
 else
     qes_notify "dialog-error" \
         "❌ Помилка підписання" \

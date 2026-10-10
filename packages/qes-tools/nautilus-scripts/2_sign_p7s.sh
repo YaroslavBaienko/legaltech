@@ -40,11 +40,19 @@ if [[ ${#VALID_FILES[@]} -eq 0 ]]; then
 fi
 
 if qes-sign --gui "${VALID_FILES[@]}"; then
-    qes_notify "document-edit" \
-        "✅ Підписано КЕП (.p7s)" \
-        "✅ Signed with QES (.p7s)" \
-        "Створено відокремлені файли підпису для ${#VALID_FILES[@]} файл(ів)." \
-        "Created detached signature files for ${#VALID_FILES[@]} file(s)."
+    created_count=0
+    for f in "${VALID_FILES[@]}"; do
+        if [[ -f "${f}.p7s" ]]; then
+            created_count=$((created_count + 1))
+        fi
+    done
+    if [[ $created_count -gt 0 ]]; then
+        qes_notify "document-edit" \
+            "✅ Підписано КЕП (.p7s)" \
+            "✅ Signed with QES (.p7s)" \
+            "Створено відокремлені файли підпису для ${created_count} файл(ів)." \
+            "Created detached signature files for ${created_count} file(s)."
+    fi
 else
     qes_notify "dialog-error" \
         "❌ Помилка підписання" \

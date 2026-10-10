@@ -65,6 +65,7 @@ async function chooseSigningMedium(options = {}) {
     defaultKeyPath = null,
     inputFiles = [],
     askPasswordFn = null,
+    isPades = false,
   } = options;
 
   const lang = getQESLang();
@@ -110,14 +111,18 @@ async function chooseSigningMedium(options = {}) {
         ? '📁  File Key'
         : '📁  Файловий ключ';
       const optFileDesc = defaultKeyPath
-        ? `${defaultKeyName}  <span size="small" color="#2a75d3">(~/.secure_keys/)</span>`
+        ? (isPades
+            ? `${defaultKeyName}  <span size="small" color="#2a75d3">(PAdES штамп + QR)</span>`
+            : `${defaultKeyName}  <span size="small" color="#2a75d3">(~/.secure_keys/)</span>`)
         : (lang === 'en' ? '<span color="#d97706">No key in ~/.secure_keys/</span>' : '<span color="#d97706">Ключ відсутній у ~/.secure_keys/</span>');
 
       const optToken = lang === 'en'
         ? '🔑  Hardware Token (ЗНОК)'
         : '🔑  Апаратний ключ (ЗНОК)';
       const optTokenDesc = activeToken
-        ? `<span color="#16a34a"><b>🟢 ${activeToken.displayName}</b></span>  <span size="small" color="#15803d">(USB смарт-чіп)</span>`
+        ? (isPades
+            ? `<span color="#16a34a"><b>🟢 ${activeToken.displayName}</b></span>  <span size="small" color="#555555">(підпис .p7s)</span>`
+            : `<span color="#16a34a"><b>🟢 ${activeToken.displayName}</b></span>  <span size="small" color="#15803d">(USB смарт-чіп)</span>`)
         : (lang === 'en'
           ? '<span color="#d97706">⚠️ USB token not connected</span>  <span size="small" color="#777777">(Almaz-1K, SecureToken-337)</span>'
           : '<span color="#d97706">⚠️ USB-токен не підключено</span>  <span size="small" color="#777777">(Алмаз-1К, SecureToken-337)</span>');
