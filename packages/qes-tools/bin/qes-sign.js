@@ -155,7 +155,7 @@ async function main() {
     console.log(`
 ${CLR_BOLD}${CLR_CYAN}================================================================================${CLR_RESET}
 ${CLR_BOLD}${CLR_CYAN}  qes-sign — автономний інструмент підписання КЕП (ДСТУ 4145-2002 / PAdES / CAdES)${CLR_RESET}
-${CLR_BOLD}${CLR_CYAN}  Версія 1.0.0 | 100% Offline-First | Захист адвокатської таємниці${CLR_RESET}
+${CLR_BOLD}${CLR_CYAN}  Версія 1.0.9 | 100% Offline-First | Захист адвокатської таємниці${CLR_RESET}
 ${CLR_BOLD}${CLR_CYAN}================================================================================${CLR_RESET}
 
 ${CLR_BOLD}ОПИС:${CLR_RESET}

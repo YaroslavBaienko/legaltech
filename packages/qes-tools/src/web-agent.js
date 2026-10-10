@@ -224,7 +224,7 @@ function startWebAgentServer(options = {}) {
       res.end(JSON.stringify({
         status: 'ok',
         service: 'qes-web-agent',
-        version: '1.0.7',
+        version: '1.0.9',
         eusw: '1.3.109',
         nmhAlive: bridge.isAlive,
         ports: { http: portHttp, https: portHttps },

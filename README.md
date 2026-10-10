@@ -10,7 +10,7 @@ Designed for lawyers, attorneys, insolvency officers, legal IT specialists, and 
 
 | Package | Description | Status | Documentation |
 | :--- | :--- | :---: | :---: |
-| **`qes-tools`** | Standalone QES/AES suite (DSTU 4145-2002, CAdES, stamped & unstamped PAdES, QR, ASiC-E, GOST encryption, court-ready OCR, 16 Nautilus scripts, hardware tokens: DepositSign / Almaz-1K / Crystal-1K / SecureToken-337, official EUSW drivers & browser extension daemon, Web Sign Agent HTTP:8081 / HTTPS:8083). | **v1.0.7** (Stable) | [Package README](packages/qes-tools/README.md) |
+| **`qes-tools`** | Standalone QES/AES suite (DSTU 4145-2002, CAdES, stamped & unstamped PAdES, QR, ASiC-E, GOST encryption, court-ready OCR, 16 Nautilus scripts with Papirus UI & 01..16 ordering, contextual key/token selector modal, hardware tokens: DepositSign / Almaz-1K / Crystal-1K / SecureToken-337, official EUSW drivers & browser extension daemon, Web Sign Agent HTTP:8081 / HTTPS:8083). | **v1.0.9** (Stable) | [Package README](packages/qes-tools/README.md) |
 | **`deb-package-starter`** | Universal starter template for rapid development of new Debian packages. | **Template** | [Template README](templates/deb-package-starter/README.md) |
 
 ---
@@ -45,11 +45,12 @@ sudo apt update && sudo apt upgrade
 Download the latest release `.deb` package from [Releases](https://github.com/YaroslavBaienko/legaltech/releases) and install it:
 
 ```bash
-sudo apt install ./packages/qes-tools/dist/qes-tools_1.0.7_amd64.deb
+sudo apt install ./packages/qes-tools/dist/qes-tools_1.0.9_amd64.deb
 ```
 
 The `apt` package manager will automatically resolve and install all system dependencies. After installation, all features are ready:
-- **In GNOME Files (Nautilus)**: Right-click any file ➔ **Scripts** ➔ **`🔐 КЕП та Безпека`** (16 convenient actions).
+- **In GNOME Files (Nautilus)**: Right-click any file ➔ **Scripts** ➔ **`🔐 КЕП та Безпека`** (16 strictly numbered `01..16` actions, beautiful Papirus styling, Pango headers, and full Ukrainian/English localization).
+- **Interactive Context Selection Modal**: Whenever signing without an explicit key flag, a clean modal prompts whether to use the pre-configured file key (`~/.secure_keys/`), a connected hardware USB token (ЗНОК), or browse for an alternative `.pfx`/`.p12` container.
 - **In the Terminal**: `qes-tool`, `qes-sign`, `qes-verify`, `qes-cert`, `qes-ocr`, `qes-pdf-court`, `qes-encrypt`, `qes-decrypt`, `qes-export-cert`, `qes-agent`, `qes-config`.
 - **Hardware USB Tokens (ЗНОК)**: Out-of-the-box drivers and udev rules for DepositSign / IIT («Алмаз-1К», «Кристал-1К»), Author («SecureToken-337»), and SafeNet. Run `qes-tool token` to inspect connected tokens.
 - **Web Browser E-Filing & Sign Portals**: Automated Native Messaging Host (`euscpnmh`) integration for Chrome, Chromium, Brave, Microsoft Edge, and Mozilla Firefox (Дія, Електронний суд, ДПС, ProZorro, DepositSign). Local Web Sign Agent runs on ports 8081 / 8083 via `qes-agent start-web`.

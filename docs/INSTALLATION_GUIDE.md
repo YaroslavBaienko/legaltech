@@ -76,7 +76,7 @@ If you need to install the package offline or test a specific build:
 2. Install it using `apt` (which will resolve necessary system dependencies from your existing repositories):
 
 ```bash
-sudo apt install ./qes-tools_1.0.6_amd64.deb
+sudo apt install ./qes-tools_1.0.9_amd64.deb
 ```
 
 > ⚠️ **Note:** When installing a standalone file locally, the system will not receive automated updates via `apt upgrade` unless the official APT repository is configured (Method 1).
@@ -94,10 +94,10 @@ apt policy qes-tools
 Expected output:
 ```text
 qes-tools:
-  Installed: 1.0.6
-  Candidate: 1.0.6
+  Installed: 1.0.9
+  Candidate: 1.0.9
   Version table:
- *** 1.0.6 500
+ *** 1.0.9 500
         500 https://yaroslavbaienko.github.io/legaltech stable/main amd64 Packages
         100 /var/lib/dpkg/status
 ```
@@ -110,13 +110,13 @@ qes-sign --help
 qes-agent status
 ```
 
-In **GNOME Files (Nautilus)**: Right-click any file ➔ **Scripts** ➔ **`🔐 КЕП та Безпека`** (16 actions available).
+In **GNOME Files (Nautilus)**: Right-click any file ➔ **Scripts** ➔ **`🔐 КЕП та Безпека`** (16 actions available, numbered `01..16` in workflow order).
 
 ---
 
 ## 🔄 How Automatic Updates Work
 
-When a new version is released (e.g., version `1.0.6`):
+When a new version is released (e.g., version `1.0.9`):
 1. Run standard system maintenance commands:
    ```bash
    sudo apt update
@@ -125,7 +125,7 @@ When a new version is released (e.g., version `1.0.6`):
 2. The `APT` package manager detects the newer version available on the server:
    ```text
    The following packages will be upgraded:
-     qes-tools (1.0.5 => 1.0.6)
+     qes-tools (1.0.8 => 1.0.9)
    ```
 3. The package updates seamlessly without affecting your personal keys, configurations, or sessions.
 

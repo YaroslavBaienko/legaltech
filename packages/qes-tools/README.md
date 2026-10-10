@@ -114,7 +114,7 @@
 ./packages/qes-tools/build.sh
 
 # Встановлення в систему через apt:
-sudo apt install ./packages/qes-tools/dist/qes-tools_1.0.8_amd64.deb
+sudo apt install ./packages/qes-tools/dist/qes-tools_1.0.9_amd64.deb
 ```
 
 Усі залежності (`nodejs`, `python3-cryptography`, `openssl`, `zenity`, `qpdf`, `ocrmypdf`, `tesseract-ocr-ukr`, `tesseract-ocr-eng`, `libnotify-bin`, `libpcsclite1`) встановлюються автоматично.
