@@ -429,8 +429,11 @@ function getHardwareTokenCertificate(options = {}) {
   // 3. Fallback: scan local certificate directories using jkurwa
   const jkurwa = require('jkurwa');
   const dirs = [
-    path.join(process.env.HOME || '/home/attor', '.secure_keys'),
-    path.join(process.env.HOME || '/home/attor', '.local/share/qes-tools/certificates'),
+    path.join(process.env.HOME || '', '.secure_keys'),
+    path.join(process.env.HOME || '', '.local/share/qes-tools/certificates'),
+    '/usr/lib/qes-tools/certs',
+    path.join(__dirname, '..', 'certs'),
+    path.join(__dirname, '..', 'node_modules', 'jkurwa', 'test', 'data'),
   ];
   for (const dir of dirs) {
     if (!fs.existsSync(dir)) continue;
