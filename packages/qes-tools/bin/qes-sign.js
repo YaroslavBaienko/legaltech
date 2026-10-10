@@ -437,6 +437,19 @@ ${CLR_BOLD}ПЕРЕВІРКА ПІДПИСІВ:${CLR_RESET}
       process.exit(1);
     }
 
+    if (usePades) {
+      if (useGui) {
+        spawnSync('zenity', [
+          '--info',
+          '--title=Формат підпису апаратного токена',
+          '--text=ℹ️ <b>Зверніть увагу щодо формату:</b>\n\nАпаратний USB-токен (ЗНОК) відповідно до стандартів ДСТУ 4145-2002 формує повноцінний кваліфікований цифровий підпис <b>.p7s (CAdES)</b>.\n\nНакладання графічного штампа адвоката з QR-кодом всередину PDF (PAdES) здійснюється за допомогою захищеного файлового ключа (~/.secure_keys/).\n\nДля даного файлу буде створено юридично значимий відокремлений підпис <b>.p7s</b>.',
+          '--width=540',
+        ]);
+      } else {
+        console.log(`${CLR_YELLOW}ℹ️ Апаратний токен формує відокремлений підпис .p7s (CAdES). Для візуального штампа у PDF використовуйте файловий ключ.${CLR_RESET}`);
+      }
+    }
+
     for (let fIdx = 0; fIdx < inputFiles.length; fIdx++) {
       const curDoc = inputFiles[fIdx];
       const curOutput = (inputFiles.length === 1 && outputPath) ? outputPath : `${curDoc}.p7s`;

@@ -83,12 +83,57 @@ def detect_tokens():
         "tokens": devices,
     }
 
+def ensure_filestore_initialized(lib):
+    """
+    Initializes EUSign certificate store from ~/.local/share/qes-tools/certificates
+    and loads all national CA bundles and user certificates.
+    """
+    store_dir = Path.home() / ".local/share/qes-tools/certificates"
+    store_dir.mkdir(parents=True, exist_ok=True)
+
+    user_keys_dir = Path.home() / ".secure_keys"
+    if user_keys_dir.is_dir():
+        for cf in user_keys_dir.glob("*.cer"):
+            dest = store_dir / cf.name
+            if not dest.exists():
+                try:
+                    dest.write_bytes(cf.read_bytes())
+                except Exception:
+                    pass
+
+    try:
+        lib.EUSetFileStoreSettings(str(store_dir).encode("utf-8"), 0, 0, 1, 1, 0, 1, 3600)
+    except Exception:
+        pass
+
+    for cf in store_dir.glob("*.cer"):
+        try:
+            data = cf.read_bytes()
+            buf = (ctypes.c_ubyte * len(data)).from_buffer_copy(data)
+            lib.EUSaveCertificate(buf, len(data))
+        except Exception:
+            pass
+
+def get_error_message(lib, rv):
+    if rv in (18, 0x12):
+        return "Невірний PIN-код доступу до апаратного токена (помилка 0x12)."
+    try:
+        lib.EUGetErrorLangDesc.restype = ctypes.c_char_p
+        lib.EUGetErrorLangDesc.argtypes = [ctypes.c_uint64, ctypes.c_uint64]
+        desc = lib.EUGetErrorLangDesc(rv, 1) # 1 = Ukrainian
+        if desc:
+            return f"{desc.decode('cp1251', 'ignore')} (код 0x{rv:02x})"
+    except Exception:
+        pass
+    return f"Помилка взаємодії з апаратним токеном (код 0x{rv:02x})"
+
 def verify_pin(type_index, pin, dev_index=0):
     lib = load_euscp_lib()
     if not lib:
         return {"success": False, "error": "Бібліотека euscp.so не знайдена"}
 
     lib.EUInitialize()
+    ensure_filestore_initialized(lib)
     km = EU_KEY_MEDIA()
     km.typeIndex = int(type_index)
     km.devIndex = int(dev_index)
@@ -100,12 +145,9 @@ def verify_pin(type_index, pin, dev_index=0):
         lib.EUResetPrivateKey()
         lib.EUFinalize()
         return {"success": True, "read": bool(is_read)}
-    elif rv == 18 or rv == 0x12:
-        lib.EUFinalize()
-        return {"success": False, "error": "Невірний PIN-код доступу до апаратного токена (помилка 0x12).", "code": 18}
     else:
         lib.EUFinalize()
-        return {"success": False, "error": f"Помилка взаємодії з токеном (код 0x{rv:02x}).", "code": rv}
+        return {"success": False, "error": get_error_message(lib, rv), "code": rv}
 
 def sign_file(type_index, pin, input_path, output_path, dev_index=0, is_append=False, is_internal=False):
     lib = load_euscp_lib()
@@ -116,6 +158,7 @@ def sign_file(type_index, pin, input_path, output_path, dev_index=0, is_append=F
         return {"success": False, "error": f"Вхідний файл не існує: {input_path}"}
 
     lib.EUInitialize()
+    ensure_filestore_initialized(lib)
     km = EU_KEY_MEDIA()
     km.typeIndex = int(type_index)
     km.devIndex = int(dev_index)
@@ -124,8 +167,7 @@ def sign_file(type_index, pin, input_path, output_path, dev_index=0, is_append=F
     rv = lib.EUReadPrivateKey(ctypes.byref(km), None)
     if rv != 0:
         lib.EUFinalize()
-        err_msg = "Невірний PIN-код доступу до апаратного токена." if rv in (18, 0x12) else f"Помилка читання ключа (код 0x{rv:02x})"
-        return {"success": False, "error": err_msg, "code": rv}
+        return {"success": False, "error": get_error_message(lib, rv), "code": rv}
 
     append_flag = 1 if is_append else 0
     internal_flag = 1 if is_internal else 0
@@ -162,6 +204,7 @@ def sign_data(type_index, pin, data_b64, dev_index=0, is_append=False):
     data_bytes = base64.b64decode(data_b64)
 
     lib.EUInitialize()
+    ensure_filestore_initialized(lib)
     km = EU_KEY_MEDIA()
     km.typeIndex = int(type_index)
     km.devIndex = int(dev_index)
@@ -170,8 +213,7 @@ def sign_data(type_index, pin, data_b64, dev_index=0, is_append=False):
     rv = lib.EUReadPrivateKey(ctypes.byref(km), None)
     if rv != 0:
         lib.EUFinalize()
-        err_msg = "Невірний PIN-код доступу до апаратного токена." if rv in (18, 0x12) else f"Помилка читання ключа (код 0x{rv:02x})"
-        return {"success": False, "error": err_msg, "code": rv}
+        return {"success": False, "error": get_error_message(lib, rv), "code": rv}
 
     p_sign = ctypes.POINTER(ctypes.c_ubyte)()
     sign_len = ctypes.c_ulong(0)
