@@ -44,14 +44,33 @@ class EngineSigner extends Signer {
 }
 
 /**
- * Extracts signer details from the active box / certificate.
+ * Signer implementation for hardware tokens (ЗНОК: Алмаз-1К, Кристал-1К, SecureToken-337).
+ * Signs PDF byte ranges via IIT euscp.so / token_bridge.py producing detached PKCS#7 / CAdES signatures.
  */
-function extractCertInfo(box) {
-  const keyInfo = box.keys.find((k) => k.cert);
-  if (!keyInfo || !keyInfo.cert) {
-    throw new Error('У крипторушії відсутній відкритий сертифікат для генерації штампа.');
+class HardwareTokenSigner extends Signer {
+  constructor(tokenOptions = {}, options = {}) {
+    super();
+    this.tokenOptions = tokenOptions;
+    this.options = options;
   }
-  const cert = keyInfo.cert;
+
+  async sign(pdfBuffer) {
+    const { signDataWithHardwareToken } = require('./token-signer');
+    const signatureBuffer = signDataWithHardwareToken({
+      ...this.tokenOptions,
+      data: pdfBuffer,
+    });
+    return signatureBuffer;
+  }
+}
+
+/**
+ * Extracts signer details from an ASN.1 parsed certificate object.
+ */
+function extractCertInfoFromCert(cert) {
+  if (!cert) {
+    throw new Error('Відкритий сертифікат відсутній.');
+  }
   const subj = cert.subject || {};
   const issuer = cert.issuer || {};
 
@@ -63,7 +82,7 @@ function extractCertInfo(box) {
   }
 
   // Serial hex
-  const serialHex = cert.serial ? cert.serial.toString('hex').toUpperCase() : '';
+  const serialHex = cert.serial ? (Buffer.isBuffer(cert.serial) ? cert.serial.toString('hex') : cert.serial.toString()).toUpperCase() : '';
 
   // Dates
   const validFrom = cert.valid && cert.valid.from ? new Date(cert.valid.from) : null;
@@ -77,7 +96,41 @@ function extractCertInfo(box) {
     validFrom,
     validTo,
     locality: subj.localityName || 'Україна',
+    organization: subj.organizationName || '',
+    title: subj.title || '',
   };
+}
+
+/**
+ * Extracts signer details from raw DER certificate bytes.
+ */
+function extractCertInfoFromCertBuffer(certBuf) {
+  const jkurwa = require('jkurwa');
+  const cert = jkurwa.Certificate.from_asn1(certBuf);
+  return extractCertInfoFromCert(cert);
+}
+
+/**
+ * Extracts signer details from the active box / certificate.
+ */
+function extractCertInfo(box) {
+  if (!box) {
+    throw new Error('У крипторушії відсутній відкритий сертифікат для генерації штампа.');
+  }
+  const keyInfo = box.keys.find((k) => k.cert);
+  if (!keyInfo || !keyInfo.cert) {
+    throw new Error('У крипторушії відсутній відкритий сертифікат для генерації штампа.');
+  }
+  return extractCertInfoFromCert(keyInfo.cert);
+}
+
+/**
+ * Resolves certInfo for hardware token options.
+ */
+function getHardwareTokenCertInfo(tokenOptions = {}) {
+  const { getHardwareTokenCertificate } = require('./token-signer');
+  const { certBuf } = getHardwareTokenCertificate(tokenOptions);
+  return extractCertInfoFromCertBuffer(certBuf);
 }
 
 function getTypstBin() {
@@ -278,7 +331,9 @@ function hasExistingSignatures(pdfBuffer) {
  * Preserves all previous revisions and signatures bit-for-bit without alteration.
  */
 async function signPdfPAdESIncremental(box, inputPdfPath, options = {}) {
-  const certInfo = extractCertInfo(box);
+  const certInfo = options.certInfo || (options.tokenOptions
+    ? getHardwareTokenCertInfo(options.tokenOptions)
+    : extractCertInfo(box));
   const origBuffer = fs.readFileSync(inputPdfPath);
 
   const pdfDoc = await PDFDocument.load(origBuffer);
@@ -407,8 +462,10 @@ async function signPdfPAdESIncremental(box, inputPdfPath, options = {}) {
   const incBytes = await pdfDoc.saveIncremental(snapshot);
   const pdfWithPlaceholder = Buffer.concat([origBuffer, incBytes]);
 
-  // 6. Sign byte ranges with QESEngine
-  const signer = new EngineSigner(box, options);
+  // 6. Sign byte ranges with QESEngine or HardwareTokenSigner
+  const signer = options.tokenOptions
+    ? new HardwareTokenSigner(options.tokenOptions, options)
+    : new EngineSigner(box, options);
   const signPdf = new SignPdf();
   const signedPdfBuffer = await signPdf.sign(pdfWithPlaceholder, signer);
 
@@ -447,7 +504,9 @@ async function signPdfPAdES(box, inputPdfPath, options = {}) {
     return signPdfPAdESIncremental(box, inputPdfPath, options);
   }
 
-  const certInfo = extractCertInfo(box);
+  const certInfo = options.certInfo || (options.tokenOptions
+    ? getHardwareTokenCertInfo(options.tokenOptions)
+    : extractCertInfo(box));
 
   // 1. Apply visual stamp if requested
   let pdfBuffer;
@@ -471,8 +530,10 @@ async function signPdfPAdES(box, inputPdfPath, options = {}) {
 
   const pdfWithPlaceholder = Buffer.from(await pdfDoc.save({ useObjectStreams: false }));
 
-  // 3. Sign byte ranges with QESEngine
-  const signer = new EngineSigner(box, options);
+  // 3. Sign byte ranges with QESEngine or HardwareTokenSigner
+  const signer = options.tokenOptions
+    ? new HardwareTokenSigner(options.tokenOptions, options)
+    : new EngineSigner(box, options);
   const signPdf = new SignPdf();
   const signedPdfBuffer = await signPdf.sign(pdfWithPlaceholder, signer);
 
@@ -501,5 +562,10 @@ module.exports = {
   applyVisualStamp,
   generateStampBoxPng,
   extractCertInfo,
+  extractCertInfoFromCert,
+  extractCertInfoFromCertBuffer,
+  getHardwareTokenCertInfo,
+  HardwareTokenSigner,
+  EngineSigner,
   hasExistingSignatures,
 };

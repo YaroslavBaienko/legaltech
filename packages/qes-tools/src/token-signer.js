@@ -7,6 +7,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const { spawnSync } = require('child_process');
 const { detectHardwareTokens } = require('./providers');
 const { getQESLang, t } = require('./i18n');
@@ -121,7 +122,7 @@ async function chooseSigningMedium(options = {}) {
         : '🔑  Апаратний ключ (ЗНОК)';
       const optTokenDesc = activeToken
         ? (isPades
-            ? `<span color="#16a34a"><b>🟢 ${activeToken.displayName}</b></span>  <span size="small" color="#555555">(підпис .p7s)</span>`
+            ? `<span color="#16a34a"><b>🟢 ${activeToken.displayName}</b></span>  <span size="small" color="#2a75d3">(PAdES штамп + QR / USB ЗНОК)</span>`
             : `<span color="#16a34a"><b>🟢 ${activeToken.displayName}</b></span>  <span size="small" color="#15803d">(USB смарт-чіп)</span>`)
         : (lang === 'en'
           ? '<span color="#d97706">⚠️ USB token not connected</span>  <span size="small" color="#777777">(Almaz-1K, SecureToken-337)</span>'
@@ -309,8 +310,156 @@ function signWithHardwareToken(options = {}) {
   }
 }
 
+/**
+ * Signs raw binary data or a buffer using the hardware token via token_bridge.py.
+ * Generates detached PKCS#7 / CAdES signature required by PAdES and @signpdf/signpdf.
+ */
+function signDataWithHardwareToken(options = {}) {
+  const {
+    data,
+    dataPath,
+    pin,
+    typeIndex = 1,
+    devIndex = 0,
+    isAppend = false,
+  } = options;
+
+  if (!fs.existsSync(PYTHON_BRIDGE)) {
+    throw new Error(`Python міст token_bridge.py не знайдено: ${PYTHON_BRIDGE}`);
+  }
+
+  let tempInputFile = null;
+  let tempOutputFile = null;
+
+  try {
+    let effectiveDataPath = dataPath;
+    if (!effectiveDataPath && (Buffer.isBuffer(data) || typeof data === 'string')) {
+      const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
+      tempInputFile = path.join(os.tmpdir(), `qes-tok-in-${Date.now()}-${Math.random().toString(36).slice(2)}.tmp`);
+      fs.writeFileSync(tempInputFile, buf);
+      effectiveDataPath = tempInputFile;
+    }
+
+    tempOutputFile = path.join(os.tmpdir(), `qes-tok-out-${Date.now()}-${Math.random().toString(36).slice(2)}.sig`);
+
+    const payload = JSON.stringify({
+      typeIndex,
+      devIndex,
+      pin,
+      dataPath: effectiveDataPath,
+      outputPath: tempOutputFile,
+      isAppend,
+    });
+
+    const proc = spawnSync('python3', [PYTHON_BRIDGE, 'sign-data'], {
+      input: payload,
+      encoding: 'utf-8',
+      timeout: 60000,
+    });
+
+    if (proc.status !== 0 || !proc.stdout) {
+      const errText = proc.stderr || (proc.stdout ? JSON.parse(proc.stdout).error : 'Помилка взаємодії з апаратним токеном');
+      throw new Error(errText);
+    }
+
+    const res = JSON.parse(proc.stdout);
+    if (!res.success) {
+      throw new Error(res.error || 'Помилка накладання підпису апаратним токеном');
+    }
+
+    if (fs.existsSync(tempOutputFile)) {
+      return fs.readFileSync(tempOutputFile);
+    } else if (res.signature) {
+      return Buffer.from(res.signature, 'base64');
+    } else {
+      throw new Error('Отримано порожній підпис від апаратного токена');
+    }
+  } finally {
+    if (tempInputFile && fs.existsSync(tempInputFile)) {
+      try { fs.unlinkSync(tempInputFile); } catch (_) {}
+    }
+    if (tempOutputFile && fs.existsSync(tempOutputFile)) {
+      try { fs.unlinkSync(tempOutputFile); } catch (_) {}
+    }
+  }
+}
+
+/**
+ * Resolves the public certificate corresponding to the hardware token.
+ * 1. Checks explicit certPath.
+ * 2. Queries token_bridge.py get-cert.
+ * 3. Scans ~/.secure_keys and ~/.local/share/qes-tools/certificates for digital signature cert.
+ */
+function getHardwareTokenCertificate(options = {}) {
+  const {
+    certPath = null,
+    pin = null,
+    typeIndex = 1,
+    devIndex = 0,
+  } = options;
+
+  // 1. Explicit certPath
+  if (certPath && fs.existsSync(certPath)) {
+    const certBuf = fs.readFileSync(certPath);
+    return { certBuf, certPath };
+  }
+
+  // 2. Call token_bridge.py get-cert
+  if (fs.existsSync(PYTHON_BRIDGE)) {
+    try {
+      const payload = JSON.stringify({
+        typeIndex,
+        devIndex,
+        pin,
+        certPath,
+      });
+      const res = spawnSync('python3', [PYTHON_BRIDGE, 'get-cert'], {
+        input: payload,
+        encoding: 'utf-8',
+        timeout: 5000,
+      });
+      if (res.status === 0 && res.stdout) {
+        const parsed = JSON.parse(res.stdout);
+        if (parsed.success && parsed.certB64) {
+          const certBuf = Buffer.from(parsed.certB64, 'base64');
+          return { certBuf, certPath: parsed.certPath || null };
+        }
+      }
+    } catch (_) {}
+  }
+
+  // 3. Fallback: scan local certificate directories using jkurwa
+  const jkurwa = require('jkurwa');
+  const dirs = [
+    path.join(process.env.HOME || '/home/attor', '.secure_keys'),
+    path.join(process.env.HOME || '/home/attor', '.local/share/qes-tools/certificates'),
+  ];
+  for (const dir of dirs) {
+    if (!fs.existsSync(dir)) continue;
+    const files = fs.readdirSync(dir);
+    for (const f of files) {
+      if (!f.endsWith('.cer')) continue;
+      const fullPath = path.join(dir, f);
+      try {
+        const certBuf = fs.readFileSync(fullPath);
+        const cert = jkurwa.Certificate.from_asn1(certBuf);
+        const subj = cert.subject || {};
+        const ku = cert.extension && cert.extension.keyUsage;
+        const isDigitalSig = ku && Buffer.isBuffer(ku) && ku.length >= 4 && (ku[3] & 0x80);
+        if (isDigitalSig && (subj.commonName || subj.serialNumber)) {
+          return { certBuf, certPath: fullPath, cert };
+        }
+      } catch (_) {}
+    }
+  }
+
+  throw new Error('Відкритий сертифікат для апаратного токена не знайдено в ~/.secure_keys/ або сховищі.');
+}
+
 module.exports = {
   getConnectedHardwareTokens,
   chooseSigningMedium,
   signWithHardwareToken,
+  signDataWithHardwareToken,
+  getHardwareTokenCertificate,
 };

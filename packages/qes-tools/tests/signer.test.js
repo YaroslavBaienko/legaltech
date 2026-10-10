@@ -874,5 +874,40 @@ test('web-agent module bridges JSON-RPC to euscpnmh over HTTP and manages browse
   fs.rmSync(tmpHome, { recursive: true, force: true });
 });
 
+test('HardwareTokenSigner and PAdES visual stamp engine support hardware token certificates', async () => {
+  const { HardwareTokenSigner, extractCertInfoFromCertBuffer, generateStampBoxPng } = require('../src/pades');
+  const { getHardwareTokenCertificate } = require('../src/token-signer');
+  const { Signer } = require('@signpdf/utils');
+
+  // 1. Verify HardwareTokenSigner inherits from Signer
+  assert.strictEqual(Object.getPrototypeOf(HardwareTokenSigner), Signer);
+  const testSigner = new HardwareTokenSigner({ typeIndex: 1, devIndex: 0, pin: '1234' });
+  assert.ok(testSigner instanceof Signer);
+  assert.strictEqual(typeof testSigner.sign, 'function');
+
+  // 2. Resolve token certificate
+  const certRes = getHardwareTokenCertificate();
+  assert.ok(certRes.certBuf && certRes.certBuf.length > 0);
+
+  // 3. Extract cert info
+  const certInfo = extractCertInfoFromCertBuffer(certRes.certBuf);
+  assert.ok(certInfo.commonName && certInfo.commonName.length > 0);
+  assert.ok(certInfo.issuerName && certInfo.issuerName.length > 0);
+  assert.ok(certInfo.serialHex && certInfo.serialHex.length > 0);
+
+  // If testing with the advocate certificate, check specific fields
+  if (certRes.certPath && certRes.certPath.includes('6FA97849')) {
+    assert.strictEqual(certInfo.commonName, 'Баєнко Ярослав Володимирович');
+    assert.strictEqual(certInfo.rnokpp, '3255419579');
+    assert.strictEqual(certInfo.title, 'Адвокат, Свідоцтво №003170');
+  }
+
+  // 4. Generate visual stamp PNG with certInfo
+  const pngBuf = await generateStampBoxPng(certInfo);
+  assert.ok(Buffer.isBuffer(pngBuf) && pngBuf.length > 100);
+  // PNG signature check
+  assert.strictEqual(pngBuf.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
+});
+
 
 

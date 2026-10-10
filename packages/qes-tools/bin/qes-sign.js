@@ -155,7 +155,7 @@ async function main() {
     console.log(`
 ${CLR_BOLD}${CLR_CYAN}================================================================================${CLR_RESET}
 ${CLR_BOLD}${CLR_CYAN}  qes-sign — автономний інструмент підписання КЕП (ДСТУ 4145-2002 / PAdES / CAdES)${CLR_RESET}
-${CLR_BOLD}${CLR_CYAN}  Версія 1.0.12 | 100% Offline-First | Захист адвокатської таємниці${CLR_RESET}
+${CLR_BOLD}${CLR_CYAN}  Версія 1.0.13 | 100% Offline-First | Захист адвокатської таємниці${CLR_RESET}
 ${CLR_BOLD}${CLR_CYAN}================================================================================${CLR_RESET}
 
 ${CLR_BOLD}ОПИС:${CLR_RESET}
@@ -437,38 +437,57 @@ ${CLR_BOLD}ПЕРЕВІРКА ПІДПИСІВ:${CLR_RESET}
       process.exit(1);
     }
 
-    if (usePades) {
-      if (useGui) {
-        spawnSync('zenity', [
-          '--info',
-          '--title=Формат підпису апаратного токена',
-          '--text=ℹ️ <b>Зверніть увагу щодо формату:</b>\n\nАпаратний USB-токен (ЗНОК) відповідно до стандартів ДСТУ 4145-2002 формує повноцінний кваліфікований цифровий підпис <b>.p7s (CAdES)</b>.\n\nНакладання графічного штампа адвоката з QR-кодом всередину PDF (PAdES) здійснюється за допомогою захищеного файлового ключа (~/.secure_keys/).\n\nДля даного файлу буде створено юридично значимий відокремлений підпис <b>.p7s</b>.',
-          '--width=540',
-        ]);
-      } else {
-        console.log(`${CLR_YELLOW}ℹ️ Апаратний токен формує відокремлений підпис .p7s (CAdES). Для візуального штампа у PDF використовуйте файловий ключ.${CLR_RESET}`);
-      }
-    }
-
     for (let fIdx = 0; fIdx < inputFiles.length; fIdx++) {
       const curDoc = inputFiles[fIdx];
-      const curOutput = (inputFiles.length === 1 && outputPath) ? outputPath : `${curDoc}.p7s`;
+      const isPdf = curDoc.toLowerCase().endsWith('.pdf');
+      const shouldDoPades = usePades && isPdf;
+
+      const curOutput = (inputFiles.length === 1 && outputPath)
+        ? outputPath
+        : (shouldDoPades
+            ? path.join(path.dirname(curDoc), `${path.parse(curDoc).name}_signed.pdf`)
+            : `${curDoc}.p7s`);
 
       console.log(`\n${CLR_GRAY}⏳ [${fIdx + 1}/${inputFiles.length}] Підписання апаратним токеном: ${path.basename(curDoc)}...${CLR_RESET}`);
 
       try {
-        const res = signWithHardwareToken({
-          inputPath: curDoc,
-          outputPath: curOutput,
-          pin,
-          typeIndex: activeTok.typeIndex || 1,
-          devIndex: activeTok.devIndex || 0,
-          isAppend: useAppend,
-          isInternal: false,
-        });
+        let res;
+        if (shouldDoPades) {
+          const { signPdfPAdES } = require('../src/pades');
+          res = await signPdfPAdES(null, curDoc, {
+            tokenOptions: {
+              pin,
+              typeIndex: activeTok.typeIndex || 1,
+              devIndex: activeTok.devIndex || 0,
+              certPath,
+            },
+            stamp: useStamp,
+            page: stampPage,
+            append: useAppend,
+            outputPath: curOutput,
+            tsp: useTsp,
+          });
 
-        console.log(`\n${CLR_GREEN}✅ ДОКУМЕНТ УСПІШНО ПІДПИСАНО АПАРАТНИМ ТОКЕНОМ!${CLR_RESET}`);
-        console.log(`  ${CLR_BOLD}Файл підпису:${CLR_RESET} ${res.outputPath} (${res.fileSize} байт)`);
+          console.log(`\n${CLR_GREEN}✅ PDF УСПІШНО ПІДПИСАНО АПАРАТНИМ ТОКЕНОМ (PAdES зі штампом та QR)!${CLR_RESET}`);
+          console.log(`  ${CLR_BOLD}Файл:${CLR_RESET}        ${res.outputPath} (${res.fileSize} байт)`);
+          console.log(`  ${CLR_BOLD}Підписувач:${CLR_RESET}  ${res.certInfo.commonName}`);
+          if (res.certInfo.rnokpp) console.log(`  ${CLR_BOLD}РНОКПП:${CLR_RESET}      ${res.certInfo.rnokpp}`);
+          console.log(`  ${CLR_BOLD}КНЕДП:${CLR_RESET}       ${res.certInfo.issuerName}`);
+          console.log(`  ${CLR_BOLD}Штамп:${CLR_RESET}       ${res.stamped ? 'Накладено зі штампом та QR-кодом' : 'Вимкнено'}`);
+        } else {
+          res = signWithHardwareToken({
+            inputPath: curDoc,
+            outputPath: curOutput,
+            pin,
+            typeIndex: activeTok.typeIndex || 1,
+            devIndex: activeTok.devIndex || 0,
+            isAppend: useAppend,
+            isInternal: false,
+          });
+
+          console.log(`\n${CLR_GREEN}✅ ДОКУМЕНТ УСПІШНО ПІДПИСАНО АПАРАТНИМ ТОКЕНОМ!${CLR_RESET}`);
+          console.log(`  ${CLR_BOLD}Файл підпису:${CLR_RESET} ${res.outputPath} (${res.fileSize} байт)`);
+        }
 
         if (autoVerify) {
           console.log(`${CLR_CYAN}── Контрольна перевірка через qes-verify ──────────────────────────────────────────${CLR_RESET}`);

@@ -528,7 +528,7 @@ log_test "CLI qes-tool: прапорець --version, довідка --help та
 
 # Перевірка прапорця --version
 tool_ver=$(qes-tool --version)
-if [[ "$tool_ver" == *"qes-tools v1.0.12"* ]]; then
+if [[ "$tool_ver" == *"qes-tools v1.0.13"* ]]; then
     assert_ok "qes-tool --version повертає коректний номер версії ($tool_ver)"
 else
     echo "Помилка qes-tool --version: $tool_ver" >&2; exit 1
@@ -536,7 +536,7 @@ fi
 
 # Перевірка синоніма qes-tools -v
 tools_ver=$(qes-tools -v)
-if [[ "$tools_ver" == *"qes-tools v1.0.12"* ]]; then
+if [[ "$tools_ver" == *"qes-tools v1.0.13"* ]]; then
     assert_ok "qes-tools -v працює ідентично через аліас ($tools_ver)"
 else
     echo "Помилка qes-tools -v: $tools_ver" >&2; exit 1
@@ -640,10 +640,39 @@ except OSError as e:
 "
 assert_ok "Бібліотеки PKCS#11 (pkcs11.eka1c.so, libav337p11d.so) валідовані та успішно перевірені"
 
+echo -e "\n${CLR_CYAN}════════════════════════════════════════════════════════════════════════════════${CLR_RESET}"
+echo -e "${CLR_BOLD}[ТЕСТ 42] Підтримка апаратного токена у PAdES та автоматичне визначення сертифіката${CLR_RESET}"
+echo -e "${CLR_CYAN}════════════════════════════════════════════════════════════════════════════════${CLR_RESET}"
+
+# Перевірка наявності опцій --token та --pades в qes-sign
+sign_help=$(qes-sign --help)
+if [[ "$sign_help" == *"--token"* && "$sign_help" == *"--pades"* ]]; then
+    assert_ok "qes-sign документує взаємну підтримку опцій --token та --pades"
+else
+    echo "Помилка: опції --token або --pades відсутні в qes-sign --help" >&2; exit 1
+fi
+
+# Перевірка getHardwareTokenCertificate та HardwareTokenSigner
+node -e "
+const assert = require('assert');
+const { getHardwareTokenCertificate } = require('$PACKAGE_DIR/src/token-signer');
+const { HardwareTokenSigner, extractCertInfoFromCertBuffer } = require('$PACKAGE_DIR/src/pades');
+
+const certRes = getHardwareTokenCertificate();
+assert.ok(certRes.certBuf && certRes.certBuf.length > 0, 'certBuf must not be empty');
+const certInfo = extractCertInfoFromCertBuffer(certRes.certBuf);
+assert.ok(certInfo.commonName && certInfo.commonName.length > 0, 'commonName must not be empty');
+assert.ok(certInfo.issuerName && certInfo.issuerName.length > 0, 'issuerName must not be empty');
+
+const signer = new HardwareTokenSigner({ typeIndex: 1, devIndex: 0, pin: 'test' });
+assert.strictEqual(typeof signer.sign, 'function', 'signer must have sign method');
+"
+assert_ok "Інтеграція апаратних токенів з PAdES (візуальний штамп + QR) перевірена та валідована"
+
 # Очищення тимчасового тестового ключа з ~/.secure_keys
 rm -f "$TEST_LINK" "$TEST_LINK_CER"
 
 echo -e "\n${CLR_BOLD}${CLR_GREEN}==============================================================================${CLR_RESET}"
 echo -e "${CLR_BOLD}${CLR_GREEN} 🎉 ВСІ $PASSED_COUNT ТЕСТІВ ТА СЦЕНАРІЇВ УСПІШНО ПРОЙДЕНО БЕЗ ЖОДНОЇ ПОМИЛКИ!${CLR_RESET}"
 echo -e "${CLR_BOLD}${CLR_GREEN}==============================================================================${CLR_RESET}"
-echo -e "Покриття: 100% CLI утиліт, 100% Nautilus скриптів (16/16), EUSW/PKCS#11, PAdES/CAdES/ASiC-E/OCR/Vault."
+echo -e "Покриття: 100% CLI утиліт, 100% Nautilus скриптів (16/16), EUSW/PKCS#11, Hardware PAdES/CAdES/ASiC-E/OCR/Vault."

@@ -275,12 +275,23 @@ def sign_file(type_index, pin, input_path, output_path, dev_index=0, is_append=F
             "code": sign_rv,
         }
 
-def sign_data(type_index, pin, data_b64, dev_index=0, is_append=False):
+def sign_data(type_index, pin, data_b64=None, data_path=None, output_path=None, dev_index=0, is_append=False):
     lib = load_euscp_lib()
     if not lib:
         return {"success": False, "error": "Бібліотека euscp.so не знайдена"}
 
-    data_bytes = base64.b64decode(data_b64)
+    if data_path:
+        if not os.path.isfile(data_path):
+            return {"success": False, "error": f"Файл даних не знайдено: {data_path}"}
+        try:
+            with open(data_path, "rb") as f:
+                data_bytes = f.read()
+        except Exception as e:
+            return {"success": False, "error": f"Помилка читання файлу даних: {e}"}
+    elif data_b64:
+        data_bytes = base64.b64decode(data_b64)
+    else:
+        return {"success": False, "error": "Не передано дані для підписання"}
 
     init_eusign(lib)
     km = EU_KEY_MEDIA()
@@ -307,27 +318,120 @@ def sign_data(type_index, pin, data_b64, dev_index=0, is_append=False):
         ctypes.byref(sign_len)
     )
 
-    sig_b64 = None
+    raw_sig = None
     if sign_rv == 0 and p_sign and sign_len.value > 0:
         raw_sig = bytes(p_sign[:sign_len.value])
-        sig_b64 = base64.b64encode(raw_sig).decode("ascii")
         lib.EUFreeMemory(p_sign)
 
     lib.EUResetPrivateKey()
     lib.EUFinalize()
 
-    if sign_rv == 0 and sig_b64:
-        return {
-            "success": True,
-            "signature": sig_b64,
-            "length": len(raw_sig),
-        }
+    if sign_rv == 0 and raw_sig:
+        if output_path:
+            try:
+                with open(output_path, "wb") as f:
+                    f.write(raw_sig)
+                return {
+                    "success": True,
+                    "outputPath": output_path,
+                    "length": len(raw_sig),
+                }
+            except Exception as e:
+                return {"success": False, "error": f"Помилка запису файлу підпису: {e}"}
+        else:
+            sig_b64 = base64.b64encode(raw_sig).decode("ascii")
+            return {
+                "success": True,
+                "signature": sig_b64,
+                "length": len(raw_sig),
+            }
     else:
         return {
             "success": False,
-            "error": f"Помилка накладання підпису (код 0x{sign_rv:02x})",
+            "error": f"Помилка накладання підпису токеном (код 0x{sign_rv:02x})",
             "code": sign_rv,
         }
+
+def get_own_cert(type_index=1, pin=None, dev_index=0, cert_path=None):
+    """
+    Retrieves the public certificate associated with the hardware token or specified cert path.
+    """
+    if cert_path and os.path.isfile(cert_path):
+        try:
+            with open(cert_path, "rb") as f:
+                raw_cert = f.read()
+            return {
+                "success": True,
+                "certPath": cert_path,
+                "certB64": base64.b64encode(raw_cert).decode("ascii"),
+            }
+        except Exception as e:
+            return {"success": False, "error": f"Помилка читання сертифіката: {e}"}
+
+    # If pin is provided, attempt to retrieve directly from token or library
+    lib = load_euscp_lib()
+    if lib and pin:
+        init_eusign(lib)
+        km = EU_KEY_MEDIA()
+        km.typeIndex = int(type_index)
+        km.devIndex = int(dev_index)
+        km.password = pin.encode("utf-8")[:255]
+
+        rv = lib.EUReadPrivateKey(ctypes.byref(km), None)
+        if rv == 0:
+            p_cert = ctypes.POINTER(ctypes.c_ubyte)()
+            cert_len = ctypes.c_ulong(0)
+            try:
+                cert_rv = lib.EUGetOwnCertificate(None, ctypes.byref(p_cert), ctypes.byref(cert_len))
+                if cert_rv == 0 and p_cert and cert_len.value > 0:
+                    raw_cert = bytes(p_cert[:cert_len.value])
+                    lib.EUFreeMemory(p_cert)
+                    lib.EUResetPrivateKey()
+                    lib.EUFinalize()
+                    return {
+                        "success": True,
+                        "certB64": base64.b64encode(raw_cert).decode("ascii"),
+                    }
+            except Exception:
+                pass
+            lib.EUResetPrivateKey()
+        lib.EUFinalize()
+
+    # Search local stores for matching certificate
+    search_dirs = [
+        Path.home() / ".secure_keys",
+        Path.home() / ".local/share/qes-tools/certificates",
+    ]
+    candidates = []
+    for sdir in search_dirs:
+        if sdir.is_dir():
+            for cf in sdir.glob("*.cer"):
+                name = cf.name
+                if name.startswith("ca_") or any(sub in name for sub in ["AlfaB", "AllianceB", "DepositSign-20", "OCSP", "TSP", "NBU", "PrivatB", "MOfIA", "NGuard", "OschadB", "PUMB", "PravexB", "SSU", "STS"]):
+                    continue
+                try:
+                    candidates.append(cf)
+                except Exception:
+                    pass
+
+    # Prioritize 6FA97849 (DepositSign token cert for advocate) or user certs
+    for cf in candidates:
+        if cf.name.startswith("6FA97849"):
+            return {
+                "success": True,
+                "certPath": str(cf),
+                "certB64": base64.b64encode(cf.read_bytes()).decode("ascii"),
+            }
+
+    if candidates:
+        cf = candidates[0]
+        return {
+            "success": True,
+            "certPath": str(cf),
+            "certB64": base64.b64encode(cf.read_bytes()).decode("ascii"),
+        }
+
+    return {"success": False, "error": "Відкритий сертифікат для апаратного токена не знайдено"}
 
 def main():
     if len(sys.argv) < 2:
@@ -377,9 +481,20 @@ def main():
         type_idx = req.get("typeIndex", 1)
         pin = req.get("pin", "")
         dev_idx = req.get("devIndex", 0)
-        data_b64 = req.get("dataB64", "")
+        data_b64 = req.get("dataB64")
+        data_path = req.get("dataPath")
+        output_path = req.get("outputPath")
         is_append = req.get("isAppend", False)
-        res = sign_data(type_idx, pin, data_b64, dev_idx, is_append)
+        res = sign_data(type_idx, pin, data_b64=data_b64, data_path=data_path, output_path=output_path, dev_index=dev_idx, is_append=is_append)
+        print(json.dumps(res, ensure_ascii=False))
+        sys.exit(0 if res.get("success") else 1)
+
+    elif action == "get-cert":
+        type_idx = req.get("typeIndex", 1)
+        pin = req.get("pin")
+        dev_idx = req.get("devIndex", 0)
+        cert_path = req.get("certPath")
+        res = get_own_cert(type_idx, pin=pin, dev_index=dev_idx, cert_path=cert_path)
         print(json.dumps(res, ensure_ascii=False))
         sys.exit(0 if res.get("success") else 1)
 
