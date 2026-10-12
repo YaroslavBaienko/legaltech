@@ -26,7 +26,7 @@ test('CLI fails gracefully when file is missing', () => {
   const cliPath = path.join(__dirname, '..', 'bin', 'qes-sign.js');
   const res = spawnSync('node', [cliPath, 'non_existent_file_12345.pdf'], { encoding: 'utf-8' });
   assert.notStrictEqual(res.status, 0);
-  assert.match(res.stderr, /не знайдено/);
+  assert.match(res.stderr, /не знайдено|not found/i);
 });
 
 test('Engine rejects wrong password without crash or leak', async () => {

@@ -12,6 +12,7 @@ const { spawnSync } = require('child_process');
 const { QESEngine } = require('../src/engine');
 const { getOrPromptPassword, sendAgentMessage } = require('../src/session');
 const { t, getQESLang } = require('../src/i18n');
+const lang = getQESLang();
 const {
   chooseSigningMedium,
   getConnectedHardwareTokens,
@@ -202,12 +203,15 @@ function findDefaultKey() {
 }
 
 async function main() {
+  const lang = getQESLang();
   const args = process.argv.slice(2);
+  let pkgVersion = '1.0.21';
+  try { pkgVersion = require('../package.json').version; } catch (_) {}
   if (args.length === 0 || args.includes('-h') || args.includes('--help')) {
     console.log(`
 ${CLR_BOLD}${CLR_CYAN}================================================================================${CLR_RESET}
 ${CLR_BOLD}${CLR_CYAN}  qes-sign — автономний інструмент підписання КЕП (ДСТУ 4145-2002 / PAdES / CAdES)${CLR_RESET}
-${CLR_BOLD}${CLR_CYAN}  Версія 1.0.16 | 100% Offline-First | Захист адвокатської таємниці${CLR_RESET}
+${CLR_BOLD}${CLR_CYAN}  Версія ${pkgVersion} | 100% Offline-First | Захист адвокатської таємниці${CLR_RESET}
 ${CLR_BOLD}${CLR_CYAN}================================================================================${CLR_RESET}
 
 ${CLR_BOLD}ОПИС:${CLR_RESET}
@@ -363,11 +367,11 @@ ${CLR_BOLD}ПЕРЕВІРКА ПІДПИСІВ:${CLR_RESET}
   if (inputFiles.length === 0) {
     if (useGui) {
       const filterArgs = usePades
-        ? ['--file-filter=PDF Документи (*.pdf) | *.pdf', '--file-filter=Усі файли (*.*) | *.*']
-        : ['--file-filter=Усі файли (*.*) | *.*'];
+        ? (lang === 'en' ? ['--file-filter=PDF Documents (*.pdf) | *.pdf', '--file-filter=All files (*.*) | *.*'] : ['--file-filter=PDF Документи (*.pdf) | *.pdf', '--file-filter=Усі файли (*.*) | *.*'])
+        : (lang === 'en' ? ['--file-filter=All files (*.*) | *.*'] : ['--file-filter=Усі файли (*.*) | *.*']);
       const title = usePades
-        ? 'Оберіть PDF-документ для накладання КЕП (PAdES зі штампом)'
-        : 'Оберіть документ або папку для підписання КЕП';
+        ? (lang === 'en' ? 'Select PDF document for QES signing (PAdES with stamp)' : 'Оберіть PDF-документ для накладання КЕП (PAdES зі штампом)')
+        : (lang === 'en' ? 'Select document or directory for QES signing' : 'Оберіть документ або папку для підписання КЕП');
       const selProc = spawnSync('zenity', [
         '--file-selection',
         `--title=${title}`,
@@ -379,7 +383,7 @@ ${CLR_BOLD}ПЕРЕВІРКА ПІДПИСІВ:${CLR_RESET}
       }
       inputFiles.push(path.resolve(chosen));
     } else {
-      console.error(`${CLR_RED}Помилка: не вказано файл(и) або папку для підписання.${CLR_RESET}`);
+      console.error(`${CLR_RED}${lang === 'en' ? 'Error: No file(s) or directory specified for signing.' : 'Помилка: не вказано файл(и) або папку для підписання.'}${CLR_RESET}`);
       process.exit(1);
     }
   }
@@ -389,7 +393,7 @@ ${CLR_BOLD}ПЕРЕВІРКА ПІДПИСІВ:${CLR_RESET}
 
   for (const fp of inputFiles) {
     if (!fs.existsSync(fp)) {
-      console.error(`${CLR_RED}Помилка: шлях '${fp}' не знайдено.${CLR_RESET}`);
+      console.error(`${CLR_RED}${lang === 'en' ? `Error: Path '${fp}' not found.` : `Помилка: шлях '${fp}' не знайдено.`}${CLR_RESET}`);
       process.exit(1);
     }
 
@@ -412,12 +416,12 @@ ${CLR_BOLD}ПЕРЕВІРКА ПІДПИСІВ:${CLR_RESET}
   }
 
   if (resolvedFiles.length === 0) {
-    console.error(`${CLR_RED}Помилка: не знайдено файлів для підписання.${CLR_RESET}`);
+    console.error(`${CLR_RED}${lang === 'en' ? 'Error: No files found for signing.' : 'Помилка: не знайдено файлів для підписання.'}${CLR_RESET}`);
     process.exit(1);
   }
 
   if (detectedFolder) {
-    console.log(`${CLR_CYAN}📁 Виявлено папку: ${path.basename(detectedFolder)}/ (знайдено файлів для підписання: ${resolvedFiles.length})${CLR_RESET}`);
+    console.log(`${CLR_CYAN}📁 ${lang === 'en' ? `Detected directory: ${path.basename(detectedFolder)}/ (found files to sign: ${resolvedFiles.length})` : `Виявлено папку: ${path.basename(detectedFolder)}/ (знайдено файлів для підписання: ${resolvedFiles.length})`}${CLR_RESET}`);
     if (useAsice && !outputPath) {
       const parentDir = path.dirname(detectedFolder);
       const baseName = path.basename(detectedFolder);
@@ -431,8 +435,8 @@ ${CLR_BOLD}ПЕРЕВІРКА ПІДПИСІВ:${CLR_RESET}
 
   const docPath = inputFiles[0];
   const docDesc = inputFiles.length === 1
-    ? `${path.basename(inputFiles[0])} (${fs.statSync(inputFiles[0]).size} байт)`
-    : `${inputFiles.length} файлів у пакеті`;
+    ? (lang === 'en' ? `${path.basename(inputFiles[0])} (${fs.statSync(inputFiles[0]).size} bytes)` : `${path.basename(inputFiles[0])} (${fs.statSync(inputFiles[0]).size} байт)`)
+    : (lang === 'en' ? `${inputFiles.length} files in batch` : `${inputFiles.length} файлів у пакеті`);
 
   // Контекстне вікно вибору носія підпису (файловий ключ або апаратний токен)
   if (!keyPath && !useToken) {
@@ -446,7 +450,7 @@ ${CLR_BOLD}ПЕРЕВІРКА ПІДПИСІВ:${CLR_RESET}
     });
 
     if (mediumRes.cancelled) {
-      console.log(`${CLR_YELLOW}Операцію підписання скасовано.${CLR_RESET}`);
+      console.log(`${CLR_YELLOW}${lang === 'en' ? 'Signing operation cancelled.' : 'Операцію підписання скасовано.'}${CLR_RESET}`);
       process.exit(1);
     }
 
@@ -464,27 +468,27 @@ ${CLR_BOLD}ПЕРЕВІРКА ПІДПИСІВ:${CLR_RESET}
       if (useGui) {
         spawnSync('zenity', [
           '--warning',
-          '--title=Апаратний ключ КЕП',
-          '--text=⚠️ Жодного апаратного токена не виявлено в USB-портах.\n\nБудь ласка, підключіть ваш апаратний носій (Алмаз-1К, Кристал-1К, SecureToken-337 тощо) у USB-порт комп\'ютера та спробуйте ще раз.',
+          `--title=${lang === 'en' ? 'Hardware Key QES' : 'Апаратний ключ КЕП'}`,
+          `--text=${lang === 'en' ? '⚠️ No hardware token detected in USB ports.\n\nPlease connect your hardware device (Almaz-1K, Crystal-1K, SecureToken-337, etc.) into a USB port and try again.' : '⚠️ Жодного апаратного токена не виявлено в USB-портах.\n\nБудь ласка, підключіть ваш апаратний носій (Алмаз-1К, Кристал-1К, SecureToken-337 тощо) у USB-порт комп\'ютера та спробуйте ще раз.'}`,
         ]);
       } else {
-        console.error(`${CLR_RED}Помилка: апаратних USB-токенів не виявлено в системі. Вставте токен і повторіть спробу.${CLR_RESET}`);
+        console.error(`${CLR_RED}${lang === 'en' ? 'Error: No hardware USB tokens detected. Insert token and try again.' : 'Помилка: апаратних USB-токенів не виявлено в системі. Вставте токен і повторіть спробу.'}${CLR_RESET}`);
       }
       process.exit(1);
     }
 
     const activeTok = tokState.tokens[0];
     console.log(`${CLR_CYAN}╔═══════════════════════════════════════════════════════════════════════════════════════╗${CLR_RESET}`);
-    console.log(`${CLR_CYAN}║ ПІДПИСАННЯ ДОКУМЕНТІВ КЕП (АПАРАТНИЙ ТОКЕН / ЗНОК)${CLR_RESET}`);
-    console.log(`${CLR_CYAN}║ Об'єкт:   ${docDesc}${CLR_RESET}`);
-    console.log(`${CLR_CYAN}║ Пристрій: ${activeTok.displayName}${CLR_RESET}`);
+    console.log(`${CLR_CYAN}║ ${lang === 'en' ? 'SIGNING WITH HARDWARE TOKEN (QES / SECURE CHIP)' : 'ПІДПИСАННЯ ДОКУМЕНТІВ КЕП (АПАРАТНИЙ ТОКЕН / ЗНОК)'}${CLR_RESET}`);
+    console.log(`${CLR_CYAN}║ ${lang === 'en' ? 'Object:' : 'Об\'єкт:'}   ${docDesc}${CLR_RESET}`);
+    console.log(`${CLR_CYAN}║ ${lang === 'en' ? 'Device:' : 'Пристрій:'} ${activeTok.displayName}${CLR_RESET}`);
     console.log(`${CLR_CYAN}╚═══════════════════════════════════════════════════════════════════════════════════════╝${CLR_RESET}`);
 
     let pin = null;
     try {
-      pin = await askPassword(`Введіть PIN-код доступу до токена (${activeTok.displayName}):`, useGui);
+      pin = await askPassword(lang === 'en' ? `Enter PIN for token (${activeTok.displayName}):` : `Введіть PIN-код доступу до токена (${activeTok.displayName}):`, useGui);
     } catch (e) {
-      console.log(`${CLR_YELLOW}Операцію введення PIN-коду скасовано.${CLR_RESET}`);
+      console.log(`${CLR_YELLOW}${lang === 'en' ? 'PIN code entry cancelled.' : 'Операцію введення PIN-коду скасовано.'}${CLR_RESET}`);
       process.exit(1);
     }
 
@@ -503,7 +507,7 @@ ${CLR_BOLD}ПЕРЕВІРКА ПІДПИСІВ:${CLR_RESET}
             ? path.join(path.dirname(curDoc), `${path.parse(curDoc).name}_signed.pdf`)
             : `${curDoc}.p7s`);
 
-      console.log(`\n${CLR_GRAY}⏳ [${fIdx + 1}/${inputFiles.length}] Підписання апаратним токеном: ${path.basename(curDoc)}...${CLR_RESET}`);
+      console.log(`\n${CLR_GRAY}⏳ [${fIdx + 1}/${inputFiles.length}] ${lang === 'en' ? 'Signing with hardware token:' : 'Підписання апаратним токеном:'} ${path.basename(curDoc)}...${CLR_RESET}`);
 
       try {
         let res;
@@ -550,18 +554,18 @@ ${CLR_BOLD}ПЕРЕВІРКА ПІДПИСІВ:${CLR_RESET}
         }
 
         if (autoVerify) {
-          console.log(`${CLR_CYAN}── Контрольна перевірка через qes-verify ──────────────────────────────────────────${CLR_RESET}`);
+          console.log(`${CLR_CYAN}── ${lang === 'en' ? 'Verification via qes-verify' : 'Контрольна перевірка через qes-verify'} ──────────────────────────────────────────${CLR_RESET}`);
           spawnSync('qes-verify', [res.outputPath], { stdio: 'inherit' });
         }
       } catch (err) {
         if (useGui) {
           spawnSync('zenity', [
             '--error',
-            '--title=Помилка апаратного токена',
+            `--title=${lang === 'en' ? 'Hardware Token Error' : 'Помилка апаратного токена'}`,
             `--text=❌ ${err.message}`,
           ]);
         }
-        console.error(`\n${CLR_RED}❌ Помилка підписання: ${err.message}${CLR_RESET}\n`);
+        console.error(`\n${CLR_RED}❌ ${lang === 'en' ? 'Signing error' : 'Помилка підписання'}: ${err.message}${CLR_RESET}\n`);
         process.exit(1);
       }
     }
@@ -574,14 +578,14 @@ ${CLR_BOLD}ПЕРЕВІРКА ПІДПИСІВ:${CLR_RESET}
   }
 
   if (!keyPath || !fs.existsSync(keyPath)) {
-    console.error(`${CLR_RED}Помилка: файл ключа не знайдено в ~/.secure_keys/. Вкажіть через --key <шлях>.${CLR_RESET}`);
+    console.error(`${CLR_RED}${lang === 'en' ? 'Error: key file not found in ~/.secure_keys/. Specify via --key <path>.' : 'Помилка: файл ключа не знайдено в ~/.secure_keys/. Вкажіть через --key <шлях>.'}${CLR_RESET}`);
     process.exit(1);
   }
 
   console.log(`${CLR_CYAN}╔═══════════════════════════════════════════════════════════════════════════════════════╗${CLR_RESET}`);
-  console.log(`${CLR_CYAN}║ ПІДПИСАННЯ ДОКУМЕНТІВ КЕП (ДСТУ 4145-2002)${CLR_RESET}`);
-  console.log(`${CLR_CYAN}║ Об'єкт: ${docDesc}${CLR_RESET}`);
-  console.log(`${CLR_CYAN}║ Ключ:   ${path.basename(keyPath)}${CLR_RESET}`);
+  console.log(`${CLR_CYAN}║ ${lang === 'en' ? 'SIGNING WITH FILE KEY (DSTU 4145-2002 / PAdES / CAdES)' : 'ПІДПИСАННЯ ДОКУМЕНТІВ КЕП (ДСТУ 4145-2002)'}${CLR_RESET}`);
+  console.log(`${CLR_CYAN}║ ${lang === 'en' ? 'Object:' : 'Об\'єкт:'} ${docDesc}${CLR_RESET}`);
+  console.log(`${CLR_CYAN}║ ${lang === 'en' ? 'Key:' : 'Ключ:'}   ${path.basename(keyPath)}${CLR_RESET}`);
   console.log(`${CLR_CYAN}╚═══════════════════════════════════════════════════════════════════════════════════════╝${CLR_RESET}`);
 
   // Load national CA bundle (all 21 accredited Ukrainian QTSPs) if available
@@ -612,19 +616,19 @@ ${CLR_BOLD}ПЕРЕВІРКА ПІДПИСІВ:${CLR_RESET}
       askPasswordFn: askPassword,
     });
   } catch (err) {
-    console.error(`\n${CLR_RED}❌ Помилка ініціалізації: ${err.message}${CLR_RESET}\n`);
+    console.error(`\n${CLR_RED}❌ ${lang === 'en' ? 'Initialization error' : 'Помилка ініціалізації'}: ${err.message}${CLR_RESET}\n`);
     process.exit(1);
   }
 
   if (!boxInfo.hasCert) {
-    console.warn(`${CLR_YELLOW}⚠️ Увага: не вдалося знайти сертифікат відкритого ключа (.cer) локально чи через CMP.${CLR_RESET}`);
+    console.warn(`${CLR_YELLOW}⚠️ ${lang === 'en' ? 'Warning: could not find public key certificate (.cer) locally or via CMP.' : 'Увага: не вдалося знайти сертифікат відкритого ключа (.cer) локально чи через CMP.'}${CLR_RESET}`);
   }
 
   let hasErrors = false;
   const isSingleAsice = inputFiles.length === 1 && inputFiles[0].toLowerCase().endsWith('.asice');
 
   if (useAsice || isSingleAsice) {
-    console.log(`${CLR_GRAY}⏳ Формування / оновлення контейнера ETSI ASiC-E...${CLR_RESET}`);
+    console.log(`${CLR_GRAY}⏳ ${lang === 'en' ? 'Creating / updating ETSI ASiC-E container...' : 'Формування / оновлення контейнера ETSI ASiC-E...'}${CLR_RESET}`);
 
     try {
       const res = await engine.signAsice(boxInfo.box, inputFiles, {
@@ -635,33 +639,33 @@ ${CLR_BOLD}ПЕРЕВІРКА ПІДПИСІВ:${CLR_RESET}
       });
 
       if (res.isMultiSignature) {
-        console.log(`\n${CLR_GREEN}✅ МУЛЬТИПІДПИС УСПІШНО ДОДАНО ДО ASiC-E! (Підпис #${res.sigCount})${CLR_RESET}`);
+        console.log(`\n${CLR_GREEN}✅ ${lang === 'en' ? `MULTI-SIGNATURE ADDED TO ASiC-E! (Signature #${res.sigCount})` : `МУЛЬТИПІДПИС УСПІШНО ДОДАНО ДО ASiC-E! (Підпис #${res.sigCount})`}${CLR_RESET}`);
       } else {
-        console.log(`\n${CLR_GREEN}✅ ПАКЕТНИЙ КОНТЕЙНЕР ASiC-E УСПІШНО СТВОРЕНО!${CLR_RESET}`);
+        console.log(`\n${CLR_GREEN}✅ ${lang === 'en' ? 'ETSI ASiC-E CONTAINER CREATED SUCCESSFULLY!' : 'ПАКЕТНИЙ КОНТЕЙНЕР ASiC-E УСПІШНО СТВОРЕНО!'}${CLR_RESET}`);
       }
-      console.log(`  ${CLR_BOLD}Файл контейнера:${CLR_RESET} ${res.outputPath} (${res.containerSize} байт)`);
-      console.log(`  ${CLR_CYAN}Підписані файли (${res.fileCount}):${CLR_RESET} ${res.signedFiles.join(', ')}\n`);
+      console.log(`  ${CLR_BOLD}${lang === 'en' ? 'Container file:' : 'Файл контейнера:'}${CLR_RESET} ${res.outputPath} (${res.containerSize} ${lang === 'en' ? 'bytes' : 'байт'})`);
+      console.log(`  ${CLR_CYAN}${lang === 'en' ? `Signed files (${res.fileCount}):` : `Підписані файли (${res.fileCount}):`}${CLR_RESET} ${res.signedFiles.join(', ')}\n`);
 
       if (autoVerify) {
-        console.log(`${CLR_CYAN}── Контрольна перевірка через qes-verify ──────────────────────────────────────────${CLR_RESET}`);
+        console.log(`${CLR_CYAN}── ${lang === 'en' ? 'Verification via qes-verify' : 'Контрольна перевірка через qes-verify'} ──────────────────────────────────────────${CLR_RESET}`);
         const vRes = spawnSync('qes-verify', [res.outputPath], { stdio: 'inherit' });
         if (vRes.status !== 0) {
-          console.warn(`${CLR_YELLOW}⚠️ Валідатор повернув статус ${vRes.status}${CLR_RESET}`);
+          console.warn(`${CLR_YELLOW}⚠️ ${lang === 'en' ? `Validator returned exit code ${vRes.status}` : `Валідатор повернув статус ${vRes.status}`}${CLR_RESET}`);
         }
       }
     } catch (asiceErr) {
-      console.error(`\n${CLR_RED}❌ Помилка обробки ASiC-E контейнера: ${asiceErr.message}${CLR_RESET}\n`);
+      console.error(`\n${CLR_RED}❌ ${lang === 'en' ? 'Error processing ASiC-E container' : 'Помилка обробки ASiC-E контейнера'}: ${asiceErr.message}${CLR_RESET}\n`);
       process.exit(1);
     }
   } else if (usePades || (useAppend && inputFiles.every((f) => f.toLowerCase().endsWith('.pdf')))) {
     for (let fIdx = 0; fIdx < inputFiles.length; fIdx++) {
       const curDoc = inputFiles[fIdx];
       if (!curDoc.toLowerCase().endsWith('.pdf')) {
-        console.warn(`${CLR_YELLOW}⚠️ Пропуск файлу '${path.basename(curDoc)}': режим PAdES підтримується лише для PDF-файлів.${CLR_RESET}`);
+        console.warn(`${CLR_YELLOW}⚠️ ${lang === 'en' ? `Skipping file '${path.basename(curDoc)}': PAdES mode only supports PDF files.` : `Пропуск файлу '${path.basename(curDoc)}': режим PAdES підтримується лише для PDF-файлів.`}${CLR_RESET}`);
         continue;
       }
 
-      console.log(`\n${CLR_GRAY}⏳ [${fIdx + 1}/${inputFiles.length}] Підписання PAdES: ${path.basename(curDoc)}...${CLR_RESET}`);
+      console.log(`\n${CLR_GRAY}⏳ [${fIdx + 1}/${inputFiles.length}] ${lang === 'en' ? 'Signing PAdES:' : 'Підписання PAdES:'} ${path.basename(curDoc)}...${CLR_RESET}`);
       const curOutput = (inputFiles.length === 1 && outputPath) ? outputPath : null;
 
       try {
@@ -675,22 +679,22 @@ ${CLR_BOLD}ПЕРЕВІРКА ПІДПИСІВ:${CLR_RESET}
         });
 
         if (res.isMultiSignature) {
-          console.log(`${CLR_GREEN}✅ МУЛЬТИПІДПИС УСПІШНО ВШИТО У PDF (Підпис #${res.sigCount}):${CLR_RESET} ${res.outputPath} (${res.fileSize} байт)`);
+          console.log(`${CLR_GREEN}✅ ${lang === 'en' ? `MULTI-SIGNATURE EMBEDDED IN PDF (Signature #${res.sigCount}):` : `МУЛЬТИПІДПИС УСПІШНО ВШИТО У PDF (Підпис #${res.sigCount}):`}${CLR_RESET} ${res.outputPath} (${res.fileSize} ${lang === 'en' ? 'bytes' : 'байт'})`);
         } else {
-          console.log(`${CLR_GREEN}✅ УСПІШНО ВШИТО У PDF (PAdES):${CLR_RESET} ${res.outputPath} (${res.fileSize} байт)`);
+          console.log(`${CLR_GREEN}✅ ${lang === 'en' ? 'SUCCESSFULLY EMBEDDED IN PDF (PAdES):' : 'УСПІШНО ВШИТО У PDF (PAdES):'}${CLR_RESET} ${res.outputPath} (${res.fileSize} ${lang === 'en' ? 'bytes' : 'байт'})`);
         }
         if (autoVerify) {
           spawnSync('qes-verify', [res.outputPath], { stdio: 'inherit' });
         }
       } catch (padesErr) {
         hasErrors = true;
-        console.error(`${CLR_RED}❌ Помилка PAdES підписання для '${path.basename(curDoc)}': ${padesErr.message}${CLR_RESET}`);
+        console.error(`${CLR_RED}❌ ${lang === 'en' ? `PAdES signing error for '${path.basename(curDoc)}'` : `Помилка PAdES підписання для '${path.basename(curDoc)}'`}: ${padesErr.message}${CLR_RESET}`);
       }
     }
   } else {
     for (let fIdx = 0; fIdx < inputFiles.length; fIdx++) {
       const curDoc = inputFiles[fIdx];
-      console.log(`\n${CLR_GRAY}⏳ [${fIdx + 1}/${inputFiles.length}] Підписання CAdES: ${path.basename(curDoc)}...${CLR_RESET}`);
+      console.log(`\n${CLR_GRAY}⏳ [${fIdx + 1}/${inputFiles.length}] ${lang === 'en' ? 'Signing CAdES:' : 'Підписання CAdES:'} ${path.basename(curDoc)}...${CLR_RESET}`);
       const curOutput = (inputFiles.length === 1 && outputPath) ? outputPath : (curDoc.toLowerCase().endsWith('.p7s') ? curDoc : `${curDoc}.p7s`);
 
       try {
@@ -703,16 +707,16 @@ ${CLR_BOLD}ПЕРЕВІРКА ПІДПИСІВ:${CLR_RESET}
         });
 
         if (res.isMultiSignature) {
-          console.log(`${CLR_GREEN}✅ МУЛЬТИПІДПИС CAdES УСПІШНО ДОДАНО (Підпис #${res.sigCount}):${CLR_RESET} ${res.outputPath} (${res.signatureBytes} байт)`);
+          console.log(`${CLR_GREEN}✅ ${lang === 'en' ? `CAdES MULTI-SIGNATURE ADDED (Signature #${res.sigCount}):` : `МУЛЬТИПІДПИС CAdES УСПІШНО ДОДАНО (Підпис #${res.sigCount}):`}${CLR_RESET} ${res.outputPath} (${res.signatureBytes} ${lang === 'en' ? 'bytes' : 'байт'})`);
         } else {
-          console.log(`${CLR_GREEN}✅ ПІДПИС СТВОРЕНО:${CLR_RESET} ${res.outputPath} (${res.signatureBytes} байт)`);
+          console.log(`${CLR_GREEN}✅ ${lang === 'en' ? 'SIGNATURE CREATED:' : 'ПІДПИС СТВОРЕНО:'}${CLR_RESET} ${res.outputPath} (${res.signatureBytes} ${lang === 'en' ? 'bytes' : 'байт'})`);
         }
         if (autoVerify) {
           spawnSync('qes-verify', [res.outputPath], { stdio: 'inherit' });
         }
       } catch (signErr) {
         hasErrors = true;
-        console.error(`${CLR_RED}❌ Помилка підписання '${path.basename(curDoc)}': ${signErr.message}${CLR_RESET}`);
+        console.error(`${CLR_RED}❌ ${lang === 'en' ? `Signing error for '${path.basename(curDoc)}'` : `Помилка підписання '${path.basename(curDoc)}'`}: ${signErr.message}${CLR_RESET}`);
       }
     }
   }
@@ -723,6 +727,6 @@ ${CLR_BOLD}ПЕРЕВІРКА ПІДПИСІВ:${CLR_RESET}
 }
 
 main().catch((e) => {
-  console.error(`${CLR_RED}Непередбачена помилка:${CLR_RESET}`, e);
+  console.error(`${CLR_RED}${lang === 'en' ? 'Unexpected error:' : 'Непередбачена помилка:'}${CLR_RESET}`, e);
   process.exit(1);
 });

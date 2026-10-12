@@ -45,9 +45,25 @@ def colorize(text: str, color: str, use_color: bool = True) -> str:
     return f"{color}{text}{CLR_RESET}" if use_color else text
 
 
+def get_qes_lang() -> str:
+    cfg = Path.home() / ".config" / "qes" / "config.json"
+    if cfg.is_file():
+        try:
+            with open(cfg, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if data.get("lang") == "en":
+                    return "en"
+                if data.get("lang") in ("uk", "ua"):
+                    return "uk"
+        except Exception:
+            pass
+    l = os.environ.get("LC_ALL") or os.environ.get("LC_MESSAGES") or os.environ.get("LANG") or ""
+    return "uk" if l.lower().startswith("uk") else "en"
+
+
 def format_iso_time(iso_str: Optional[str]) -> str:
     if not iso_str:
-        return "Не вказано"
+        return "Not specified" if get_qes_lang() == "en" else "Не вказано"
     try:
         # Normalize ISO strings
         cleaned = iso_str.replace("Z", "+00:00")
@@ -397,113 +413,135 @@ def inspect_pades_pdf(path: str) -> List[Dict[str, Any]]:
 
 def print_cli_report(res: Dict[str, Any], use_color: bool = True, sig_index: int = 1, total_sigs: int = 1) -> bool:
     all_ok = True
+    is_en = (get_qes_lang() == "en")
     print(colorize(f"╔═══════════════════════════════════════════════════════════════════════════════════════╗", CLR_CYAN, use_color))
-    if total_sigs > 1:
-        print(colorize(f"║ АНАЛІЗ ЕЛЕКТРОННОГО ПІДПИСУ (QES / КЕП / УЕП) — ПІДПИС #{sig_index} З {total_sigs}", CLR_BOLD + CLR_CYAN, use_color))
+    if is_en:
+        if total_sigs > 1:
+            print(colorize(f"║ ELECTRONIC SIGNATURE ANALYSIS (QES / AES) — SIGNATURE #{sig_index} OF {total_sigs}", CLR_BOLD + CLR_CYAN, use_color))
+        else:
+            print(colorize(f"║ ELECTRONIC SIGNATURE ANALYSIS (QES / AES)", CLR_BOLD + CLR_CYAN, use_color))
+        print(colorize(f"║ File: {os.path.basename(res['file_path'])}", CLR_CYAN, use_color))
     else:
-        print(colorize(f"║ АНАЛІЗ ЕЛЕКТРОННОГО ПІДПИСУ (QES / КЕП / УЕП)", CLR_BOLD + CLR_CYAN, use_color))
-    print(colorize(f"║ Файл: {os.path.basename(res['file_path'])}", CLR_CYAN, use_color))
+        if total_sigs > 1:
+            print(colorize(f"║ АНАЛІЗ ЕЛЕКТРОННОГО ПІДПИСУ (QES / КЕП / УЕП) — ПІДПИС #{sig_index} З {total_sigs}", CLR_BOLD + CLR_CYAN, use_color))
+        else:
+            print(colorize(f"║ АНАЛІЗ ЕЛЕКТРОННОГО ПІДПИСУ (QES / КЕП / УЕП)", CLR_BOLD + CLR_CYAN, use_color))
+        print(colorize(f"║ Файл: {os.path.basename(res['file_path'])}", CLR_CYAN, use_color))
     print(colorize(f"╚═══════════════════════════════════════════════════════════════════════════════════════╝", CLR_CYAN, use_color))
 
-    print(f"  {colorize('Формат контейнера:', CLR_BOLD, use_color)} {res['container_format']}")
+    container_label = "Container format:" if is_en else "Формат контейнера:"
+    print(f"  {colorize(container_label, CLR_BOLD, use_color)} {res['container_format']}")
 
     if res.get("signed_files"):
         files_str = ", ".join(res["signed_files"])
-        print(f"  {colorize('Підписані файли:', CLR_BOLD, use_color)}   {colorize(files_str, CLR_BLUE, use_color)} ({len(res['signed_files'])} файл(-ів))")
+        signed_files_label = "Signed files:" if is_en else "Підписані файли:"
+        count_suffix = f"{len(res['signed_files'])} file(s)" if is_en else f"{len(res['signed_files'])} файл(-ів)"
+        print(f"  {colorize(signed_files_label, CLR_BOLD, use_color)}   {colorize(files_str, CLR_BLUE, use_color)} ({count_suffix})")
 
     if res.get("manifest_verified") is True:
-        print(f"  {colorize('Цілісність архіву:', CLR_BOLD, use_color)} {colorize('✅ Усі файли відповідають контрольним сумам у маніфесті', CLR_GREEN, use_color)}")
+        integrity_label = "Archive integrity:" if is_en else "Цілісність архіву:"
+        integrity_val = "✅ All files match checksums in manifest" if is_en else "✅ Усі файли відповідають контрольним сумам у маніфесті"
+        print(f"  {colorize(integrity_label, CLR_BOLD, use_color)} {colorize(integrity_val, CLR_GREEN, use_color)}")
     elif res.get("manifest_verified") is False:
         all_ok = False
-        print(f"  {colorize('Цілісність архіву:', CLR_BOLD, use_color)} {colorize('❌ ПОШКОДЖЕНО (файли не відповідають контрольним сумам у маніфесті!)', CLR_RED + CLR_BOLD, use_color)}")
+        integrity_label = "Archive integrity:" if is_en else "Цілісність архіву:"
+        integrity_val = "❌ CORRUPTED (files do not match checksums in manifest!)" if is_en else "❌ ПОШКОДЖЕНО (файли не відповідають контрольним сумам у маніфесті!)"
+        print(f"  {colorize(integrity_label, CLR_BOLD, use_color)} {colorize(integrity_val, CLR_RED + CLR_BOLD, use_color)}")
 
     # Signing Time
     st = format_iso_time(res.get("signing_time"))
-    print(f"  {colorize('Час підписання:', CLR_BOLD, use_color)}     {st}")
+    signing_time_label = "Signing time:" if is_en else "Час підписання:"
+    print(f"  {colorize(signing_time_label, CLR_BOLD, use_color)}     {st}")
 
     # TSP
+    tsp_label = "Timestamp (TSP):" if is_en else "Позначка часу (TSP):"
     if res.get("has_tsp"):
-        tsp_info = f"Присутня" + (f" ({format_iso_time(res.get('tsp_time'))})" if res.get('tsp_time') else "")
-        print(f"  {colorize('Позначка часу (TSP):', CLR_BOLD, use_color)} {colorize(f'✅ {tsp_info}', CLR_GREEN, use_color)}")
+        tsp_info = ("Present" if is_en else "Присутня") + (f" ({format_iso_time(res.get('tsp_time'))})" if res.get('tsp_time') else "")
+        print(f"  {colorize(tsp_label, CLR_BOLD, use_color)} {colorize(f'✅ {tsp_info}', CLR_GREEN, use_color)}")
     else:
-        print(f"  {colorize('Позначка часу (TSP):', CLR_BOLD, use_color)} {colorize('⚠️ Відсутня окрема мітка TSP (час заявлено клієнтом)', CLR_YELLOW, use_color)}")
+        no_tsp = "⚠️ No dedicated TSP timestamp (claimed time by client)" if is_en else "⚠️ Відсутня окрема мітка TSP (час заявлено клієнтом)"
+        print(f"  {colorize(tsp_label, CLR_BOLD, use_color)} {colorize(no_tsp, CLR_YELLOW, use_color)}")
 
     # Validity at signing
+    validity_label = "Validity at signing:" if is_en else "Чинність на момент підпису:"
     if res.get("is_valid_at_signing") is True:
-        print(f"  {colorize('Чинність на момент підпису:', CLR_BOLD, use_color)} {colorize('✅ ДІЙСНИЙ (сертифікат діяв на дату підписання)', CLR_GREEN, use_color)}")
+        valid_val = "✅ VALID (certificate was active at signing time)" if is_en else "✅ ДІЙСНИЙ (сертифікат діяв на дату підписання)"
+        print(f"  {colorize(validity_label, CLR_BOLD, use_color)} {colorize(valid_val, CLR_GREEN, use_color)}")
     elif res.get("is_valid_at_signing") is False:
         all_ok = False
-        print(f"  {colorize('Чинність на момент підпису:', CLR_BOLD, use_color)} {colorize('❌ НЕДІЙСНИЙ (підписано поза строком дії сертифіката!)', CLR_RED + CLR_BOLD, use_color)}")
+        invalid_val = "❌ INVALID (signed outside certificate validity period!)" if is_en else "❌ НЕДІЙСНИЙ (підписано поза строком дії сертифіката!)"
+        print(f"  {colorize(validity_label, CLR_BOLD, use_color)} {colorize(invalid_val, CLR_RED + CLR_BOLD, use_color)}")
 
     print()
     certs = res.get("signer_certs", [])
     if not certs:
-        print(colorize("  ⚠️ Сертифікат підписувача не знайдено або не вдалося декодувати.", CLR_YELLOW, use_color))
+        no_cert = "  ⚠️ Signer certificate not found or could not be decoded." if is_en else "  ⚠️ Сертифікат підписувача не знайдено або не вдалося декодувати."
+        print(colorize(no_cert, CLR_YELLOW, use_color))
         return False
 
     for idx, c in enumerate(certs, 1):
         subj = c["subject"]
         iss = c["issuer"]
-        print(colorize(f"  ── Підписувач #{idx} ─────────────────────────────────────────────────────────────", CLR_GRAY, use_color))
+        signer_hdr = f"  ── Signer #{idx} ─────────────────────────────────────────────────────────────" if is_en else f"  ── Підписувач #{idx} ─────────────────────────────────────────────────────────────"
+        print(colorize(signer_hdr, CLR_GRAY, use_color))
         
         # Identity
-        full_name = subj.get("cn") or f"{subj.get('surname', '')} {subj.get('given_name', '')}".strip() or "Не вказано"
-        print(f"  {colorize('П.І.Б. підписувача:', CLR_BOLD, use_color)}  {colorize(full_name, CLR_BOLD, use_color)}")
+        not_specified = "Not specified" if is_en else "Не вказано"
+        full_name = subj.get("cn") or f"{subj.get('surname', '')} {subj.get('given_name', '')}".strip() or not_specified
+        name_label = "Signer full name:" if is_en else "П.І.Б. підписувача:"
+        print(f"  {colorize(name_label, CLR_BOLD, use_color)}  {colorize(full_name, CLR_BOLD, use_color)}")
 
-        drfo = subj.get("drfo") or subj.get("serial_number") or "Не вказано"
-        print(f"  {colorize('РНОКПП (ДРФО/ІПН):', CLR_BOLD, use_color)}  {drfo}")
+        drfo = subj.get("drfo") or subj.get("serial_number") or not_specified
+        drfo_label = "Tax ID (RNOKPP/DRFO):" if is_en else "РНОКПП (ДРФО/ІПН):"
+        print(f"  {colorize(drfo_label, CLR_BOLD, use_color)}  {drfo}")
 
         if subj.get("organization") and subj.get("organization") != "ФІЗИЧНА ОСОБА":
-            print(f"  {colorize('Організація:', CLR_BOLD, use_color)}        {subj.get('organization')}")
+            org_label = "Organization:" if is_en else "Організація:"
+            print(f"  {colorize(org_label, CLR_BOLD, use_color)}        {subj.get('organization')}")
         if subj.get("edrpou"):
-            print(f"  {colorize('Код ЄДРПОУ:', CLR_BOLD, use_color)}         {subj.get('edrpou')}")
+            edrpou_label = "USREOU Code:" if is_en else "Код ЄДРПОУ:"
+            print(f"  {colorize(edrpou_label, CLR_BOLD, use_color)}         {subj.get('edrpou')}")
         if subj.get("title"):
-            print(f"  {colorize('Посада:', CLR_BOLD, use_color)}             {subj.get('title')}")
+            title_label = "Position/Title:" if is_en else "Посада:"
+            print(f"  {colorize(title_label, CLR_BOLD, use_color)}             {subj.get('title')}")
 
         # Issuer / CA
-        ca_name = iss.get("cn") or iss.get("organization") or "Не вказано"
-        print(f"  {colorize('КНЕДП (Акредитований АЦСК):', CLR_BOLD, use_color)} {ca_name}")
+        ca_name = iss.get("cn") or iss.get("organization") or not_specified
+        ca_label = "QTSP (Accredited CA):" if is_en else "КНЕДП (Акредитований АЦСК):"
+        print(f"  {colorize(ca_label, CLR_BOLD, use_color)} {ca_name}")
 
         # Qualification level
+        sig_type_label = "Signature type:" if is_en else "Тип підпису:"
         if c.get("is_qes"):
             if c.get("is_sscd"):
-                q_text = "🟢 Кваліфікований електронний підпис (КЕП) на захищеному носії (токені)"
+                q_text = "🟢 Qualified Electronic Signature (QES) on secure hardware token" if is_en else "🟢 Кваліфікований електронний підпис (КЕП) на захищеному носії (токені)"
             else:
-                q_text = "🟢 Кваліфікований електронний підпис (КЕП)"
-            print(f"  {colorize('Тип підпису:', CLR_BOLD, use_color)}        {colorize(q_text, CLR_GREEN, use_color)}")
+                q_text = "🟢 Qualified Electronic Signature (QES)" if is_en else "🟢 Кваліфікований електронний підпис (КЕП)"
+            print(f"  {colorize(sig_type_label, CLR_BOLD, use_color)}        {colorize(q_text, CLR_GREEN, use_color)}")
         else:
-            print(f"  {colorize('Тип підпису:', CLR_BOLD, use_color)}        {colorize('🟡 Удосконалений електронний підпис (УЕП)', CLR_YELLOW, use_color)}")
+            uep_text = "🟡 Advanced Electronic Signature (AES)" if is_en else "🟡 Удосконалений електронний підпис (УЕП)"
+            print(f"  {colorize(sig_type_label, CLR_BOLD, use_color)}        {colorize(uep_text, CLR_YELLOW, use_color)}")
 
         # Certificate Validity
         val_from = format_iso_time(c.get("valid_from"))
         val_to = format_iso_time(c.get("valid_to"))
-        print(f"  {colorize('Дія сертифіката:', CLR_BOLD, use_color)}    з {val_from} до {val_to}")
+        cert_validity_label = "Certificate validity:" if is_en else "Дія сертифіката:"
+        from_to_text = f"from {val_from} to {val_to}" if is_en else f"з {val_from} до {val_to}"
+        print(f"  {colorize(cert_validity_label, CLR_BOLD, use_color)}    {from_to_text}")
 
+        cur_status_label = "Current status:" if is_en else "Поточний статус:"
         if c.get("is_currently_valid"):
-            print(f"  {colorize('Поточний статус:', CLR_BOLD, use_color)}    {colorize('✅ Сертифікат чинний сьогодні', CLR_GREEN, use_color)}")
+            stat_val = "✅ Certificate is valid today" if is_en else "✅ Сертифікат чинний сьогодні"
+            print(f"  {colorize(cur_status_label, CLR_BOLD, use_color)}    {colorize(stat_val, CLR_GREEN, use_color)}")
         else:
-            print(f"  {colorize('Поточний статус:', CLR_BOLD, use_color)}    {colorize('⚠️ Термін дії сертифіката вичерпано (перевіряйте чинність на дату підпису)', CLR_YELLOW, use_color)}")
+            stat_val = "⚠️ Certificate has expired (verify validity at signing time)" if is_en else "⚠️ Термін дії сертифіката вичерпано (перевіряйте чинність на дату підпису)"
+            print(f"  {colorize(cur_status_label, CLR_BOLD, use_color)}    {colorize(stat_val, CLR_YELLOW, use_color)}")
 
-        print(f"  {colorize('Серійний номер:', CLR_BOLD, use_color)}     {c.get('serial_hex')}")
+        serial_label = "Serial number:" if is_en else "Серійний номер:"
+        print(f"  {colorize(serial_label, CLR_BOLD, use_color)}     {c.get('serial_hex')}")
 
     print(colorize(f"─────────────────────────────────────────────────────────────────────────────────", CLR_GRAY, use_color))
     return all_ok
-
-
-def get_qes_lang() -> str:
-    cfg = Path.home() / ".config" / "qes" / "config.json"
-    if cfg.is_file():
-        try:
-            with open(cfg, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                if data.get("lang") == "en":
-                    return "en"
-                if data.get("lang") in ("uk", "ua"):
-                    return "uk"
-        except Exception:
-            pass
-    l = os.environ.get("LC_ALL") or os.environ.get("LC_MESSAGES") or os.environ.get("LANG") or ""
-    return "uk" if l.lower().startswith("uk") else "en"
 
 
 def show_help_dialog():
@@ -749,54 +787,56 @@ def delegate_to_qes_cert(file_path: str, args: argparse.Namespace) -> int:
 
 
 def main():
+    is_en = (get_qes_lang() == "en")
+    ver_str = "1.0.21"
     parser = argparse.ArgumentParser(
-        description="""================================================================================
-  qes-verify — автономний валідатор КЕП/УЕП (.p7s, .asice, .pdf)
-  Версія 1.0.16 | 100% Offline-First | Захист адвокатської таємниці
+        description=f"""================================================================================
+  qes-verify — {"Ukrainian & EU QES/AES validator (.p7s, .asice, .pdf)" if is_en else "автономний валідатор КЕП/УЕП (.p7s, .asice, .pdf)"}
+  {"Version" if is_en else "Версія"} {ver_str} | 100% Offline-First | {"Legal Privilege Protected" if is_en else "Захист адвокатської таємниці"}
 ================================================================================
 
-ОПИС:
-  Перевіряє справжність кваліфікованих та удосконалених електронних підписів (КЕП/УЕП),
-  розпізнає сертифікати всіх акредитованих центрів України (КНЕДП/АЦСК), перевіряє
-  мітку точного часу TSP, витягує підписані файли та не відправляє жодних даних у мережу.
-  Також автоматично перенаправляє відкриті сертифікати (.cer, .p7b) до інспектора qes-cert.""",
+{"DESCRIPTION:" if is_en else "ОПИС:"}
+  {"Validates qualified and advanced electronic signatures (QES/AES)," if is_en else "Перевіряє справжність кваліфікованих та удосконалених електронних підписів (КЕП/УЕП),"}
+  {"recognizes certificates of all Ukrainian accredited QTSPs (CA), verifies" if is_en else "розпізнає сертифікати всіх акредитованих центрів України (КНЕДП/АЦСК), перевіряє"}
+  {"trusted TSP timestamps, extracts signed files, with zero telemetry." if is_en else "мітку точного часу TSP, витягує підписані файли та не відправляє жодних даних у мережу."}
+  {"Also automatically delegates certificates (.cer, .p7b) to qes-cert inspector." if is_en else "Також автоматично перенаправляє відкриті сертифікати (.cer, .p7b) до інспектора qes-cert."}""",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""ПРИКЛАДИ КОМАНД:
+        epilog="""ПРИКЛАДИ КОМАНД / EXAMPLES:
 
-  1. Перевірка PDF-файлу з вбудованим підписом PAdES (зі штампом та QR):
+  1. PDF with embedded PAdES signature (visual stamp + QR code):
      $ qes-verify statement_signed.pdf
 
-  2. Перевірка документа з кількома підписами (Мультипідпис):
+  2. Document with multiple signatures (multi-signature):
      $ qes-verify statement_multi_signed.pdf
 
-  3. Перевірка класичного відокремленого файлу підпису .p7s:
+  3. Detached signature (.p7s):
      $ qes-verify contract.pdf.p7s
 
-  4. Перевірка відповідності оригіналу документа та відокремленого підпису:
+  4. Verify matching pair [document + detached signature]:
      $ qes-verify contract.pdf contract.pdf.p7s
 
-  5. Перевірка європейського архівного контейнера ASiC-E (.asice):
+  5. European container archive ASiC-E (.asice):
      $ qes-verify legal_bundle.asice
 
-  6. Видобування оригінальних підписаних документів з контейнера ASiC-E:
+  6. Extract signed documents from ASiC-E container:
      $ qes-verify -x /home/attor/Documents legal_bundle.asice
 
-  7. Перегляд відкритого сертифіката підписувача (.cer) або ланцюжка (.p7b):
+  7. Inspect public certificate (.cer) or certificate chain bundle (.p7b):
      $ qes-verify cert.cer
      $ qes-verify --gui mono.p7b
 
-  8. Вивід у структурованому форматі JSON для автоматизації та скриптів:
+  8. Machine-readable JSON output for automated scripting:
      $ qes-verify --json statement_signed.pdf
 
-  9. Відображення картки перевірки у графічному вікні GNOME (Zenity):
+  9. Display visual inspection dialog in GNOME (Zenity):
      $ qes-verify --gui statement_signed.pdf
 ================================================================================"""
     )
-    parser.add_argument("files", nargs="*", default=[], help="Шлях до файлу(-ів) підпису (.p7s, .asice, .pdf), сертифікатів (.cer, .p7b) або пари [документ підпис]")
-    parser.add_argument("-j", "--json", action="store_true", help="Вивести результат у структурованому форматі JSON")
-    parser.add_argument("-x", "--extract", nargs="?", const=".", default=None, help="Видобути підписаний документ у вказану папку (за замовчуванням: поточна)")
-    parser.add_argument("--gui", action="store_true", help="Показати результат у графічному діалоговому вікні GNOME (Zenity)")
-    parser.add_argument("--no-color", action="store_true", help="Вимкнути кольоровий вивід у терміналі")
+    parser.add_argument("files", nargs="*", default=[], help="File path(s) to signature (.p7s, .asice, .pdf), certificate (.cer, .p7b) or [document signature] pair" if is_en else "Шлях до файлу(-ів) підпису (.p7s, .asice, .pdf), сертифікатів (.cer, .p7b) або пари [документ підпис]")
+    parser.add_argument("-j", "--json", action="store_true", help="Output results in structured JSON format" if is_en else "Вивести результат у структурованому форматі JSON")
+    parser.add_argument("-x", "--extract", nargs="?", const=".", default=None, help="Extract signed documents to target directory" if is_en else "Видобути підписаний документ у вказану папку (за замовчуванням: поточна)")
+    parser.add_argument("--gui", action="store_true", help="Display visual verification report dialog (Zenity)" if is_en else "Показати результат у графічному діалоговому вікні GNOME (Zenity)")
+    parser.add_argument("--no-color", action="store_true", help="Disable colored output in terminal" if is_en else "Вимкнути кольоровий вивід у терміналі")
 
     args = parser.parse_args()
 
@@ -804,9 +844,9 @@ def main():
         if args.gui:
             cmd_sel = [
                 "zenity", "--file-selection",
-                "--title=Оберіть документ або підпис для перевірки КЕП",
-                "--file-filter=Документи та підписи (*.pdf *.p7s *.asice *.cer) | *.pdf *.p7s *.asice *.asics *.cer *.crt *.der *.pem *.p7b",
-                "--file-filter=Усі файли (*.*) | *.*",
+                f"--title={'Select document or signature to verify QES' if is_en else 'Оберіть документ або підпис для перевірки КЕП'}",
+                f"--file-filter={'Documents and Signatures (*.pdf *.p7s *.asice *.cer) | *.pdf *.p7s *.asice *.asics *.cer *.crt *.der *.pem *.p7b' if is_en else 'Документи та підписи (*.pdf *.p7s *.asice *.cer) | *.pdf *.p7s *.asice *.asics *.cer *.crt *.der *.pem *.p7b'}",
+                f"--file-filter={'All files (*.*) | *.*' if is_en else 'Усі файли (*.*) | *.*'}",
             ]
             sel_res = subprocess.run(cmd_sel, stdout=subprocess.PIPE, text=True)
             chosen = sel_res.stdout.strip()
@@ -824,7 +864,7 @@ def main():
     for item in args.files:
         p = Path(item)
         if not p.exists():
-            sys.stderr.write(f"Помилка: файл '{item}' не знайдено.\n")
+            sys.stderr.write(f"Error: file '{item}' not found.\n" if is_en else f"Помилка: файл '{item}' не знайдено.\n")
             sys.exit(1)
         target_files.append(str(p.resolve()))
 
@@ -858,14 +898,16 @@ def main():
             if args.extract:
                 extracted = extract_asice_files(sf, args.extract)
                 if not args.json and not args.gui and extracted:
-                    print(colorize(f"📦 Видобуто підписані файли до '{args.extract}': {', '.join(map(os.path.basename, extracted))}\n", CLR_GREEN, use_color))
+                    msg = f"📦 Extracted signed files to '{args.extract}': {', '.join(map(os.path.basename, extracted))}\n" if is_en else f"📦 Видобуто підписані файли до '{args.extract}': {', '.join(map(os.path.basename, extracted))}\n"
+                    print(colorize(msg, CLR_GREEN, use_color))
         elif ext in [".p7s", ".p7b"]:
             res_list = inspect_p7s(sf)
         elif ext == ".pdf":
             res_list = inspect_pades_pdf(sf)
             if not res_list:
                 if not args.json and not args.gui:
-                    print(colorize(f"⚠️ У файлі '{os.path.basename(sf)}' не знайдено вбудованого підпису PAdES.\n", CLR_YELLOW, use_color))
+                    msg = f"⚠️ No embedded PAdES signature found in '{os.path.basename(sf)}'.\n" if is_en else f"⚠️ У файлі '{os.path.basename(sf)}' не знайдено вбудованого підпису PAdES.\n"
+                    print(colorize(msg, CLR_YELLOW, use_color))
                 continue
         else:
             # Fallback attempt p7s

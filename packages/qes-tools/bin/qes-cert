@@ -29,6 +29,23 @@ except ImportError:
     sys.stderr.write("Помилка: бібліотеку 'cryptography' не знайдено. Встановіть python3-cryptography.\n")
     sys.exit(1)
 
+
+def get_qes_lang() -> str:
+    cfg = Path.home() / ".config" / "qes" / "config.json"
+    if cfg.is_file():
+        try:
+            with open(cfg, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if data.get("lang") == "en":
+                    return "en"
+                if data.get("lang") in ("uk", "ua"):
+                    return "uk"
+        except Exception:
+            pass
+    l = os.environ.get("LC_ALL") or os.environ.get("LC_MESSAGES") or os.environ.get("LANG") or ""
+    return "uk" if l.lower().startswith("uk") else "en"
+
+
 # ANSI кольори для термінала
 CLR_RESET = "\033[0m"
 CLR_BOLD = "\033[1m"
@@ -619,32 +636,62 @@ def print_compact_summary(d: Dict[str, Any], use_color: bool = True):
 
 def show_cert_help_dialog():
     """Відображає довідкове вікно з поясненням реквізитів сертифікатів КНЕДП."""
-    help_pango = (
-        "<span size='x-large' weight='bold' color='#1a5fb4'>📖 Довідка: Інспектор сертифікатів КНЕДП</span>\n"
-        "<span size='small' color='#666666'>Автономний перегляд та перевірка сертифікатів X.509, ДСТУ 4145, RSA, ECDSA</span>\n\n"
-        "<b>1. ПРИЗНАЧЕННЯ СЕРТИФІКАТА:</b>\n"
-        "• <b>Відкритий сертифікат (.cer, .crt):</b> публічна частина ключа. Не містить секретів і може вільно передаватися клієнтам, судам чи контрагентам.\n"
-        "• <b>Ланцюжок / пакет сертифікатів (.p7b, .p7c):</b> містить сертифікат підписувача та сертифікати проміжних/кореневих ЦСК.\n\n"
-        "<b>2. РІВНІ БЕЗПЕКИ ПІДПИСУ:</b>\n"
-        "• <span color='#1e7e34'><b>КЕП (Кваліфікований):</b></span> найвищий рівень довіри згідно Регламенту eIDAS та Закону України «Про електронну ідентифікацію». Рівнозначний власноручному підпису.\n"
-        "• <b>УЕП (Удосконалений):</b> підпис на базі кваліфікованого сертифіката, але збережений у звичайному файлі без захищеного носія QSCD/токена.\n"
-        "• <b>Печатка юридичної особи:</b> сертифікат підприємства або держустанови для завірення звітів та довідок.\n\n"
-        "<b>3. РЕКВІЗИТИ ТА ІДЕНТИФІКАТОРИ:</b>\n"
-        "• <b>РНОКПП (ІПН):</b> 10-значний номер картки платника податків підписувача (TINUA / ДРФО).\n"
-        "• <b>Код ЄДРПОУ:</b> 8-значний код організації або установи (NTRUA).\n"
-        "• <b>Швидкі кнопки:</b> копіюють номер РНОКПП або готові текстові реквізити для вставки в процесуальні документи та договори в 1 клік.\n\n"
-        "<b>4. КОМАНДИ ТЕРМІНАЛА:</b>\n"
-        "• <code>qes-cert cert.cer</code> — детальний перегляд сертифіката в терміналі\n"
-        "• <code>qes-cert --gui cert.cer</code> — графічна картка GNOME з кнопками копіювання\n"
-        "• <code>qes-cert --json cert.cer</code> — структурований вивід JSON для автоматизації\n"
-        "• <code>qes-cert --raw cert.cer &gt; cert.pem</code> — конвертація у текстовий PEM\n"
-        "• <code>qes-cert bundle.p7b</code> — перегляд усього списку сертифікатів з архіву PKCS#7\n"
-    )
+    lang = get_qes_lang()
+    is_en = (lang == "en")
+    if is_en:
+        help_pango = (
+            "<span size='x-large' weight='bold' color='#1a5fb4'>📖 Help: QTSP Certificate Inspector</span>\n"
+            "<span size='small' color='#666666'>Offline inspection and validation of X.509, DSTU 4145, RSA, ECDSA certificates</span>\n\n"
+            "<b>1. CERTIFICATE PURPOSE:</b>\n"
+            "• <b>Public Certificate (.cer, .crt):</b> public key part. Contains no private secrets and can be freely shared.\n"
+            "• <b>Certificate Bundle (.p7b, .p7c):</b> contains signer certificate and intermediate/root CA certificates.\n\n"
+            "<b>2. SIGNATURE SECURITY LEVELS:</b>\n"
+            "• <span color='#1e7e34'><b>QES (Qualified):</b></span> highest trust level under eIDAS and Ukrainian Electronic Identification Law. Equivalent to handwritten signature.\n"
+            "• <b>AES (Advanced):</b> certificate-based signature, stored in a standard file without a hardware QSCD token.\n"
+            "• <b>Legal Entity Seal:</b> organizational certificate for authenticating reports and corporate filings.\n\n"
+            "<b>3. REQUISITES & IDENTIFIERS:</b>\n"
+            "• <b>Tax ID (RNOKPP/DRFO):</b> 10-digit tax identification number of the individual signer.\n"
+            "• <b>USREOU Code (EDRPOU):</b> 8-digit identification code of the enterprise or authority.\n"
+            "• <b>Quick Action Buttons:</b> copy Tax ID or full legal details to clipboard in 1 click.\n\n"
+            "<b>4. TERMINAL COMMANDS:</b>\n"
+            "• <code>qes-cert cert.cer</code> — detailed terminal inspection\n"
+            "• <code>qes-cert --gui cert.cer</code> — graphical GNOME dialog with copy buttons\n"
+            "• <code>qes-cert --json cert.cer</code> — structured JSON output for automation\n"
+            "• <code>qes-cert --raw cert.cer &gt; cert.pem</code> — convert to text PEM\n"
+            "• <code>qes-cert bundle.p7b</code> — inspect full PKCS#7 certificate bundle\n"
+        )
+        title = "Help — qes-cert"
+        btn = "Got it"
+    else:
+        help_pango = (
+            "<span size='x-large' weight='bold' color='#1a5fb4'>📖 Довідка: Інспектор сертифікатів КНЕДП</span>\n"
+            "<span size='small' color='#666666'>Автономний перегляд та перевірка сертифікатів X.509, ДСТУ 4145, RSA, ECDSA</span>\n\n"
+            "<b>1. ПРИЗНАЧЕННЯ СЕРТИФІКАТА:</b>\n"
+            "• <b>Відкритий сертифікат (.cer, .crt):</b> публічна частина ключа. Не містить секретів і може вільно передаватися клієнтам, судам чи контрагентам.\n"
+            "• <b>Ланцюжок / пакет сертифікатів (.p7b, .p7c):</b> містить сертифікат підписувача та сертифікати проміжних/кореневих ЦСК.\n\n"
+            "<b>2. РІВНІ БЕЗПЕКИ ПІДПИСУ:</b>\n"
+            "• <span color='#1e7e34'><b>КЕП (Кваліфікований):</b></span> найвищий рівень довіри згідно Регламенту eIDAS та Закону України «Про електронну ідентифікацію». Рівнозначний власноручному підпису.\n"
+            "• <b>УЕП (Удосконалений):</b> підпис на базі кваліфікованого сертифіката, але збережений у звичайному файлі без захищеного носія QSCD/токена.\n"
+            "• <b>Печатка юридичної особи:</b> сертифікат підприємства або держустанови для завірення звітів та довідок.\n\n"
+            "<b>3. РЕКВІЗИТИ ТА ІДЕНТИФІКАТОРИ:</b>\n"
+            "• <b>РНОКПП (ІПН):</b> 10-значний номер картки платника податків підписувача (TINUA / ДРФО).\n"
+            "• <b>Код ЄДРПОУ:</b> 8-значний код організації або установи (NTRUA).\n"
+            "• <b>Швидкі кнопки:</b> копіюють номер РНОКПП або готові текстові реквізити для вставки в процесуальні документи та договори в 1 клік.\n\n"
+            "<b>4. КОМАНДИ ТЕРМІНАЛА:</b>\n"
+            "• <code>qes-cert cert.cer</code> — детальний перегляд сертифіката в терміналі\n"
+            "• <code>qes-cert --gui cert.cer</code> — графічна картка GNOME з кнопками копіювання\n"
+            "• <code>qes-cert --json cert.cer</code> — структурований вивід JSON для автоматизації\n"
+            "• <code>qes-cert --raw cert.cer &gt; cert.pem</code> — конвертація у текстовий PEM\n"
+            "• <code>qes-cert bundle.p7b</code> — перегляд усього списку сертифікатів з архіву PKCS#7\n"
+        )
+        title = "Довідка — qes-cert"
+        btn = "Зрозуміло"
+
     subprocess.run([
         "zenity", "--info",
-        "--title=Довідка — qes-cert",
+        f"--title={title}",
         f"--text={help_pango}",
-        "--ok-label=Зрозуміло",
+        f"--ok-label={btn}",
         "--width=640"
     ])
 
@@ -656,25 +703,27 @@ def show_gui_dialog(certs_data: List[Dict[str, Any]], file_path: str):
 
     # Якщо сертифікатів кілька (наприклад у .p7b бандлі), спершу показуємо меню вибору
     if len(certs_data) > 1:
+        lang = get_qes_lang()
+        is_en = (lang == "en")
         while True:
             list_cmd = [
                 "zenity", "--list",
-                f"--title=Пакет сертифікатів КНЕДП ({len(certs_data)} шт.) — {os.path.basename(file_path)}",
-                "--text=Оберіть сертифікат для детального перегляду:",
+                f"--title={'QTSP Certificate Bundle' if is_en else 'Пакет сертифікатів КНЕДП'} ({len(certs_data)} {'items' if is_en else 'шт.'}) — {os.path.basename(file_path)}",
+                f"--text={'Select certificate for detailed inspection:' if is_en else 'Оберіть сертифікат для детального перегляду:'}",
                 "--column=#",
-                "--column=Тип",
-                "--column=Власник / Назва",
-                "--column=Надавач (КНЕДП)",
-                "--column=Дійсний до",
-                "--column=Статус",
+                f"--column={'Type' if is_en else 'Тип'}",
+                f"--column={'Owner / Organization' if is_en else 'Власник / Назва'}",
+                f"--column={'Issuer (QTSP)' if is_en else 'Надавач (КНЕДП)'}",
+                f"--column={'Valid until' if is_en else 'Дійсний до'}",
+                f"--column={'Status' if is_en else 'Статус'}",
                 "--width=860",
                 "--height=480",
-                "--ok-label=Переглянути картку",
-                "--cancel-label=Закрити",
+                f"--ok-label={'View Details' if is_en else 'Переглянути картку'}",
+                f"--cancel-label={'Close' if is_en else 'Закрити'}",
                 "--extra-button=📖 Довідка / Help",
             ]
             for idx, c in enumerate(certs_data, 1):
-                c_type = "🏛️ Печатка" if c["classification"]["is_seal"] else ("CA" if c["classification"]["is_ca"] else ("КЕП" if c["classification"]["is_qes"] else "УЕП"))
+                c_type = ("🏛️ Seal" if is_en else "🏛️ Печатка") if c["classification"]["is_seal"] else ("CA" if c["classification"]["is_ca"] else ("QES" if is_en else "КЕП" if c["classification"]["is_qes"] else "AES" if is_en else "УЕП"))
                 dt_to = datetime.fromisoformat(c["validity"]["not_after"])
                 list_cmd.extend([
                     str(idx),
@@ -690,7 +739,7 @@ def show_gui_dialog(certs_data: List[Dict[str, Any]], file_path: str):
             if not chosen:
                 return  # Закриття вікна
 
-            if "Довідка" in chosen:
+            if "Довідка" in chosen or "Help" in chosen:
                 show_cert_help_dialog()
                 continue
 
@@ -709,6 +758,8 @@ def show_gui_dialog(certs_data: List[Dict[str, Any]], file_path: str):
 
 def show_single_cert_gui(d: Dict[str, Any], file_path: str, allow_back: bool = False) -> bool:
     """Відображає картку одного сертифіката в Zenity з кнопками копіювання в буфер."""
+    lang = get_qes_lang()
+    is_en = (lang == "en")
     subj = d["subject"]
     iss = d["issuer"]
     val = d["validity"]
@@ -719,55 +770,84 @@ def show_single_cert_gui(d: Dict[str, Any], file_path: str, allow_back: bool = F
     dt_from = datetime.fromisoformat(val["not_before"])
     dt_to = datetime.fromisoformat(val["not_after"])
 
-    lines = []
-    lines.append(f"<span size='x-large' weight='bold' color='{status_color}'>{val['status_ukr']}</span>")
-    lines.append(f"<span size='small' color='#666666'>Файл: {os.path.basename(file_path)}</span>\n")
+    status_title = ("✅ CERTIFICATE VALID" if val["status"] == "VALID" else ("❌ EXPIRED" if val["status"] == "EXPIRED" else "⚠️ SUSPENDED")) if is_en else val['status_ukr']
 
-    lines.append("<b>── Власник сертифіката ──</b>")
-    lines.append(f"<b>ПІБ / Назва:</b> {subj['full_name'] or '—'}")
+    lines = []
+    lines.append(f"<span size='x-large' weight='bold' color='{status_color}'>{status_title}</span>")
+    file_lbl = "File" if is_en else "Файл"
+    lines.append(f"<span size='small' color='#666666'>{file_lbl}: {os.path.basename(file_path)}</span>\n")
+
+    owner_hdr = "── Certificate Owner ──" if is_en else "── Власник сертифіката ──"
+    lines.append(f"<b>{owner_hdr}</b>")
+    name_lbl = "Full Name / Subject" if is_en else "ПІБ / Назва"
+    lines.append(f"<b>{name_lbl}:</b> {subj['full_name'] or '—'}")
     if subj.get("drfo"):
-        lines.append(f"<b>РНОКПП (ІПН):</b> <span color='#1e7e34'>{subj['drfo']}</span>")
+        drfo_lbl = "Tax ID (RNOKPP/DRFO)" if is_en else "РНОКПП (ІПН)"
+        lines.append(f"<b>{drfo_lbl}:</b> <span color='#1e7e34'>{subj['drfo']}</span>")
     if subj.get("organization") and subj["organization"] != "ФІЗИЧНА ОСОБА":
-        lines.append(f"<b>Організація:</b> {subj['organization']}")
+        org_lbl = "Organization" if is_en else "Організація"
+        lines.append(f"<b>{org_lbl}:</b> {subj['organization']}")
+    else:
+        org_lbl = "Organization" if is_en else "Організація"
     if subj.get("edrpou"):
-        lines.append(f"<b>Код ЄДРПОУ:</b> <span color='#1e7e34'>{subj['edrpou']}</span>")
+        edrpou_lbl = "USREOU Code" if is_en else "Код ЄДРПОУ"
+        lines.append(f"<b>{edrpou_lbl}:</b> <span color='#1e7e34'>{subj['edrpou']}</span>")
     if subj.get("title"):
-        lines.append(f"<b>Посада:</b> {subj['title']}")
+        title_lbl = "Position/Title" if is_en else "Посада"
+        lines.append(f"<b>{title_lbl}:</b> {subj['title']}")
 
     loc_parts = [p for p in [subj.get("locality"), subj.get("state"), subj.get("country")] if p]
     if loc_parts:
-        lines.append(f"<b>Місцезнаходження:</b> {', '.join(loc_parts)}")
+        loc_lbl = "Location" if is_en else "Місцезнаходження"
+        lines.append(f"<b>{loc_lbl}:</b> {', '.join(loc_parts)}")
     if subj.get("email"):
-        lines.append(f"<b>Електронна пошта:</b> {subj['email']}")
+        email_lbl = "Email" if is_en else "Електронна пошта"
+        lines.append(f"<b>{email_lbl}:</b> {subj['email']}")
 
-    lines.append("\n<b>── Надавач (КНЕДП / АЦСК) ──</b>")
-    lines.append(f"<b>АЦСК:</b> {iss['name']}")
+    ca_hdr = "── QTSP / CA Issuer ──" if is_en else "── Надавач (КНЕДП / АЦСК) ──"
+    lines.append(f"\n<b>{ca_hdr}</b>")
+    ca_lbl = "CA" if is_en else "АЦСК"
+    lines.append(f"<b>{ca_lbl}:</b> {iss['name']}")
     if iss.get("organization") and iss["organization"] != iss["name"]:
-        lines.append(f"<b>Організація:</b> {iss['organization']}")
+        lines.append(f"<b>{org_lbl}:</b> {iss['organization']}")
 
-    lines.append("\n<b>── Чинність та рівень безпеки ──</b>")
-    lines.append(f"<b>Дія сертифіката:</b> з {format_date_simple(dt_from)} до {format_date_simple(dt_to)}")
-    lines.append(f"<b>Залишилось:</b> {val['days_text']}")
-    lines.append(f"<b>Тип підпису:</b> {cls['sig_type_ukr']}")
-    lines.append(f"<b>Носій ключа:</b> {cls['token_ukr']}")
+    sec_hdr = "── Validity & Security Level ──" if is_en else "── Чинність та рівень безпеки ──"
+    lines.append(f"\n<b>{sec_hdr}</b>")
+    from_to_fmt = f"from {format_date_simple(dt_from)} to {format_date_simple(dt_to)}" if is_en else f"з {format_date_simple(dt_from)} до {format_date_simple(dt_to)}"
+    val_lbl = "Certificate validity" if is_en else "Дія сертифіката"
+    lines.append(f"<b>{val_lbl}:</b> {from_to_fmt}")
+    left_lbl = "Time remaining" if is_en else "Залишилось"
+    lines.append(f"<b>{left_lbl}:</b> {val['days_text']}")
+    sigtype_lbl = "Signature type" if is_en else "Тип підпису"
+    lines.append(f"<b>{sigtype_lbl}:</b> {cls['sig_type_ukr']}")
+    keymed_lbl = "Key medium" if is_en else "Носій ключа"
+    lines.append(f"<b>{keymed_lbl}:</b> {cls['token_ukr']}")
 
     if d["key_usage"]["usages"]:
-        lines.append(f"<b>Призначення:</b> {', '.join(d['key_usage']['usages'])}")
+        usage_lbl = "Key usage" if is_en else "Призначення"
+        lines.append(f"<b>{usage_lbl}:</b> {', '.join(d['key_usage']['usages'])}")
 
-    lines.append("\n<b>── Криптографічні параметри ──</b>")
-    lines.append(f"<b>Алгоритм:</b> {cr['algorithm_name']}")
-    lines.append(f"<b>Серійний номер:</b> <tt>{cr['serial_number_hex']}</tt>")
-    lines.append(f"<b>SHA-256 відбиток:</b> <tt>{cr['fingerprint_sha256']}</tt>")
+    crypto_hdr = "── Cryptographic Parameters ──" if is_en else "── Криптографічні параметри ──"
+    lines.append(f"\n<b>{crypto_hdr}</b>")
+    algo_lbl = "Algorithm" if is_en else "Алгоритм"
+    lines.append(f"<b>{algo_lbl}:</b> {cr['algorithm_name']}")
+    sn_lbl = "Serial number" if is_en else "Серійний номер"
+    lines.append(f"<b>{sn_lbl}:</b> <tt>{cr['serial_number_hex']}</tt>")
+    fp_lbl = "SHA-256 fingerprint" if is_en else "SHA-256 відбиток"
+    lines.append(f"<b>{fp_lbl}:</b> <tt>{cr['fingerprint_sha256']}</tt>")
 
     pango_text = "\n".join(lines)
     requisites = get_requisites_text(d)
 
+    dlg_title = f"QTSP Certificate — {os.path.basename(file_path)}" if is_en else f"Сертифікат КНЕДП — {os.path.basename(file_path)}"
+    close_btn = "Close" if is_en else "Закрити"
+
     while True:
         cmd = [
             "zenity", "--info",
-            f"--title=Сертифікат КНЕДП — {os.path.basename(file_path)}",
+            f"--title={dlg_title}",
             f"--text={pango_text}",
-            "--ok-label=Закрити",
+            f"--ok-label={close_btn}",
             "--icon-name=application-certificate",
             "--width=650",
             "--height=480",
@@ -780,49 +860,57 @@ def show_single_cert_gui(d: Dict[str, Any], file_path: str, allow_back: bool = F
             cmd.append(f"--window-icon={sys_icon}")
 
         if allow_back:
-            cmd.append("--extra-button=🔙 До списку сертифікатів")
+            cmd.append(f"--extra-button={'🔙 Back to list' if is_en else '🔙 До списку сертифікатів'}")
 
         if subj.get("drfo"):
-            cmd.append(f"--extra-button=📋 Скопіювати РНОКПП ({subj['drfo']})")
+            cmd.append(f"--extra-button={'📋 Copy Tax ID' if is_en else '📋 Скопіювати РНОКПП'} ({subj['drfo']})")
         if subj.get("edrpou"):
-            cmd.append(f"--extra-button=📋 Скопіювати ЄДРПОУ ({subj['edrpou']})")
-        cmd.append("--extra-button=📋 Скопіювати повні реквізити")
+            cmd.append(f"--extra-button={'📋 Copy USREOU' if is_en else '📋 Скопіювати ЄДРПОУ'} ({subj['edrpou']})")
+        cmd.append(f"--extra-button={'📋 Copy Full Details' if is_en else '📋 Скопіювати повні реквізити'}")
         cmd.append("--extra-button=📖 Довідка / Help")
 
         proc = subprocess.run(cmd, stdout=subprocess.PIPE, text=True)
         clicked = proc.stdout.strip()
 
-        if "🔙 До списку" in clicked:
+        if "До списку" in clicked or "Back to list" in clicked:
             return True
-        elif "Довідка" in clicked:
+        elif "Довідка" in clicked or "Help" in clicked:
             show_cert_help_dialog()
             continue
-        elif "Скопіювати РНОКПП" in clicked and subj.get("drfo"):
+        elif ("Скопіювати РНОКПП" in clicked or "Copy Tax ID" in clicked) and subj.get("drfo"):
             copy_to_clipboard(subj["drfo"])
-            notify("КЕП Сертифікат", f"РНОКПП {subj['drfo']} скопійовано в буфер обміну")
+            notif_title = "QES Certificate" if is_en else "КЕП Сертифікат"
+            notif_text = f"Tax ID {subj['drfo']} copied to clipboard" if is_en else f"РНОКПП {subj['drfo']} скопійовано в буфер обміну"
+            notify(notif_title, notif_text)
             continue
-        elif "Скопіювати ЄДРПОУ" in clicked and subj.get("edrpou"):
+        elif ("Скопіювати ЄДРПОУ" in clicked or "Copy USREOU" in clicked) and subj.get("edrpou"):
             copy_to_clipboard(subj["edrpou"])
-            notify("КЕП Сертифікат", f"ЄДРПОУ {subj['edrpou']} скопійовано в буфер обміну")
+            notif_title = "QES Certificate" if is_en else "КЕП Сертифікат"
+            notif_text = f"USREOU {subj['edrpou']} copied to clipboard" if is_en else f"ЄДРПОУ {subj['edrpou']} скопійовано в буфер обміну"
+            notify(notif_title, notif_text)
             continue
-        elif "Скопіювати повні реквізити" in clicked:
+        elif "Скопіювати повні реквізити" in clicked or "Copy Full Details" in clicked:
             copy_to_clipboard(requisites)
-            notify("КЕП Сертифікат", "Реквізити підписувача скопійовано в буфер обміну")
+            notif_title = "QES Certificate" if is_en else "КЕП Сертифікат"
+            notif_text = "Signer details copied to clipboard" if is_en else "Реквізити підписувача скопійовано в буфер обміну"
+            notify(notif_title, notif_text)
             continue
         else:
             return False
 
 
 def main():
+    ver_str = "1.0.21"
+    is_en = (get_qes_lang() == "en")
     parser = argparse.ArgumentParser(
-        description="""================================================================================
-  qes-cert — швидкий інспектор сертифікатів КНЕДП / АЦСК (X.509, ДСТУ, RSA, ECDSA)
-  Версія 1.0.16 | 100% Offline-First | Захист адвокатської таємниці
+        description=f"""================================================================================
+  qes-cert — {"Fast QTSP / CA Certificate Inspector (X.509, DSTU, RSA, ECDSA)" if is_en else "швидкий інспектор сертифікатів КНЕДП / АЦСК (X.509, ДСТУ, RSA, ECDSA)"}
+  {"Version" if is_en else "Версія"} {ver_str} | 100% Offline-First | {"Legal Privilege Protected" if is_en else "Захист адвокатської таємниці"}
 ================================================================================
 
-ОПИС:
-  Переглядає та аналізує відкриті сертифікати кваліфікованих надавачів електронних
-  довірчих послуг України (КНЕДП monobank, Дія, ПриватБанк, ДПС, НАІС, Вчасно тощо).
+{"DESCRIPTION:" if is_en else "ОПИС:"}
+  {"Inspects and validates public certificates of Ukrainian QTSPs (CAs):" if is_en else "Переглядає та аналізує відкриті сертифікати кваліфікованих надавачів електронних"}
+  {"monobank, Diia, PrivatBank, State Tax Service, NAIS, Vchasno, etc." if is_en else "довірчих послуг України (КНЕДП monobank, Дія, ПриватБанк, ДПС, НАІС, Вчасно тощо)."}
   Розпізнає ПІБ, РНОКПП (ІПН), ЄДРПОУ, посаду, термін дії, алгоритми ДСТУ 4145-2002,
   рівень безпеки (КЕП / УЕП / QSCD токен), призначення ключів та точки OCSP/TSP/CRL.
   Дозволяє за один клік скопіювати реквізити підписувача для договорів чи позовів.""",
