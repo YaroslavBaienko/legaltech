@@ -574,19 +574,20 @@ fi
 log_test "CLI qes-tool: прапорець --version, довідка --help та диспетчеризація"
 
 # Перевірка прапорця --version
+expected_ver=$(node -p "require('$PACKAGE_DIR/package.json').version")
 tool_ver=$(qes-tool --version)
-if [[ "$tool_ver" == *"qes-tools v1.0.16"* ]]; then
+if [[ "$tool_ver" == *"qes-tools v$expected_ver"* ]]; then
     assert_ok "qes-tool --version повертає коректний номер версії ($tool_ver)"
 else
-    echo "Помилка qes-tool --version: $tool_ver" >&2; exit 1
+    echo "Помилка qes-tool --version: $tool_ver (очікувалось v$expected_ver)" >&2; exit 1
 fi
 
 # Перевірка синоніма qes-tools -v
 tools_ver=$(qes-tools -v)
-if [[ "$tools_ver" == *"qes-tools v1.0.16"* ]]; then
+if [[ "$tools_ver" == *"qes-tools v$expected_ver"* ]]; then
     assert_ok "qes-tools -v працює ідентично через аліас ($tools_ver)"
 else
-    echo "Помилка qes-tools -v: $tools_ver" >&2; exit 1
+    echo "Помилка qes-tools -v: $tools_ver (очікувалось v$expected_ver)" >&2; exit 1
 fi
 
 # Перевірка довідки та прикладів українською мовою

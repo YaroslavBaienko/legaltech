@@ -30,8 +30,9 @@ function askPassword(promptText, forceGui = false) {
 
     if ((forceGui || !process.stdin.isTTY) && (process.env.DISPLAY || process.env.WAYLAND_DISPLAY)) {
       const cleanPrompt = (promptText || t('enterPassword')).replace(/\x1b\[[0-9;]*m/g, '');
-      const header = '🛡️ Захист особистого сейфа (.enc)';
-      const sub = 'Шифрування здійснюється за стандартом ДСТУ 4145 / ГОСТ 28147:89';
+      const lang = getQESLang();
+      const header = t('encryptHeader');
+      const sub = t('encryptSub');
 
       // 1. Try modern GNOME HIG Libadwaita dialog (qes-dialog)
       let qesDialogBin = null;
@@ -64,7 +65,7 @@ function askPassword(promptText, forceGui = false) {
           `--header=${header}`,
           `--prompt=${cleanPrompt}`,
           `--subtext=${sub}`,
-          '--lang=uk',
+          `--lang=${lang}`,
         ];
         try {
           const dRes = spawnSync(qesDialogBin, dialogArgs, { encoding: 'utf-8' });

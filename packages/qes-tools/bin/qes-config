@@ -151,9 +151,9 @@ get_effective_lang() {
     fi
 
     # Auto-detection from environment
-    local l="${LC_ALL:-${LC_MESSAGES:-${LANG:-}}}"
+    local l="${LANGUAGE:-${LC_ALL:-${LC_MESSAGES:-${LANG:-}}}}"
     if [[ -z "$l" && -f /etc/default/locale ]]; then
-        l=$(grep -E '^(LANG|LC_MESSAGES)=' /etc/default/locale | head -n1 | cut -d= -f2 | tr -d '"' || true)
+        l=$(grep -E '^(LANGUAGE|LANG|LC_MESSAGES)=' /etc/default/locale | head -n1 | cut -d= -f2 | tr -d '"' || true)
     fi
     if [[ "${l,,}" =~ ^uk ]]; then
         echo "uk"
@@ -291,6 +291,23 @@ deploy_nautilus_scripts_for_dir() {
                 fi
             done
         fi
+    fi
+
+    # Автоматичний запуск синхронізації мови при вході користувача в сесію
+    if [[ -d "$target_home" ]]; then
+        mkdir -p "$target_home/.config/autostart"
+        cat << 'EOF' > "$target_home/.config/autostart/qes-locale-sync.desktop"
+[Desktop Entry]
+Type=Application
+Name=QES Tools Locale Sync
+Comment=Synchronize QES Tools Nautilus menu language with active desktop session
+Exec=/usr/bin/qes-config --refresh
+Terminal=false
+Hidden=false
+NoDisplay=true
+X-GNOME-Autostart-enabled=true
+EOF
+        chmod 0644 "$target_home/.config/autostart/qes-locale-sync.desktop" 2>/dev/null || true
     fi
 }
 

@@ -205,6 +205,19 @@ cat << 'EOF' > "${BUILD_ROOT}/usr/bin/qes-dialog"
 exec /usr/bin/python3 /usr/lib/qes-tools/bin/qes-dialog "$@"
 EOF
 
+mkdir -p "${BUILD_ROOT}/etc/xdg/autostart"
+cat << 'EOF' > "${BUILD_ROOT}/etc/xdg/autostart/qes-locale-sync.desktop"
+[Desktop Entry]
+Type=Application
+Name=QES Tools Locale Sync
+Comment=Synchronize QES Tools Nautilus menu language with active desktop session
+Exec=/usr/bin/qes-config --refresh
+Terminal=false
+Hidden=false
+NoDisplay=true
+X-GNOME-Autostart-enabled=true
+EOF
+chmod 0644 "${BUILD_ROOT}/etc/xdg/autostart/qes-locale-sync.desktop"
 
 find "${BUILD_ROOT}/usr/bin" -type f -exec chmod 0755 {} +
 find "${BUILD_ROOT}/usr/lib/qes-tools/bin" -type f -exec chmod 0755 {} +

@@ -975,11 +975,13 @@ test('i18n priority engine correctly handles ~/.config/qes/config.json override 
   const origLang = process.env.LANG;
   const origLcAll = process.env.LC_ALL;
   const origLcMessages = process.env.LC_MESSAGES;
+  const origLanguage = process.env.LANGUAGE;
 
   try {
     process.env.HOME = tmpHome;
     delete process.env.LC_ALL;
     delete process.env.LC_MESSAGES;
+    delete process.env.LANGUAGE;
 
     const cfgDir = path.join(tmpHome, '.config', 'qes');
     fs.mkdirSync(cfgDir, { recursive: true });
@@ -1019,6 +1021,7 @@ test('i18n priority engine correctly handles ~/.config/qes/config.json override 
     if (origLang !== undefined) process.env.LANG = origLang; else delete process.env.LANG;
     if (origLcAll !== undefined) process.env.LC_ALL = origLcAll; else delete process.env.LC_ALL;
     if (origLcMessages !== undefined) process.env.LC_MESSAGES = origLcMessages; else delete process.env.LC_MESSAGES;
+    if (origLanguage !== undefined) process.env.LANGUAGE = origLanguage; else delete process.env.LANGUAGE;
     try { fs.rmSync(tmpHome, { recursive: true, force: true }); } catch (_) {}
   }
 });

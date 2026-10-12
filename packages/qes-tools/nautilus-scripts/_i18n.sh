@@ -14,10 +14,10 @@ get_qes_lang() {
         if [[ "$user_lang" == "uk" || "$user_lang" == "ua" ]]; then echo "uk"; return; fi
     fi
 
-    # 2. Перевірка локалі оточення ($LC_ALL, $LC_MESSAGES, $LANG)
-    local l="${LC_ALL:-${LC_MESSAGES:-${LANG:-}}}"
+    # 2. Перевірка локалі оточення ($LANGUAGE, $LC_ALL, $LC_MESSAGES, $LANG)
+    local l="${LANGUAGE:-${LC_ALL:-${LC_MESSAGES:-${LANG:-}}}}"
     if [[ -z "$l" && -f /etc/default/locale ]]; then
-        l=$(grep -E '^(LANG|LC_MESSAGES)=' /etc/default/locale | head -n1 | cut -d= -f2 | tr -d '"' || true)
+        l=$(grep -E '^(LANGUAGE|LANG|LC_MESSAGES)=' /etc/default/locale | head -n1 | cut -d= -f2 | tr -d '"' || true)
     fi
     if [[ "${l,,}" =~ ^uk ]]; then
         echo "uk"

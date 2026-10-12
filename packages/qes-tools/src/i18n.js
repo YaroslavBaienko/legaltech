@@ -9,6 +9,12 @@ const fs = require('fs');
 const path = require('path');
 
 function getQESLang() {
+  if (process.env.QES_LANG) {
+    const ql = process.env.QES_LANG.toLowerCase();
+    if (ql === 'en') return 'en';
+    if (ql === 'uk' || ql === 'ua') return 'uk';
+  }
+
   try {
     const cfgPath = path.join(process.env.HOME || '', '.config', 'qes', 'config.json');
     if (fs.existsSync(cfgPath)) {
@@ -18,7 +24,7 @@ function getQESLang() {
     }
   } catch {}
 
-  const l = process.env.LC_ALL || process.env.LC_MESSAGES || process.env.LANG || '';
+  const l = process.env.LC_ALL || process.env.LC_MESSAGES || process.env.LANG || process.env.LANGUAGE || '';
   return l.toLowerCase().startsWith('uk') ? 'uk' : 'en';
 }
 
@@ -27,8 +33,14 @@ const strings = {
     // Dialogs & Prompts
     dialogTitle: 'КЕП (ДСТУ 4145-2002)',
     encryptDialogTitle: 'Шифрування КЕП (ДСТУ 4145)',
+    encryptHeader: '🛡️ Захист особистого сейфа (.enc)',
+    encryptSub: 'Шифрування здійснюється за стандартом ДСТУ 4145 / ГОСТ 28147:89',
     decryptDialogTitle: 'Розшифрування КЕП (ДСТУ 4145)',
+    decryptHeader: '🔓 Розшифрування особистим КЕП',
+    decryptSub: 'Введіть пароль вашого особистого ключа для відкриття зашифрованого файлу (.enc):',
     exportCertDialogTitle: 'Експорт сертифіката КЕП',
+    exportCertHeader: '📤 Експорт відкритого сертифіката (.cer)',
+    exportCertSub: 'Введіть пароль для безпечного видобування відкритого сертифіката з контейнера КЕП:',
     enterPassword: (label) => `Введіть пароль до ключа \x1b[1m${label}\x1b[0m: `,
     sessionActive: (timeStr) => `\x1b[32m🔑 Сесія КЕП активна:\x1b[0m пароль отримано з пам'яті (залишилось ${timeStr})`,
     stalePassword: '⚠️ Збережений у сесії пароль не підійшов до ключа. Запитуємо знову...',
@@ -66,8 +78,14 @@ const strings = {
     // Dialogs & Prompts
     dialogTitle: 'QES (DSTU 4145-2002)',
     encryptDialogTitle: 'QES Encryption (DSTU 4145)',
+    encryptHeader: '🛡️ Protect Personal Vault (.enc)',
+    encryptSub: 'Encryption is performed per DSTU 4145 / GOST 28147:89 standards.',
     decryptDialogTitle: 'QES Decryption (DSTU 4145)',
+    decryptHeader: '🔓 Decrypt with Personal Key',
+    decryptSub: 'Enter password for your personal private key to open encrypted file (.enc):',
     exportCertDialogTitle: 'Export QES Certificate',
+    exportCertHeader: '📤 Export Public Certificate (.cer)',
+    exportCertSub: 'Enter password to safely extract public certificate from QES container:',
     enterPassword: (label) => `Enter password for key \x1b[1m${label}\x1b[0m: `,
     sessionActive: (timeStr) => `\x1b[32m🔑 QES session active:\x1b[0m password retrieved from memory (${timeStr} remaining)`,
     stalePassword: '⚠️ Cached session password did not match the key. Prompting again...',
