@@ -13,6 +13,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: "apt-repository"
+  cancel-in-progress: false
+
 jobs:
   apt-repository:
     name: Build & Publish APT Repository
