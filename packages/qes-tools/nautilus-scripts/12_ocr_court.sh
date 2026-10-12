@@ -9,6 +9,10 @@ if [[ -f "${SCRIPT_DIR}/.i18n.sh" ]]; then
     source "${SCRIPT_DIR}/.i18n.sh"
 elif [[ -f "${SCRIPT_DIR}/_i18n.sh" ]]; then
     source "${SCRIPT_DIR}/_i18n.sh"
+elif [[ -f "${SCRIPT_DIR}/../.i18n.sh" ]]; then
+    source "${SCRIPT_DIR}/../.i18n.sh"
+elif [[ -f "${SCRIPT_DIR}/../_i18n.sh" ]]; then
+    source "${SCRIPT_DIR}/../_i18n.sh"
 elif [[ -f "/usr/share/qes-tools/nautilus-scripts/_i18n.sh" ]]; then
     source "/usr/share/qes-tools/nautilus-scripts/_i18n.sh"
 fi

@@ -8,7 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PKG_ROOT="${SCRIPT_DIR}"
 
 PKG_NAME="qes-tools"
-PKG_VERSION="$(grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' "${PKG_ROOT}/package.json" 2>/dev/null | cut -d'"' -f4 || echo "1.0.15")"
+PKG_VERSION="$(grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' "${PKG_ROOT}/package.json" 2>/dev/null | cut -d'"' -f4 || echo "1.0.16")"
 PKG_ARCH="amd64"
 DEB_FILENAME="${PKG_NAME}_${PKG_VERSION}_${PKG_ARCH}.deb"
 

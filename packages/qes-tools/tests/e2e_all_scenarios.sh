@@ -521,6 +521,38 @@ else
     echo "Помилка: невірний статус qes-config: $cfg_status" >&2; exit 1
 fi
 
+# Перевірка макета меню GNOME HIG (submenus та flat)
+HOME="$MOCK_USER_HOME" qes-config --lang uk --layout submenus >/dev/null
+sub_cnt=$(find "$MOCK_USER_HOME/.local/share/nautilus/scripts/🔐 КЕП та Безпека" -mindepth 1 -maxdepth 1 -type d | wc -l)
+if [ "$sub_cnt" -eq 5 ]; then
+    assert_ok "qes-config --layout submenus створив 5 категорій GNOME HIG підменю"
+else
+    echo "Помилка: очікувалось 5 категорій, знайдено $sub_cnt" >&2; exit 1
+fi
+
+# Перевірка наявності .i18n.sh у кожній категорії
+for cdir in "$MOCK_USER_HOME/.local/share/nautilus/scripts/🔐 КЕП та Безпека/"*; do
+    if [ -d "$cdir" ]; then
+        if [ -f "$cdir/.i18n.sh" ]; then
+            assert_ok "Категорія $(basename "$cdir") містить локалізований помічник .i18n.sh"
+        else
+            echo "Помилка: $cdir не містить .i18n.sh" >&2; exit 1
+        fi
+    fi
+done
+
+# Перевірка повернення до макету за замовчуванням (categorized)
+HOME="$MOCK_USER_HOME" qes-config --lang uk --layout categorized >/dev/null
+assert_ok "qes-config --layout categorized успішно розгорнув гібридний макет"
+
+# Тестування помічників Pango-розмітки в _i18n.sh
+w_icon=$(bash -c "source '$PACKAGE_DIR/nautilus-scripts/_i18n.sh'; qes_get_window_icon")
+if [[ -n "$w_icon" ]]; then
+    assert_ok "qes_get_window_icon успішно визначив іконку вікна ($w_icon)"
+else
+    echo "Помилка: qes_get_window_icon повернув порожнє значення" >&2; exit 1
+fi
+
 # ------------------------------------------------------------------------------
 # 16. ТЕСТ: qes-tool (майстер-утиліта, прапорці --version, --help та диспетчер)
 # ------------------------------------------------------------------------------
@@ -528,7 +560,7 @@ log_test "CLI qes-tool: прапорець --version, довідка --help та
 
 # Перевірка прапорця --version
 tool_ver=$(qes-tool --version)
-if [[ "$tool_ver" == *"qes-tools v1.0.15"* ]]; then
+if [[ "$tool_ver" == *"qes-tools v1.0.16"* ]]; then
     assert_ok "qes-tool --version повертає коректний номер версії ($tool_ver)"
 else
     echo "Помилка qes-tool --version: $tool_ver" >&2; exit 1
@@ -536,7 +568,7 @@ fi
 
 # Перевірка синоніма qes-tools -v
 tools_ver=$(qes-tools -v)
-if [[ "$tools_ver" == *"qes-tools v1.0.15"* ]]; then
+if [[ "$tools_ver" == *"qes-tools v1.0.16"* ]]; then
     assert_ok "qes-tools -v працює ідентично через аліас ($tools_ver)"
 else
     echo "Помилка qes-tools -v: $tools_ver" >&2; exit 1

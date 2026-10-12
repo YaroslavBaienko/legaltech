@@ -51,6 +51,23 @@ declare -A SCRIPTS_EN=(
   ["0_help.sh"]="16. 📖 Help & QES Documentation"
 )
 
+# Оголошення категоризованої структури (GNOME HIG Submenus)
+declare -A CATEGORIES_UK=(
+  ["1_✍️ Підписання"]="1_sign_pades.sh:01. ✍️ PAdES (зі штампом та QR)|1b_sign_pades_no_stamp.sh:02. ✍️ PAdES (без штампа)|2_sign_p7s.sh:03. ✍️ Відокремлений підпис (.p7s)|3_sign_asice.sh:04. 📦 Пакетний контейнер (ASiC-E)|10_append_signature.sh:05. ✍️ Додати другий підпис (Мультипідпис)"
+  ["2_🔍 Перевірка та Сертифікати"]="4_verify.sh:01. 🔍 Перевірити підпис КЕП|13_view_cert.sh:02. 📜 Переглянути сертифікат КНЕДП|8_export_cert.sh:03. 📤 Експортувати відкритий сертифікат (.cer)"
+  ["3_🛡️ Шифрування та Сейф"]="5_encrypt_self.sh:01. 🛡️ Зашифрувати в особистий сейф (.enc)|6_encrypt_recipient.sh:02. 📨 Зашифрувати для адресата (.enc)|7_decrypt.sh:03. 🔓 Розшифрувати особистим КЕП"
+  ["4_⚖️ Е-Суд та OCR"]="9_pdf_court.sh:01. ⚖️ Оптимізувати PDF для Е-Суду|12_ocr_court.sh:02. 👁️ Розпізнати текст OCR (Е-Суд)|14_ocr_english.sh:03. 👁️ Розпізнати текст OCR (🇬🇧 Чиста Англійська)"
+  ["5_⚙️ Керування та Довідка"]="11_lock_session.sh:01. 🔒 Скинути кеш пароля (Заблокувати)|0_help.sh:02. 📖 Довідка та Інструкції КЕП"
+)
+
+declare -A CATEGORIES_EN=(
+  ["1_✍️ Signing"]="1_sign_pades.sh:01. ✍️ PAdES (with Stamp & QR)|1b_sign_pades_no_stamp.sh:02. ✍️ PAdES (without Stamp & QR)|2_sign_p7s.sh:03. ✍️ Detached Signature (.p7s)|3_sign_asice.sh:04. 📦 Package Container (ASiC-E)|10_append_signature.sh:05. ✍️ Add Secondary Signature (Multi-Sign)"
+  ["2_🔍 Verification & Certificates"]="4_verify.sh:01. 🔍 Verify QES Signature|13_view_cert.sh:02. 📜 View CA Certificate Details|8_export_cert.sh:03. 📤 Export Public Certificate (.cer)"
+  ["3_🛡️ Encryption & Vault"]="5_encrypt_self.sh:01. 🛡️ Encrypt to Personal Vault (.enc)|6_encrypt_recipient.sh:02. 📨 Encrypt for Recipient (.enc)|7_decrypt.sh:03. 🔓 Decrypt with Personal Key"
+  ["4_⚖️ Court & OCR"]="9_pdf_court.sh:01. ⚖️ Optimize PDF for Court|12_ocr_court.sh:02. 👁️ OCR Text Recognition (Court PDF)|14_ocr_english.sh:03. 👁️ OCR Text Recognition (🇬🇧 English)"
+  ["5_⚙️ Management & Help"]="11_lock_session.sh:01. 🔒 Lock Session (Clear Password Cache)|0_help.sh:02. 📖 Help & QES Documentation"
+)
+
 FOLDER_UK="🔐 КЕП та Безпека"
 FOLDER_EN="🔐 QES & Security"
 
@@ -92,6 +109,19 @@ get_configured_lang() {
     echo "auto"
 }
 
+get_configured_layout() {
+    local cfg="$HOME/.config/qes/config.json"
+    if [[ -f "$cfg" ]]; then
+        local l
+        l=$(grep -o '"layout"[[:space:]]*:[[:space:]]*"[^"]*"' "$cfg" 2>/dev/null | cut -d'"' -f4 || true)
+        if [[ -n "$l" ]]; then
+            echo "$l"
+            return 0
+        fi
+    fi
+    echo "categorized"
+}
+
 # Detect effective language
 get_effective_lang() {
     local mode="${1:-$(get_configured_lang)}"
@@ -120,54 +150,142 @@ deploy_nautilus_scripts_for_dir() {
     local target_home="$1"
     local effective_lang="$2"
     local src_dir="$3"
+    local layout="${4:-$(get_configured_layout)}"
     local target_base="$target_home/.local/share/nautilus/scripts"
 
     mkdir -p "$target_base"
 
+    local target_folder other_folder
     if [[ "$effective_lang" == "en" ]]; then
-        # Remove Ukrainian folder if present
-        rm -rf "$target_base/$FOLDER_UK"
-        local target_folder="$target_base/$FOLDER_EN"
-        mkdir -p "$target_folder"
-        for script_file in "${!SCRIPTS_EN[@]}"; do
-            if [[ -f "$src_dir/$script_file" ]]; then
-                local display_name="${SCRIPTS_EN[$script_file]}"
-                cp "$src_dir/$script_file" "$target_folder/$display_name"
-                chmod 0755 "$target_folder/$display_name"
-            fi
-        done
-        # Copy hidden helper
-        if [[ -f "$src_dir/_i18n.sh" ]]; then
-            cp "$src_dir/_i18n.sh" "$target_folder/.i18n.sh"
-            chmod 0755 "$target_folder/.i18n.sh"
+        target_folder="$target_base/$FOLDER_EN"
+        other_folder="$target_base/$FOLDER_UK"
+    else
+        target_folder="$target_base/$FOLDER_UK"
+        other_folder="$target_base/$FOLDER_EN"
+    fi
+
+    rm -rf "$other_folder"
+    rm -rf "$target_folder"
+    mkdir -p "$target_folder"
+
+    # Копіюємо глобальний .i18n.sh
+    if [[ -f "$src_dir/_i18n.sh" ]]; then
+        cp "$src_dir/_i18n.sh" "$target_folder/.i18n.sh"
+        chmod 0755 "$target_folder/.i18n.sh"
+    fi
+
+    if [[ "$layout" == "categorized" || "$layout" == "hybrid" ]]; then
+        if [[ "$effective_lang" == "en" ]]; then
+            for cat_name in "${!CATEGORIES_EN[@]}"; do
+                local cat_dir="$target_folder/$cat_name"
+                mkdir -p "$cat_dir"
+                if [[ -f "$src_dir/_i18n.sh" ]]; then
+                    cp "$src_dir/_i18n.sh" "$cat_dir/.i18n.sh"
+                    chmod 0755 "$cat_dir/.i18n.sh"
+                fi
+                IFS="|" read -ra items <<< "${CATEGORIES_EN[$cat_name]}"
+                for item in "${items[@]}"; do
+                    local s_file="${item%%:*}"
+                    local s_disp="${item##*:}"
+                    if [[ -f "$src_dir/$s_file" ]]; then
+                        cp "$src_dir/$s_file" "$cat_dir/$s_disp"
+                        chmod 0755 "$cat_dir/$s_disp"
+                        local flat_name="${SCRIPTS_EN[$s_file]:-$s_disp}"
+                        ln -sf "$cat_name/$s_disp" "$target_folder/$flat_name" 2>/dev/null || cp "$src_dir/$s_file" "$target_folder/$flat_name"
+                    fi
+                done
+            done
+        else
+            for cat_name in "${!CATEGORIES_UK[@]}"; do
+                local cat_dir="$target_folder/$cat_name"
+                mkdir -p "$cat_dir"
+                if [[ -f "$src_dir/_i18n.sh" ]]; then
+                    cp "$src_dir/_i18n.sh" "$cat_dir/.i18n.sh"
+                    chmod 0755 "$cat_dir/.i18n.sh"
+                fi
+                IFS="|" read -ra items <<< "${CATEGORIES_UK[$cat_name]}"
+                for item in "${items[@]}"; do
+                    local s_file="${item%%:*}"
+                    local s_disp="${item##*:}"
+                    if [[ -f "$src_dir/$s_file" ]]; then
+                        cp "$src_dir/$s_file" "$cat_dir/$s_disp"
+                        chmod 0755 "$cat_dir/$s_disp"
+                        local flat_name="${SCRIPTS_UK[$s_file]:-$s_disp}"
+                        ln -sf "$cat_name/$s_disp" "$target_folder/$flat_name" 2>/dev/null || cp "$src_dir/$s_file" "$target_folder/$flat_name"
+                    fi
+                done
+            done
+        fi
+    elif [[ "$layout" == "submenus" || "$layout" == "compact" ]]; then
+        # Тільки підменю без верхньорівневих посилань
+        if [[ "$effective_lang" == "en" ]]; then
+            for cat_name in "${!CATEGORIES_EN[@]}"; do
+                local cat_dir="$target_folder/$cat_name"
+                mkdir -p "$cat_dir"
+                if [[ -f "$src_dir/_i18n.sh" ]]; then
+                    cp "$src_dir/_i18n.sh" "$cat_dir/.i18n.sh"
+                    chmod 0755 "$cat_dir/.i18n.sh"
+                fi
+                IFS="|" read -ra items <<< "${CATEGORIES_EN[$cat_name]}"
+                for item in "${items[@]}"; do
+                    local s_file="${item%%:*}"
+                    local s_disp="${item##*:}"
+                    if [[ -f "$src_dir/$s_file" ]]; then
+                        cp "$src_dir/$s_file" "$cat_dir/$s_disp"
+                        chmod 0755 "$cat_dir/$s_disp"
+                    fi
+                done
+            done
+        else
+            for cat_name in "${!CATEGORIES_UK[@]}"; do
+                local cat_dir="$target_folder/$cat_name"
+                mkdir -p "$cat_dir"
+                if [[ -f "$src_dir/_i18n.sh" ]]; then
+                    cp "$src_dir/_i18n.sh" "$cat_dir/.i18n.sh"
+                    chmod 0755 "$cat_dir/.i18n.sh"
+                fi
+                IFS="|" read -ra items <<< "${CATEGORIES_UK[$cat_name]}"
+                for item in "${items[@]}"; do
+                    local s_file="${item%%:*}"
+                    local s_disp="${item##*:}"
+                    if [[ -f "$src_dir/$s_file" ]]; then
+                        cp "$src_dir/$s_file" "$cat_dir/$s_disp"
+                        chmod 0755 "$cat_dir/$s_disp"
+                    fi
+                done
+            done
         fi
     else
-        # Remove English folder if present
-        rm -rf "$target_base/$FOLDER_EN"
-        local target_folder="$target_base/$FOLDER_UK"
-        mkdir -p "$target_folder"
-        for script_file in "${!SCRIPTS_UK[@]}"; do
-            if [[ -f "$src_dir/$script_file" ]]; then
-                local display_name="${SCRIPTS_UK[$script_file]}"
-                cp "$src_dir/$script_file" "$target_folder/$display_name"
-                chmod 0755 "$target_folder/$display_name"
-            fi
-        done
-        # Copy hidden helper
-        if [[ -f "$src_dir/_i18n.sh" ]]; then
-            cp "$src_dir/_i18n.sh" "$target_folder/.i18n.sh"
-            chmod 0755 "$target_folder/.i18n.sh"
+        # Традиційний плоский список
+        if [[ "$effective_lang" == "en" ]]; then
+            for script_file in "${!SCRIPTS_EN[@]}"; do
+                if [[ -f "$src_dir/$script_file" ]]; then
+                    local display_name="${SCRIPTS_EN[$script_file]}"
+                    cp "$src_dir/$script_file" "$target_folder/$display_name"
+                    chmod 0755 "$target_folder/$display_name"
+                fi
+            done
+        else
+            for script_file in "${!SCRIPTS_UK[@]}"; do
+                if [[ -f "$src_dir/$script_file" ]]; then
+                    local display_name="${SCRIPTS_UK[$script_file]}"
+                    cp "$src_dir/$script_file" "$target_folder/$display_name"
+                    chmod 0755 "$target_folder/$display_name"
+                fi
+            done
         fi
     fi
 }
 
 save_user_config() {
     local mode="$1"
+    local layout="${2:-$(get_configured_layout)}"
     local cfg_dir="$HOME/.config/qes"
     mkdir -p "$cfg_dir"
     cat > "$cfg_dir/config.json" << EOF
 {
-  "lang": "$mode"
+  "lang": "$mode",
+  "layout": "$layout"
 }
 EOF
 }
@@ -175,6 +293,8 @@ EOF
 show_status() {
     local cfg_mode
     cfg_mode=$(get_configured_lang)
+    local cfg_layout
+    cfg_layout=$(get_configured_layout)
     local eff_lang
     eff_lang=$(get_effective_lang "$cfg_mode")
     local sys_locale="${LANG:-not set}"
@@ -190,7 +310,8 @@ show_status() {
     echo -e "\n${CLR_BOLD}${CLR_CYAN}╔═══════════════════════════════════════════════════════════════════════════════════════╗${CLR_RESET}"
     echo -e "${CLR_BOLD}${CLR_CYAN}║ НАЛАШТУВАННЯ ТА ЛОКАЛІЗАЦІЯ QES TOOLS / CONFIGURATION & LOCALE${CLR_RESET}"
     echo -e "${CLR_CYAN}╟───────────────────────────────────────────────────────────────────────────────────────╢${CLR_RESET}"
-    echo -e "${CLR_CYAN}║ • Режим конфігурації / Config mode: ${CLR_BOLD}${CLR_GREEN}${cfg_mode}${CLR_RESET}"
+    echo -e "${CLR_CYAN}║ • Режим конфігурації / Config mode:  ${CLR_BOLD}${CLR_GREEN}${cfg_mode}${CLR_RESET}"
+    echo -e "${CLR_CYAN}║ • Макет меню Nautilus / Menu layout: ${CLR_BOLD}${CLR_GREEN}${cfg_layout}${CLR_RESET} ($([ "$cfg_layout" = "categorized" ] && echo "GNOME HIG Категорії" || echo "Плоский список"))"
     echo -e "${CLR_CYAN}║ • Активна мова / Effective language: ${CLR_BOLD}${CLR_YELLOW}${eff_lang}${CLR_RESET} ($([ "$eff_lang" = "uk" ] && echo "Українська 🇺🇦" || echo "English 🇬🇧"))"
     echo -e "${CLR_CYAN}║ • Локаль системи / System locale:    ${CLR_GRAY}${sys_locale}${CLR_RESET}"
     echo -e "${CLR_CYAN}║ • Меню Nautilus / Active folder:     ${CLR_BOLD}${CLR_GREEN}${active_folder}${CLR_RESET}"
@@ -205,24 +326,29 @@ ${CLR_BOLD}ВИКОРИСТАННЯ / USAGE:${CLR_RESET}
   qes-config [ОПЦІЇ / OPTIONS]
 
 ${CLR_BOLD}ОПЦІЇ / OPTIONS:${CLR_RESET}
-  ${CLR_GREEN}--lang uk | ua${CLR_RESET}      Встановити українську мову інтерфейсу (меню: '${FOLDER_UK}')
-  ${CLR_GREEN}--lang en${CLR_RESET}           Set English interface language (menu: '${FOLDER_EN}')
-  ${CLR_GREEN}--lang auto${CLR_RESET}         Автовизначення за мовою системи ($LANG) / Auto-detect locale
-  ${CLR_GREEN}--status${CLR_RESET}            Показати поточні налаштування / Show current configuration
-  ${CLR_GREEN}--refresh${CLR_RESET}           Перевстановити скрипти Nautilus / Re-deploy scripts
-  ${CLR_GREEN}--all-users${CLR_RESET}         Розгорнути для всіх користувачів системи (потрібні права root)
-  ${CLR_GREEN}-h, --help${CLR_RESET}          Показати цю довідку / Show help
+  ${CLR_GREEN}--lang uk | ua${CLR_RESET}           Встановити українську мову інтерфейсу (меню: '${FOLDER_UK}')
+  ${CLR_GREEN}--lang en${CLR_RESET}                Set English interface language (menu: '${FOLDER_EN}')
+  ${CLR_GREEN}--lang auto${CLR_RESET}              Автовизначення за мовою системи (\$LANG) / Auto-detect locale
+  ${CLR_GREEN}--layout categorized${CLR_RESET}     Категоризовані підменю за стандартами GNOME HIG (за замовчуванням)
+  ${CLR_GREEN}--layout flat${CLR_RESET}            Традиційний плоский список дій (16 пунктів)
+  ${CLR_GREEN}--status${CLR_RESET}                 Показати поточні налаштування / Show current configuration
+  ${CLR_GREEN}--refresh${CLR_RESET}                Перевстановити скрипти Nautilus / Re-deploy scripts
+  ${CLR_GREEN}--all-users${CLR_RESET}              Розгорнути для всіх користувачів системи (потрібні права root)
+  ${CLR_GREEN}-h, --help${CLR_RESET}               Показати цю довідку / Show help
 
 ${CLR_BOLD}ПРИКЛАДИ / EXAMPLES:${CLR_RESET}
-  qes-config --lang en        # Switch to English
-  qes-config --lang uk        # Перемкнути на українську
-  qes-config --status         # Перевірити поточний стан
+  qes-config --lang en                   # Switch to English
+  qes-config --lang uk                   # Перемкнути на українську
+  qes-config --layout categorized        # Використовувати категоризовані підменю GNOME HIG
+  qes-config --layout flat               # Традиційний плоский список
+  qes-config --status                    # Перевірити поточний стан
 "
 }
 
 main() {
     local cmd="${1:---status}"
     local target_lang=""
+    local target_layout=""
     local all_users=false
 
     while [[ $# -gt 0 ]]; do
@@ -231,12 +357,17 @@ main() {
                 target_lang="${2:-}"
                 shift 2 || true
                 ;;
+            --layout)
+                target_layout="${2:-}"
+                shift 2 || true
+                ;;
             --status)
                 show_status
                 return 0
                 ;;
             --refresh)
                 target_lang="$(get_configured_lang)"
+                target_layout="$(get_configured_layout)"
                 shift
                 ;;
             --all-users)
@@ -254,10 +385,13 @@ main() {
         esac
     done
 
-    if [[ -z "$target_lang" ]]; then
+    if [[ -z "$target_lang" && -z "$target_layout" ]]; then
         show_status
         return 0
     fi
+
+    [[ -z "$target_lang" ]] && target_lang="$(get_configured_lang)"
+    [[ -z "$target_layout" ]] && target_layout="$(get_configured_layout)"
 
     # Validate language
     case "${target_lang,,}" in
@@ -276,6 +410,20 @@ main() {
             ;;
     esac
 
+    # Validate layout
+    case "${target_layout,,}" in
+        categorized|cat|submenus|categories)
+            target_layout="categorized"
+            ;;
+        flat|legacy)
+            target_layout="flat"
+            ;;
+        *)
+            echo -e "${CLR_RED}Помилка: невідомий макет '${target_layout}'. Допустимі значення: categorized, flat.${CLR_RESET}"
+            return 1
+            ;;
+    esac
+
     local src_dir
     src_dir=$(find_source_scripts_dir || true)
     if [[ -z "$src_dir" ]]; then
@@ -285,14 +433,14 @@ main() {
 
     if [[ "$all_users" == true ]]; then
         # System-wide installation
-        echo -e "${CLR_YELLOW}Розгортання налаштувань для всіх користувачів системи (режим: ${target_lang})...${CLR_RESET}"
+        echo -e "${CLR_YELLOW}Розгортання налаштувань для всіх користувачів системи (режим: ${target_lang}, макет: ${target_layout})...${CLR_RESET}"
         
         # /etc/skel
         local eff_skel
         eff_skel=$(get_effective_lang "$target_lang")
-        deploy_nautilus_scripts_for_dir "/etc/skel" "$eff_skel" "$src_dir"
+        deploy_nautilus_scripts_for_dir "/etc/skel" "$eff_skel" "$src_dir" "$target_layout"
         mkdir -p "/etc/skel/.config/qes"
-        echo "{\"lang\": \"$target_lang\"}" > "/etc/skel/.config/qes/config.json"
+        echo "{\"lang\": \"$target_lang\", \"layout\": \"$target_layout\"}" > "/etc/skel/.config/qes/config.json"
 
         for u_home in /home/*; do
             if [[ -d "$u_home" ]]; then
@@ -301,10 +449,10 @@ main() {
                 if id "$u" >/dev/null 2>&1; then
                     local eff_u
                     eff_u=$(get_effective_lang "$target_lang")
-                    deploy_nautilus_scripts_for_dir "$u_home" "$eff_u" "$src_dir"
+                    deploy_nautilus_scripts_for_dir "$u_home" "$eff_u" "$src_dir" "$target_layout"
                     chown -R "$u:" "$u_home/.local/share/nautilus/scripts" 2>/dev/null || true
                     mkdir -p "$u_home/.config/qes"
-                    echo "{\"lang\": \"$target_lang\"}" > "$u_home/.config/qes/config.json"
+                    echo "{\"lang\": \"$target_lang\", \"layout\": \"$target_layout\"}" > "$u_home/.config/qes/config.json"
                     chown -R "$u:" "$u_home/.config/qes" 2>/dev/null || true
                 fi
             fi
@@ -315,10 +463,10 @@ main() {
     fi
 
     # Single user setup
-    save_user_config "$target_lang"
+    save_user_config "$target_lang" "$target_layout"
     local eff_lang
     eff_lang=$(get_effective_lang "$target_lang")
-    deploy_nautilus_scripts_for_dir "$HOME" "$eff_lang" "$src_dir"
+    deploy_nautilus_scripts_for_dir "$HOME" "$eff_lang" "$src_dir" "$target_layout"
 
     # Reload Nautilus
     pkill -x nautilus 2>/dev/null || true
@@ -327,10 +475,10 @@ main() {
     fi
 
     if [[ "$eff_lang" == "en" ]]; then
-        echo -e "\n${CLR_GREEN}✅ Language set to English (en).${CLR_RESET}"
+        echo -e "\n${CLR_GREEN}✅ Language set to English (en) [Layout: ${target_layout}].${CLR_RESET}"
         echo -e "Nautilus context menu updated to: ${CLR_BOLD}${CLR_CYAN}${FOLDER_EN}${CLR_RESET}\n"
     else
-        echo -e "\n${CLR_GREEN}✅ Встановлено українську мову (uk).${CLR_RESET}"
+        echo -e "\n${CLR_GREEN}✅ Встановлено українську мову (uk) [Макет: ${target_layout}].${CLR_RESET}"
         echo -e "Меню Nautilus оновлено на: ${CLR_BOLD}${CLR_CYAN}${FOLDER_UK}${CLR_RESET}\n"
     fi
 }

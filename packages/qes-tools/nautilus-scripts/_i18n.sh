@@ -5,7 +5,7 @@
 # ==============================================================================
 
 get_qes_lang() {
-    # 1. Пріоритет: файл налаштувань користувача ~/.config/qes/config.json
+# 1. Пріоритет: файл налаштувань користувача ~/.config/qes/config.json
     local cfg="$HOME/.config/qes/config.json"
     if [[ -f "$cfg" ]]; then
         local user_lang
@@ -38,7 +38,23 @@ qes_text() {
     fi
 }
 
-# Двомовне сповіщення desktop notify-send
+# Знайти відповідну іконку для Zenity діалогів (Papirus або hicolor fallback)
+qes_get_window_icon() {
+    local candidate
+    for candidate in \
+        "${XDG_DATA_HOME:-$HOME/.local/share}/icons/Papirus/48x48/mimetypes/application-certificate.svg" \
+        "/usr/share/icons/Papirus/48x48/mimetypes/application-certificate.svg" \
+        "/usr/share/icons/hicolor/scalable/apps/qes-tools.svg" \
+        "/usr/share/icons/hicolor/48x48/apps/security-high.png"; do
+        if [[ -f "$candidate" ]]; then
+            echo "$candidate"
+            return 0
+        fi
+    done
+    echo "security-high"
+}
+
+# Двомовне сповіщення desktop notify-send з прапорцем транзитності
 qes_notify() {
     local icon="$1"
     local title_uk="$2"
@@ -47,26 +63,81 @@ qes_notify() {
     local body_en="$5"
 
     if command -v notify-send >/dev/null 2>&1; then
+        local w_icon
+        w_icon="$(qes_get_window_icon)"
+        local use_icon="$icon"
+        [[ -z "$use_icon" ]] && use_icon="$w_icon"
+
         if [[ "$QES_LANG" == "en" ]]; then
-            notify-send -a "QES Tools" -i "$icon" "$title_en" "$body_en"
+            notify-send -a "QES Tools" -h int:transient:1 -i "$use_icon" "$title_en" "$body_en"
         else
-            notify-send -a "QES Tools" -i "$icon" "$title_uk" "$body_uk"
+            notify-send -a "QES Tools" -h int:transient:1 -i "$use_icon" "$title_uk" "$body_uk"
         fi
     fi
 }
 
-# Двомовне діалогове вікно попередження zenity
+# Двомовне діалогове вікно попередження zenity з Pango-розміткою (GNOME Adwaita HIG)
 qes_warn_dialog() {
     local title_uk="$1"
     local title_en="$2"
     local text_uk="$3"
     local text_en="$4"
+    local w_icon
+    w_icon="$(qes_get_window_icon)"
 
     if command -v zenity >/dev/null 2>&1; then
+        local dlg_title dlg_text
         if [[ "$QES_LANG" == "en" ]]; then
-            zenity --warning --title="$title_en" --text="$text_en" 2>/dev/null || true
+            dlg_title="$title_en"
+            dlg_text="<span weight='bold' size='larger'>${title_en}</span>\n\n${text_en}"
         else
-            zenity --warning --title="$title_uk" --text="$text_uk" 2>/dev/null || true
+            dlg_title="$title_uk"
+            dlg_text="<span weight='bold' size='larger'>${title_uk}</span>\n\n${text_uk}"
         fi
+        zenity --warning --title="$dlg_title" --text="$dlg_text" --width=450 --icon-name="dialog-warning" --window-icon="$w_icon" 2>/dev/null || true
+    fi
+}
+
+# Двомовне інформаційне діалогове вікно zenity з Pango-розміткою
+qes_info_dialog() {
+    local title_uk="$1"
+    local title_en="$2"
+    local text_uk="$3"
+    local text_en="$4"
+    local w_icon
+    w_icon="$(qes_get_window_icon)"
+
+    if command -v zenity >/dev/null 2>&1; then
+        local dlg_title dlg_text
+        if [[ "$QES_LANG" == "en" ]]; then
+            dlg_title="$title_en"
+            dlg_text="<span weight='bold' size='larger'>${title_en}</span>\n\n${text_en}"
+        else
+            dlg_title="$title_uk"
+            dlg_text="<span weight='bold' size='larger'>${title_uk}</span>\n\n${text_uk}"
+        fi
+        zenity --info --title="$dlg_title" --text="$dlg_text" --width=450 --icon-name="security-high" --window-icon="$w_icon" 2>/dev/null || true
+    fi
+}
+
+# Двомовне діалогове вікно помилки zenity з Pango-розміткою
+qes_error_dialog() {
+    local title_uk="$1"
+    local title_en="$2"
+    local text_uk="$3"
+    local text_en="$4"
+    local w_icon
+    w_icon="$(qes_get_window_icon)"
+
+    if command -v zenity >/dev/null 2>&1; then
+        local dlg_title dlg_text
+        if [[ "$QES_LANG" == "en" ]]; then
+            dlg_title="$title_en"
+            dlg_text="<span weight='bold' size='larger'>${title_en}</span>\n\n${text_en}"
+        else
+            dlg_title="$title_uk"
+            dlg_text="<span weight='bold' size='larger'>${title_uk}</span>\n\n${text_uk}"
+        fi
+        zenity --error --title="$dlg_title" --text="$dlg_text" --width=450 --icon-name="dialog-error" --window-icon="$w_icon" 2>/dev/null || true
     fi
 }
