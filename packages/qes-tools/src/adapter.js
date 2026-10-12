@@ -119,7 +119,24 @@ async function safeBoxSign(box, dataBuffer, ...args) {
     const firstKey = Object.values(box.keys)[0];
     if (firstKey && firstKey.cert) keyInfo = firstKey;
   }
-  const hasTspUrl = Boolean(keyInfo?.cert?.extension?.subjectInfoAccess?.link);
+  let tspUrl = signOpts.tspUrl || keyInfo?.cert?.extension?.subjectInfoAccess?.link;
+  if (!tspUrl && keyInfo?.cert) {
+    try {
+      const { detectProvider } = require('./providers');
+      const prov = detectProvider(keyInfo.cert);
+      if (prov && prov.tsp && prov.tsp.length > 0) {
+        tspUrl = prov.tsp[0];
+      }
+    } catch (_) {}
+  }
+  if (tspUrl && keyInfo?.cert) {
+    if (!keyInfo.cert.extension) keyInfo.cert.extension = {};
+    if (!keyInfo.cert.extension.subjectInfoAccess) {
+      keyInfo.cert.extension.subjectInfoAccess = { id: 'tsp', link: tspUrl };
+    }
+  }
+
+  const hasTspUrl = Boolean(tspUrl || keyInfo?.cert?.extension?.subjectInfoAccess?.link);
   const wantsTsp = signOpts.tsp === 'all' || (signOpts.tsp !== false && signOpts.tsp !== undefined);
   const shouldTsp = wantsTsp && hasTspUrl;
 

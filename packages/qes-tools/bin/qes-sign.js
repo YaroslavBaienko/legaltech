@@ -308,6 +308,7 @@ ${CLR_BOLD}ПЕРЕВІРКА ПІДПИСІВ:${CLR_RESET}
   let certPath = null;
   let outputPath = null;
   let useTsp = true;
+  let tspUrl = null;
   let autoVerify = true;
   let useGui = false;
   let usePades = false;
@@ -331,6 +332,8 @@ ${CLR_BOLD}ПЕРЕВІРКА ПІДПИСІВ:${CLR_RESET}
       outputPath = path.resolve(args[++i]);
     } else if (arg === '--no-tsp') {
       useTsp = false;
+    } else if (arg === '--tsp-url' && i + 1 < args.length) {
+      tspUrl = args[++i];
     } else if (arg === '--no-verify') {
       autoVerify = false;
     } else if (arg === '--gui') {
@@ -622,6 +625,7 @@ ${CLR_BOLD}ПЕРЕВІРКА ПІДПИСІВ:${CLR_RESET}
       const res = await engine.signAsice(boxInfo.box, inputFiles, {
         outputPath: outputPath,
         tsp: useTsp,
+        tspUrl: tspUrl,
         append: useAppend,
       });
 
@@ -661,6 +665,7 @@ ${CLR_BOLD}ПЕРЕВІРКА ПІДПИСІВ:${CLR_RESET}
           stamp: useStamp,
           page: stampPage,
           tsp: useTsp,
+          tspUrl: tspUrl,
           append: useAppend,
         });
 
@@ -688,6 +693,7 @@ ${CLR_BOLD}ПЕРЕВІРКА ПІДПИСІВ:${CLR_RESET}
           outputPath: curOutput,
           detached: true,
           tsp: useTsp,
+          tspUrl: tspUrl,
           append: useAppend,
         });
 

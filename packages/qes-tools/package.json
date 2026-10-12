@@ -1,6 +1,6 @@
 {
   "name": "qes-tools",
-  "version": "1.0.18",
+  "version": "1.0.19",
   "description": "Offline-first Ukrainian Qualified Electronic Signature (QES / КЕП) signer tool for DSTU 4145-2002 & PKCS#12 containers",
   "main": "src/index.js",
   "bin": {
@@ -15,7 +15,7 @@
     "qes-export-cert": "bin/qes-export-cert.js"
   },
   "scripts": {
-    "test": "node --test tests/signer.test.js"
+    "test": "node --test tests/signer.test.js tests/test_tsp_scenarios.js"
   },
   "keywords": [
     "qes",

@@ -35,6 +35,7 @@ class EngineSigner extends Signer {
     const signOpts = {
       detached: true,
       tsp: this.options.tsp !== false ? 'all' : false,
+      tspUrl: this.options.tspUrl,
       includeChain: true,
       time: this.options.time ? Math.floor(new Date(this.options.time).getTime() / 1000) : undefined,
     };

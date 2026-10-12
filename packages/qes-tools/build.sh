@@ -50,6 +50,7 @@ mkdir -p "${DIST_DIR}"
 # 3. Копіювання керуючих файлів DEBIAN
 echo -e "${CLR_YELLOW}[2/6] Копіювання керуючих файлів DEBIAN (control, postinst, prerm)...${CLR_RESET}"
 cp "${PKG_ROOT}/debian/control" "${BUILD_ROOT}/DEBIAN/control"
+sed -i "s/^Version:.*/Version: ${PKG_VERSION}/" "${BUILD_ROOT}/DEBIAN/control"
 cp "${PKG_ROOT}/debian/postinst" "${BUILD_ROOT}/DEBIAN/postinst"
 cp "${PKG_ROOT}/debian/prerm" "${BUILD_ROOT}/DEBIAN/prerm"
 if [ -f "${PKG_ROOT}/debian/postrm" ]; then

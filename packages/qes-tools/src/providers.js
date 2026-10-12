@@ -19,7 +19,7 @@ const PROVIDERS = {
     domains: ['depositsign.com', 'ca.depositsign.com'],
     cmp: ['https://ca.depositsign.com/services/cmp/'],
     ocsp: ['https://ca.depositsign.com/services/ocsp/'],
-    tsp: ['https://ca.depositsign.com/services/tsp/'],
+    tsp: ['http://ca.depositsign.com/services/tsp/dstu/', 'https://ca.depositsign.com/services/tsp/'],
     matchers: [/DEPOSIT\s*SIGN/i, /ДЕПОЗИТ\s*САЙН/i, /43005049/],
   },
   monobank: {
@@ -30,7 +30,7 @@ const PROVIDERS = {
     domains: ['monobank.ua', 'ca.monobank.ua'],
     cmp: ['http://ca.monobank.ua/services/cmp/'],
     ocsp: ['http://ca.monobank.ua/services/ocsp/'],
-    tsp: ['http://ca.monobank.ua/services/tsp/'],
+    tsp: ['http://ca.monobank.ua/services/tsp/dstu/', 'http://ca.monobank.ua/services/tsp/'],
     matchers: [/monobank/i, /UNIVERSAL\s*BANK/i, /УНІВЕРСАЛ\s*БАНК/i],
   },
   diia: {
@@ -203,9 +203,24 @@ function getOcspEndpoints() {
  */
 function detectProvider(certOrIssuer) {
   if (!certOrIssuer) return null;
-  const str = typeof certOrIssuer === 'string'
-    ? certOrIssuer
-    : JSON.stringify(certOrIssuer);
+  let str = '';
+  if (typeof certOrIssuer === 'string') {
+    str = certOrIssuer;
+  } else if (certOrIssuer && typeof certOrIssuer === 'object') {
+    const parts = [];
+    if (certOrIssuer.issuer) parts.push(JSON.stringify(certOrIssuer.issuer));
+    if (certOrIssuer.subject) parts.push(JSON.stringify(certOrIssuer.subject));
+    if (certOrIssuer.extension) {
+      if (certOrIssuer.extension.subjectInfoAccess) parts.push(JSON.stringify(certOrIssuer.extension.subjectInfoAccess));
+      if (certOrIssuer.extension.authorityInfoAccess) parts.push(JSON.stringify(certOrIssuer.extension.authorityInfoAccess));
+    }
+    if (parts.length === 0) {
+      try {
+        parts.push(JSON.stringify(certOrIssuer));
+      } catch (_) {}
+    }
+    str = parts.join(' ');
+  }
 
   for (const id of Object.keys(PROVIDERS)) {
     const prov = PROVIDERS[id];

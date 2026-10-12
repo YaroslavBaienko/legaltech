@@ -239,6 +239,7 @@ async function appendAsiceSignature(box, asicePath, options = {}) {
   const signOpts = {
     detached: true,
     tsp: options.tsp !== false ? 'all' : false,
+    tspUrl: options.tspUrl,
     includeChain: true,
     time: options.time ? Math.floor(new Date(options.time).getTime() / 1000) : undefined,
   };
@@ -342,6 +343,7 @@ async function createAsiceContainer(box, filePaths, options = {}) {
   const signOpts = {
     detached: true,
     tsp: options.tsp !== false ? 'all' : false,
+    tspUrl: options.tspUrl,
     includeChain: true,
     time: options.time ? Math.floor(new Date(options.time).getTime() / 1000) : undefined,
   };

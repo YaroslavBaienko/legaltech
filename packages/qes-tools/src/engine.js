@@ -233,6 +233,7 @@ class QESEngine {
     const signOpts = {
       detached: !existingParsed.content.contentInfo?.content,
       tsp: options.tsp !== false ? 'all' : false,
+      tspUrl: options.tspUrl,
       includeChain: true,
       time: options.time ? Math.floor(new Date(options.time).getTime() / 1000) : undefined,
     };
@@ -304,6 +305,7 @@ class QESEngine {
     const signOpts = {
       detached: options.detached !== false,
       tsp: options.tsp !== false ? 'all' : false,
+      tspUrl: options.tspUrl,
       includeChain: true,
       time: options.time ? Math.floor(new Date(options.time).getTime() / 1000) : undefined,
     };
