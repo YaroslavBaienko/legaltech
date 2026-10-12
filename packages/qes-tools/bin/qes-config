@@ -14,58 +14,74 @@ CLR_RED="\033[31m"
 CLR_GRAY="\033[90m"
 
 declare -A SCRIPTS_UK=(
-  ["1_sign_pades.sh"]="01. ✍️ Підписати (PAdES PDF зі штампом та QR)"
-  ["1b_sign_pades_no_stamp.sh"]="02. ✍️ Підписати (PAdES PDF без штампу та QR)"
-  ["2_sign_p7s.sh"]="03. ✍️ Підписати (Відокремлений підпис .p7s)"
-  ["3_sign_asice.sh"]="04. 📦 Підписати (Пакетний контейнер ASiC-E)"
-  ["10_append_signature.sh"]="05. ✍️ Додати другий підпис (Мультипідпис)"
-  ["4_verify.sh"]="06. 🔍 Перевірити підпис КЕП"
-  ["13_view_cert.sh"]="07. 📜 Переглянути сертифікат КНЕДП"
-  ["8_export_cert.sh"]="08. 📤 Експортувати мій відкритий сертифікат (.cer)"
-  ["5_encrypt_self.sh"]="09. 🛡️ Зашифрувати в особистий сейф (.enc)"
-  ["6_encrypt_recipient.sh"]="10. 📨 Зашифрувати для адресата (.enc)"
-  ["7_decrypt.sh"]="11. 🔓 Розшифрувати особистим КЕП"
-  ["9_pdf_court.sh"]="12. ⚖️ Оптимізувати PDF для Е-Суду"
-  ["12_ocr_court.sh"]="13. 👁️ Розпізнати текст OCR (Е-Суд)"
-  ["14_ocr_english.sh"]="14. 👁️ Розпізнати текст OCR (🇬🇧 Чиста Англійська)"
-  ["11_lock_session.sh"]="15. 🔒 Скинути кеш пароля (Заблокувати)"
-  ["0_help.sh"]="16. 📖 Довідка та Інструкції КЕП"
+  ["1_sign_pades.sh"]="✍️ Підписати PDF (зі штампом та QR)"
+  ["1b_sign_pades_no_stamp.sh"]="✍️ Підписати PDF (без штампа)"
+  ["2_sign_p7s.sh"]="✍️ Підписати окремим файлом (.p7s)"
+  ["3_sign_asice.sh"]="📦 Підписати контейнер (ASiC-E)"
+  ["10_append_signature.sh"]="✍️ Додати другий підпис (Мультипідпис)"
+  ["4_verify.sh"]="🔍 Перевірити підпис КЕП"
+  ["13_view_cert.sh"]="📜 Переглянути сертифікат КНЕДП"
+  ["8_export_cert.sh"]="📤 Експортувати відкритий сертифікат (.cer)"
+  ["5_encrypt_self.sh"]="🛡️ Зашифрувати в особистий сейф (.enc)"
+  ["6_encrypt_recipient.sh"]="📨 Зашифрувати для адресата (.enc)"
+  ["7_decrypt.sh"]="🔓 Розшифрувати особистим КЕП"
+  ["9_pdf_court.sh"]="⚖️ Оптимізувати PDF для Е-Суду"
+  ["12_ocr_court.sh"]="👁️ Розпізнати текст OCR (Е-Суд)"
+  ["14_ocr_english.sh"]="👁️ Розпізнати текст OCR (Англійська)"
+  ["11_lock_session.sh"]="🔒 Скинути кеш пароля (Заблокувати)"
+  ["0_help.sh"]="📖 Довідка та Інструкції КЕП"
 )
 
 declare -A SCRIPTS_EN=(
-  ["1_sign_pades.sh"]="01. ✍️ Sign (PAdES PDF with Stamp & QR)"
-  ["1b_sign_pades_no_stamp.sh"]="02. ✍️ Sign (PAdES PDF without Stamp & QR)"
-  ["2_sign_p7s.sh"]="03. ✍️ Sign (Detached Signature .p7s)"
-  ["3_sign_asice.sh"]="04. 📦 Sign (Package Container ASiC-E)"
-  ["10_append_signature.sh"]="05. ✍️ Add Secondary Signature (Multi-Sign)"
-  ["4_verify.sh"]="06. 🔍 Verify QES Signature"
-  ["13_view_cert.sh"]="07. 📜 View CA Certificate Details"
-  ["8_export_cert.sh"]="08. 📤 Export Public Certificate (.cer)"
-  ["5_encrypt_self.sh"]="09. 🛡️ Encrypt to Personal Vault (.enc)"
-  ["6_encrypt_recipient.sh"]="10. 📨 Encrypt for Recipient (.enc)"
-  ["7_decrypt.sh"]="11. 🔓 Decrypt with Personal Key"
-  ["9_pdf_court.sh"]="12. ⚖️ Optimize PDF for Court"
-  ["12_ocr_court.sh"]="13. 👁️ OCR Text Recognition (Court PDF)"
-  ["14_ocr_english.sh"]="14. 👁️ OCR Text Recognition (🇬🇧 English)"
-  ["11_lock_session.sh"]="15. 🔒 Lock Session (Clear Password Cache)"
-  ["0_help.sh"]="16. 📖 Help & QES Documentation"
+  ["1_sign_pades.sh"]="✍️ Sign PDF (with Stamp & QR)"
+  ["1b_sign_pades_no_stamp.sh"]="✍️ Sign PDF (without Stamp & QR)"
+  ["2_sign_p7s.sh"]="✍️ Sign Detached Signature (.p7s)"
+  ["3_sign_asice.sh"]="📦 Sign Package Container (ASiC-E)"
+  ["10_append_signature.sh"]="✍️ Add Secondary Signature (Multi-Sign)"
+  ["4_verify.sh"]="🔍 Verify QES Signature"
+  ["13_view_cert.sh"]="📜 View CA Certificate Details"
+  ["8_export_cert.sh"]="📤 Export Public Certificate (.cer)"
+  ["5_encrypt_self.sh"]="🛡️ Encrypt to Personal Vault (.enc)"
+  ["6_encrypt_recipient.sh"]="📨 Encrypt for Recipient (.enc)"
+  ["7_decrypt.sh"]="🔓 Decrypt with Personal Key"
+  ["9_pdf_court.sh"]="⚖️ Optimize PDF for Court"
+  ["12_ocr_court.sh"]="👁️ OCR Text Recognition (Court PDF)"
+  ["14_ocr_english.sh"]="👁️ OCR Text Recognition (English)"
+  ["11_lock_session.sh"]="🔒 Lock Session (Clear Password Cache)"
+  ["0_help.sh"]="📖 Help & QES Documentation"
 )
 
 # Оголошення категоризованої структури (GNOME HIG Submenus)
+ORDERED_CATEGORIES_UK=(
+  "✍️ Підписання"
+  "🔍 Перевірка та Сертифікати"
+  "🛡️ Шифрування та Сейф"
+  "⚖️ Судові документи та OCR"
+  "⚙️ Керування та Довідка"
+)
+
 declare -A CATEGORIES_UK=(
-  ["1_✍️ Підписання"]="1_sign_pades.sh:01. ✍️ PAdES (зі штампом та QR)|1b_sign_pades_no_stamp.sh:02. ✍️ PAdES (без штампа)|2_sign_p7s.sh:03. ✍️ Відокремлений підпис (.p7s)|3_sign_asice.sh:04. 📦 Пакетний контейнер (ASiC-E)|10_append_signature.sh:05. ✍️ Додати другий підпис (Мультипідпис)"
-  ["2_🔍 Перевірка та Сертифікати"]="4_verify.sh:01. 🔍 Перевірити підпис КЕП|13_view_cert.sh:02. 📜 Переглянути сертифікат КНЕДП|8_export_cert.sh:03. 📤 Експортувати відкритий сертифікат (.cer)"
-  ["3_🛡️ Шифрування та Сейф"]="5_encrypt_self.sh:01. 🛡️ Зашифрувати в особистий сейф (.enc)|6_encrypt_recipient.sh:02. 📨 Зашифрувати для адресата (.enc)|7_decrypt.sh:03. 🔓 Розшифрувати особистим КЕП"
-  ["4_⚖️ Е-Суд та OCR"]="9_pdf_court.sh:01. ⚖️ Оптимізувати PDF для Е-Суду|12_ocr_court.sh:02. 👁️ Розпізнати текст OCR (Е-Суд)|14_ocr_english.sh:03. 👁️ Розпізнати текст OCR (🇬🇧 Чиста Англійська)"
-  ["5_⚙️ Керування та Довідка"]="11_lock_session.sh:01. 🔒 Скинути кеш пароля (Заблокувати)|0_help.sh:02. 📖 Довідка та Інструкції КЕП"
+  ["✍️ Підписання"]="1_sign_pades.sh:Підписати PDF (зі штампом та QR)|1b_sign_pades_no_stamp.sh:Підписати PDF (без штампа)|2_sign_p7s.sh:Підписати окремим файлом (.p7s)|3_sign_asice.sh:Пакетний контейнер (ASiC-E)|10_append_signature.sh:Додати другий підпис (Мультипідпис)"
+  ["🔍 Перевірка та Сертифікати"]="4_verify.sh:Перевірити підпис КЕП|13_view_cert.sh:Переглянути сертифікат КНЕДП|8_export_cert.sh:Експортувати відкритий сертифікат (.cer)"
+  ["🛡️ Шифрування та Сейф"]="5_encrypt_self.sh:Зашифрувати в особистий сейф (.enc)|6_encrypt_recipient.sh:Зашифрувати для адресата (.enc)|7_decrypt.sh:Розшифрувати особистим КЕП"
+  ["⚖️ Судові документи та OCR"]="9_pdf_court.sh:Оптимізувати PDF для Е-Суду|12_ocr_court.sh:Розпізнати текст OCR (Е-Суд)|14_ocr_english.sh:Розпізнати текст OCR (Англійська мова)"
+  ["⚙️ Керування та Довідка"]="11_lock_session.sh:Скинути кеш пароля (Заблокувати)|0_help.sh:Довідка та Інструкції КЕП"
+)
+
+ORDERED_CATEGORIES_EN=(
+  "✍️ Signing"
+  "🔍 Verification & Certificates"
+  "🛡️ Encryption & Vault"
+  "⚖️ Court & OCR"
+  "⚙️ Management & Help"
 )
 
 declare -A CATEGORIES_EN=(
-  ["1_✍️ Signing"]="1_sign_pades.sh:01. ✍️ PAdES (with Stamp & QR)|1b_sign_pades_no_stamp.sh:02. ✍️ PAdES (without Stamp & QR)|2_sign_p7s.sh:03. ✍️ Detached Signature (.p7s)|3_sign_asice.sh:04. 📦 Package Container (ASiC-E)|10_append_signature.sh:05. ✍️ Add Secondary Signature (Multi-Sign)"
-  ["2_🔍 Verification & Certificates"]="4_verify.sh:01. 🔍 Verify QES Signature|13_view_cert.sh:02. 📜 View CA Certificate Details|8_export_cert.sh:03. 📤 Export Public Certificate (.cer)"
-  ["3_🛡️ Encryption & Vault"]="5_encrypt_self.sh:01. 🛡️ Encrypt to Personal Vault (.enc)|6_encrypt_recipient.sh:02. 📨 Encrypt for Recipient (.enc)|7_decrypt.sh:03. 🔓 Decrypt with Personal Key"
-  ["4_⚖️ Court & OCR"]="9_pdf_court.sh:01. ⚖️ Optimize PDF for Court|12_ocr_court.sh:02. 👁️ OCR Text Recognition (Court PDF)|14_ocr_english.sh:03. 👁️ OCR Text Recognition (🇬🇧 English)"
-  ["5_⚙️ Management & Help"]="11_lock_session.sh:01. 🔒 Lock Session (Clear Password Cache)|0_help.sh:02. 📖 Help & QES Documentation"
+  ["✍️ Signing"]="1_sign_pades.sh:Sign PDF (with Stamp & QR)|1b_sign_pades_no_stamp.sh:Sign PDF (without Stamp & QR)|2_sign_p7s.sh:Detached Signature (.p7s)|3_sign_asice.sh:Package Container (ASiC-E)|10_append_signature.sh:Add Secondary Signature (Multi-Sign)"
+  ["🔍 Verification & Certificates"]="4_verify.sh:Verify QES Signature|13_view_cert.sh:View CA Certificate Details|8_export_cert.sh:Export Public Certificate (.cer)"
+  ["🛡️ Encryption & Vault"]="5_encrypt_self.sh:Encrypt to Personal Vault (.enc)|6_encrypt_recipient.sh:Encrypt for Recipient (.enc)|7_decrypt.sh:Decrypt with Personal Key"
+  ["⚖️ Court & OCR"]="9_pdf_court.sh:Optimize PDF for Court|12_ocr_court.sh:OCR Text Recognition (Court PDF)|14_ocr_english.sh:OCR Text Recognition (English)"
+  ["⚙️ Management & Help"]="11_lock_session.sh:Lock Session (Clear Password Cache)|0_help.sh:Help & QES Documentation"
 )
 
 FOLDER_UK="🔐 КЕП та Безпека"
@@ -174,9 +190,49 @@ deploy_nautilus_scripts_for_dir() {
         chmod 0755 "$target_folder/.i18n.sh"
     fi
 
-    if [[ "$layout" == "categorized" || "$layout" == "hybrid" ]]; then
+    if [[ "$layout" == "categorized" || "$layout" == "submenus" || "$layout" == "compact" ]]; then
+        # GNOME HIG Категоризовані підменю (чиста ієрархія без засмічення кореневого каталогу)
         if [[ "$effective_lang" == "en" ]]; then
-            for cat_name in "${!CATEGORIES_EN[@]}"; do
+            for cat_name in "${ORDERED_CATEGORIES_EN[@]}"; do
+                local cat_dir="$target_folder/$cat_name"
+                mkdir -p "$cat_dir"
+                if [[ -f "$src_dir/_i18n.sh" ]]; then
+                    cp "$src_dir/_i18n.sh" "$cat_dir/.i18n.sh"
+                    chmod 0755 "$cat_dir/.i18n.sh"
+                fi
+                IFS="|" read -ra items <<< "${CATEGORIES_EN[$cat_name]}"
+                for item in "${items[@]}"; do
+                    local s_file="${item%%:*}"
+                    local s_disp="${item##*:}"
+                    if [[ -f "$src_dir/$s_file" ]]; then
+                        cp "$src_dir/$s_file" "$cat_dir/$s_disp"
+                        chmod 0755 "$cat_dir/$s_disp"
+                    fi
+                done
+            done
+        else
+            for cat_name in "${ORDERED_CATEGORIES_UK[@]}"; do
+                local cat_dir="$target_folder/$cat_name"
+                mkdir -p "$cat_dir"
+                if [[ -f "$src_dir/_i18n.sh" ]]; then
+                    cp "$src_dir/_i18n.sh" "$cat_dir/.i18n.sh"
+                    chmod 0755 "$cat_dir/.i18n.sh"
+                fi
+                IFS="|" read -ra items <<< "${CATEGORIES_UK[$cat_name]}"
+                for item in "${items[@]}"; do
+                    local s_file="${item%%:*}"
+                    local s_disp="${item##*:}"
+                    if [[ -f "$src_dir/$s_file" ]]; then
+                        cp "$src_dir/$s_file" "$cat_dir/$s_disp"
+                        chmod 0755 "$cat_dir/$s_disp"
+                    fi
+                done
+            done
+        fi
+    elif [[ "$layout" == "hybrid" ]]; then
+        # Гібридний макет: категорії + плоскі посилання у корені
+        if [[ "$effective_lang" == "en" ]]; then
+            for cat_name in "${ORDERED_CATEGORIES_EN[@]}"; do
                 local cat_dir="$target_folder/$cat_name"
                 mkdir -p "$cat_dir"
                 if [[ -f "$src_dir/_i18n.sh" ]]; then
@@ -196,7 +252,7 @@ deploy_nautilus_scripts_for_dir() {
                 done
             done
         else
-            for cat_name in "${!CATEGORIES_UK[@]}"; do
+            for cat_name in "${ORDERED_CATEGORIES_UK[@]}"; do
                 local cat_dir="$target_folder/$cat_name"
                 mkdir -p "$cat_dir"
                 if [[ -f "$src_dir/_i18n.sh" ]]; then
@@ -216,47 +272,8 @@ deploy_nautilus_scripts_for_dir() {
                 done
             done
         fi
-    elif [[ "$layout" == "submenus" || "$layout" == "compact" ]]; then
-        # Тільки підменю без верхньорівневих посилань
-        if [[ "$effective_lang" == "en" ]]; then
-            for cat_name in "${!CATEGORIES_EN[@]}"; do
-                local cat_dir="$target_folder/$cat_name"
-                mkdir -p "$cat_dir"
-                if [[ -f "$src_dir/_i18n.sh" ]]; then
-                    cp "$src_dir/_i18n.sh" "$cat_dir/.i18n.sh"
-                    chmod 0755 "$cat_dir/.i18n.sh"
-                fi
-                IFS="|" read -ra items <<< "${CATEGORIES_EN[$cat_name]}"
-                for item in "${items[@]}"; do
-                    local s_file="${item%%:*}"
-                    local s_disp="${item##*:}"
-                    if [[ -f "$src_dir/$s_file" ]]; then
-                        cp "$src_dir/$s_file" "$cat_dir/$s_disp"
-                        chmod 0755 "$cat_dir/$s_disp"
-                    fi
-                done
-            done
-        else
-            for cat_name in "${!CATEGORIES_UK[@]}"; do
-                local cat_dir="$target_folder/$cat_name"
-                mkdir -p "$cat_dir"
-                if [[ -f "$src_dir/_i18n.sh" ]]; then
-                    cp "$src_dir/_i18n.sh" "$cat_dir/.i18n.sh"
-                    chmod 0755 "$cat_dir/.i18n.sh"
-                fi
-                IFS="|" read -ra items <<< "${CATEGORIES_UK[$cat_name]}"
-                for item in "${items[@]}"; do
-                    local s_file="${item%%:*}"
-                    local s_disp="${item##*:}"
-                    if [[ -f "$src_dir/$s_file" ]]; then
-                        cp "$src_dir/$s_file" "$cat_dir/$s_disp"
-                        chmod 0755 "$cat_dir/$s_disp"
-                    fi
-                done
-            done
-        fi
     else
-        # Традиційний плоский список
+        # Традиційний плоский список (без категорій)
         if [[ "$effective_lang" == "en" ]]; then
             for script_file in "${!SCRIPTS_EN[@]}"; do
                 if [[ -f "$src_dir/$script_file" ]]; then
@@ -357,9 +374,25 @@ main() {
                 target_lang="${2:-}"
                 shift 2 || true
                 ;;
+            --uk|--ua)
+                target_lang="uk"
+                shift
+                ;;
+            --en)
+                target_lang="en"
+                shift
+                ;;
             --layout)
                 target_layout="${2:-}"
                 shift 2 || true
+                ;;
+            --categorized|--submenus)
+                target_layout="categorized"
+                shift
+                ;;
+            --flat)
+                target_layout="flat"
+                shift
                 ;;
             --status)
                 show_status

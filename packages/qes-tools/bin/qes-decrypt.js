@@ -29,7 +29,59 @@ function askPassword(promptText, forceGui = false) {
 
     if ((forceGui || !process.stdin.isTTY) && (process.env.DISPLAY || process.env.WAYLAND_DISPLAY)) {
       const cleanPrompt = (promptText || t('enterPassword')).replace(/\x1b\[[0-9;]*m/g, '');
-      const pangoText = `<span size="larger" weight="bold" color="#2a75d3">🔓 Розшифрування особистим КЕП</span>\n\n${cleanPrompt}\n<span size="small" color="#666666">Введіть пароль вашого особистого ключа для відкриття зашифрованого файлу (.enc):</span>`;
+      const header = '🔓 Розшифрування особистим КЕП';
+      const sub = 'Введіть пароль вашого особистого ключа для відкриття зашифрованого файлу (.enc):';
+
+      // 1. Try modern GNOME HIG Libadwaita dialog (qes-dialog)
+      let qesDialogBin = null;
+      try {
+        const whichRes = spawnSync('which', ['qes-dialog'], { encoding: 'utf-8' });
+        if (whichRes.status === 0 && whichRes.stdout.trim() && fs.existsSync(whichRes.stdout.trim())) {
+          qesDialogBin = whichRes.stdout.trim();
+        }
+      } catch (_) {}
+
+      if (!qesDialogBin) {
+        const qesDialogCandidates = [
+          path.join(__dirname, 'qes-dialog'),
+          path.join(__dirname, '../bin/qes-dialog'),
+          '/usr/lib/qes-tools/bin/qes-dialog',
+          '/usr/bin/qes-dialog',
+        ];
+        for (const cand of qesDialogCandidates) {
+          if (fs.existsSync(cand)) {
+            qesDialogBin = cand;
+            break;
+          }
+        }
+      }
+
+      if (qesDialogBin) {
+        const dialogArgs = [
+          'password',
+          `--title=${t('decryptDialogTitle')}`,
+          `--header=${header}`,
+          `--prompt=${cleanPrompt}`,
+          `--subtext=${sub}`,
+          '--lang=uk',
+        ];
+        try {
+          const dRes = spawnSync(qesDialogBin, dialogArgs, { encoding: 'utf-8' });
+          if (dRes.status === 0 && dRes.stdout) {
+            const parsed = JSON.parse(dRes.stdout.trim());
+            if (parsed.status === 'ok') {
+              return resolve(parsed.password);
+            } else if (parsed.status === 'cancelled') {
+              return reject(new Error(t('pwdCancelled')));
+            }
+          } else if (dRes.status === 1) {
+            return reject(new Error(t('pwdCancelled')));
+          }
+        } catch (_) {}
+      }
+
+      // 2. Fallback to Zenity with Papirus Green theme
+      const pangoText = `<span size="larger" weight="bold" color="#2e7d32">${header}</span>\n\n${cleanPrompt}\n<span size="small" color="#666666">${sub}</span>`;
       const userUnlockIcon = path.join(process.env.HOME || '', '.local/share/icons/Papirus/48x48/emblems/emblem-unlocked.svg');
       const sysUnlockIcon = '/usr/share/icons/Papirus/48x48/emblems/emblem-unlocked.svg';
       const PAPIRUS_UNLOCK_ICON = fs.existsSync(userUnlockIcon) ? userUnlockIcon : (fs.existsSync(sysUnlockIcon) ? sysUnlockIcon : null);

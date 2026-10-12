@@ -1,0 +1,582 @@
+#!/usr/bin/env python3
+# ==============================================================================
+# qes-dialog — GNOME HIG Adwaita / Libadwaita Dialog Engine for QES Tools
+# Styled with Papirus Green accent theme and native Papirus icons.
+# ==============================================================================
+
+import sys
+import os
+import json
+import argparse
+
+def find_papirus_icon(name):
+    """Finds an icon in Papirus theme or system hicolor."""
+    candidates = [
+        os.path.expanduser(f"~/.local/share/icons/Papirus/48x48/mimetypes/{name}.svg"),
+        os.path.expanduser(f"~/.local/share/icons/Papirus/48x48/status/{name}.svg"),
+        os.path.expanduser(f"~/.local/share/icons/Papirus/48x48/apps/{name}.svg"),
+        os.path.expanduser(f"~/.local/share/icons/Papirus/48x48/devices/{name}.svg"),
+        f"/usr/share/icons/Papirus/48x48/mimetypes/{name}.svg",
+        f"/usr/share/icons/Papirus/48x48/status/{name}.svg",
+        f"/usr/share/icons/Papirus/48x48/apps/{name}.svg",
+        f"/usr/share/icons/Papirus/48x48/devices/{name}.svg",
+    ]
+    for c in candidates:
+        if os.path.isfile(c):
+            return c
+    return None
+
+PAPIRUS_GREEN_CSS = """
+@define-color accent_color #43a047;
+@define-color accent_bg_color #43a047;
+@define-color accent_fg_color #ffffff;
+
+window.qes-dialog-window {
+    border-radius: 16px;
+}
+
+.qes-main-box {
+    padding: 24px;
+}
+
+.qes-header-title {
+    font-size: 15pt;
+    font-weight: 800;
+    color: #2e7d32;
+    margin-bottom: 4px;
+}
+
+.qes-doc-badge {
+    background-color: alpha(#43a047, 0.15);
+    color: #2e7d32;
+    border-radius: 8px;
+    padding: 4px 12px;
+    font-size: 0.9em;
+    font-weight: 600;
+}
+
+.qes-card-subtitle {
+    font-size: 0.88em;
+    color: #555555;
+}
+
+button.suggested-action {
+    background-color: #43a047;
+    color: #ffffff;
+    font-weight: 700;
+    border-radius: 8px;
+    padding: 8px 24px;
+}
+
+button.suggested-action:hover {
+    background-color: #388e3c;
+}
+
+button.suggested-action:active {
+    background-color: #2e7d32;
+}
+
+button.cancel-btn {
+    border-radius: 8px;
+    padding: 8px 20px;
+}
+
+.token-connected {
+    color: #2e7d32;
+    font-weight: 600;
+}
+
+.token-disconnected {
+    color: #d97706;
+}
+"""
+
+def run_select_medium(args):
+    import gi
+    gi.require_version('Gtk', '4.0')
+    gi.require_version('Adw', '1')
+    from gi.repository import Gtk, Adw, Gdk, Gio, GLib
+
+    result = {"status": "cancelled"}
+
+    app = Adw.Application(application_id="org.qestools.dialog.selectmedium")
+
+    def on_activate(app):
+        nonlocal result
+
+        # Apply Papirus Green CSS
+        provider = Gtk.CssProvider()
+        provider.load_from_data(PAPIRUS_GREEN_CSS.encode())
+        display = Gdk.Display.get_default()
+        if display:
+            Gtk.StyleContext.add_provider_for_display(
+                display, provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+            )
+
+        win = Adw.Window(application=app)
+        win.add_css_class("qes-dialog-window")
+        win.set_default_size(580, 440)
+        win.set_resizable(False)
+
+        title = args.title or (
+            "Select Signature Medium — QES Tools" if args.lang == "en"
+            else "Вибір носія особистого ключа — QES Tools"
+        )
+        win.set_title(title)
+
+        header_bar = Adw.HeaderBar()
+        header_bar.set_show_end_title_buttons(True)
+        header_bar.set_show_start_title_buttons(False)
+
+        main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
+        main_box.add_css_class("qes-main-box")
+
+        # Top section: Icon + Header info
+        top_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16)
+        
+        cert_icon_path = find_papirus_icon("application-certificate")
+        if cert_icon_path and os.path.exists(cert_icon_path):
+            icon_img = Gtk.Image.new_from_file(cert_icon_path)
+            icon_img.set_pixel_size(48)
+        else:
+            icon_img = Gtk.Image.new_from_icon_name("application-certificate")
+            icon_img.set_pixel_size(48)
+        top_box.append(icon_img)
+
+        header_info = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        top_title = Gtk.Label()
+        top_title.set_markup(
+            "<b>Electronic Signature (QES / DSTU 4145)</b>" if args.lang == "en"
+            else "<b>Електронний підпис (КЕП / ДСТУ 4145)</b>"
+        )
+        top_title.set_halign(Gtk.Align.START)
+        top_title.add_css_class("qes-header-title")
+        header_info.append(top_title)
+
+        if args.doc_desc:
+            doc_pill = Gtk.Label()
+            prefix = "Object: " if args.lang == "en" else "Об'єкт: "
+            doc_pill.set_markup(f"<b>{prefix}</b> {GLib.markup_escape_text(args.doc_desc)}")
+            doc_pill.set_halign(Gtk.Align.START)
+            doc_pill.add_css_class("qes-doc-badge")
+            header_info.append(doc_pill)
+
+        prompt_lbl = Gtk.Label()
+        prompt_lbl.set_text(
+            "Select key storage medium to perform digital signing:" if args.lang == "en"
+            else "Оберіть носій особистого ключа для накладання цифрового підпису:"
+        )
+        prompt_lbl.set_halign(Gtk.Align.START)
+        prompt_lbl.add_css_class("qes-card-subtitle")
+        header_info.append(prompt_lbl)
+
+        top_box.append(header_info)
+        main_box.append(top_box)
+
+        # Selection Card Group
+        group = Adw.PreferencesGroup()
+
+        # Row 1: File key
+        row_file = Adw.ActionRow()
+        row_file.set_title("File Key" if args.lang == "en" else "Файловий ключ (КЕП)")
+        
+        file_icon_path = find_papirus_icon("application-certificate")
+        if file_icon_path:
+            img_file = Gtk.Image.new_from_file(file_icon_path)
+            img_file.set_pixel_size(32)
+        else:
+            img_file = Gtk.Image.new_from_icon_name("application-certificate")
+            img_file.set_pixel_size(32)
+        row_file.add_prefix(img_file)
+
+        has_file_key = bool(args.key_path and os.path.isfile(args.key_path))
+        if has_file_key:
+            stamp_note = " (PAdES stamp + QR)" if args.is_pades else " (~/.secure_keys/)"
+            if args.lang == "uk":
+                stamp_note = " (PAdES штамп + QR)" if args.is_pades else " (~/.secure_keys/)"
+            row_file.set_subtitle(f"{args.key_name or os.path.basename(args.key_path)}{stamp_note}")
+        else:
+            row_file.set_subtitle(
+                "No key file in ~/.secure_keys/" if args.lang == "en"
+                else "Ключ не знайдено в ~/.secure_keys/"
+            )
+            row_file.set_sensitive(False)
+
+        radio_file = Gtk.CheckButton()
+        row_file.add_suffix(radio_file)
+        row_file.set_activatable_widget(radio_file)
+        group.add(row_file)
+
+        # Row 2: Hardware Token (ЗНОК)
+        row_token = Adw.ActionRow()
+        row_token.set_title(
+            "Hardware Token (Secure Token)" if args.lang == "en"
+            else "Апаратний ключ (ЗНОК / смарт-чіп)"
+        )
+
+        token_icon_path = find_papirus_icon("security-high") or find_papirus_icon("auth-sim-token")
+        if token_icon_path:
+            img_token = Gtk.Image.new_from_file(token_icon_path)
+            img_token.set_pixel_size(32)
+        else:
+            img_token = Gtk.Image.new_from_icon_name("security-high")
+            img_token.set_pixel_size(32)
+        row_token.add_prefix(img_token)
+
+        token_connected = bool(args.token_detected)
+        if token_connected:
+            tok_label = args.token_name or ("e.Key Almaz-1K" if args.lang == "en" else "e.ключ Алмаз-1К")
+            row_token.set_subtitle(f"🟢 {'Connected: ' if args.lang == 'en' else 'Підключено: '}{tok_label}")
+        else:
+            row_token.set_subtitle(
+                "⚠️ USB token not connected (Almaz-1K, SecureToken-337)" if args.lang == "en"
+                else "⚠️ USB-токен не підключено (Алмаз-1К, SecureToken-337)"
+            )
+            row_token.set_sensitive(False)
+
+        radio_token = Gtk.CheckButton()
+        radio_token.set_group(radio_file)
+        row_token.add_suffix(radio_token)
+        row_token.set_activatable_widget(radio_token)
+        group.add(row_token)
+
+        # Row 3: Browse other file
+        row_browse = Adw.ActionRow()
+        row_browse.set_title(
+            "Choose Another Key File..." if args.lang == "en"
+            else "Обрати інший файл ключа..."
+        )
+        row_browse.set_subtitle(
+            "Browse .pfx / .p12 container from disk or USB flash drive" if args.lang == "en"
+            else "Вибрати контейнер .pfx / .p12 з довільної папки чи USB-флешки"
+        )
+
+        browse_icon_path = find_papirus_icon("document-open")
+        if browse_icon_path:
+            img_browse = Gtk.Image.new_from_file(browse_icon_path)
+            img_browse.set_pixel_size(32)
+        else:
+            img_browse = Gtk.Image.new_from_icon_name("document-open")
+            img_browse.set_pixel_size(32)
+        row_browse.add_prefix(img_browse)
+
+        radio_browse = Gtk.CheckButton()
+        radio_browse.set_group(radio_file)
+        row_browse.add_suffix(radio_browse)
+        row_browse.set_activatable_widget(radio_browse)
+        group.add(row_browse)
+
+        main_box.append(group)
+
+        # Set initial active radio
+        if has_file_key:
+            radio_file.set_active(True)
+        elif token_connected:
+            radio_token.set_active(True)
+        else:
+            radio_browse.set_active(True)
+
+        # Bottom Buttons Box
+        btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        btn_box.set_halign(Gtk.Align.END)
+        btn_box.set_margin_top(8)
+
+        btn_cancel = Gtk.Button(label="Cancel" if args.lang == "en" else "Скасувати")
+        btn_cancel.add_css_class("cancel-btn")
+        def on_cancel(b):
+            win.close()
+        btn_cancel.connect("clicked", on_cancel)
+        btn_box.append(btn_cancel)
+
+        btn_continue = Gtk.Button(label="Continue" if args.lang == "en" else "Продовжити")
+        btn_continue.add_css_class("suggested-action")
+
+        def proceed_with_selection():
+            nonlocal result
+            if radio_file.get_active() and has_file_key:
+                result = {"status": "ok", "choice": "file", "path": args.key_path}
+                win.close()
+            elif radio_token.get_active() and token_connected:
+                result = {"status": "ok", "choice": "token"}
+                win.close()
+            elif radio_browse.get_active():
+                # Open native file chooser
+                if hasattr(Gtk, "FileDialog"):
+                    file_dialog = Gtk.FileDialog.new()
+                    file_dialog.set_title(
+                        "Choose Private Key Container (.pfx, .p12)" if args.lang == "en"
+                        else "Оберіть файл особистого ключа (.pfx, .p12)"
+                    )
+                    f_filter = Gtk.FileFilter()
+                    f_filter.set_name(
+                        "QES Keys (*.pfx, *.p12, *.jks)" if args.lang == "en"
+                        else "Ключі КЕП (*.pfx, *.p12, *.jks)"
+                    )
+                    f_filter.add_pattern("*.pfx")
+                    f_filter.add_pattern("*.p12")
+                    f_filter.add_pattern("*.jks")
+                    filters = Gio.ListStore.new(Gtk.FileFilter)
+                    filters.append(f_filter)
+                    file_dialog.set_filters(filters)
+                    file_dialog.set_default_filter(f_filter)
+
+                    def on_file_open(dlg, task):
+                        nonlocal result
+                        try:
+                            gfile = dlg.open_finish(task)
+                            if gfile:
+                                picked = gfile.get_path()
+                                result = {"status": "ok", "choice": "browse", "path": picked}
+                                win.close()
+                        except Exception:
+                            # User cancelled file picker
+                            pass
+
+                    file_dialog.open(win, None, on_file_open)
+                else:
+                    # Fallback to FileChooserNative
+                    native = Gtk.FileChooserNative.new(
+                        "Choose Private Key Container (.pfx, .p12)" if args.lang == "en"
+                        else "Оберіть файл особистого ключа (.pfx, .p12)",
+                        win,
+                        Gtk.FileChooserAction.OPEN,
+                        "Open" if args.lang == "en" else "Відкрити",
+                        "Cancel" if args.lang == "en" else "Скасувати",
+                    )
+                    f_filter = Gtk.FileFilter()
+                    f_filter.set_name("Ключі КЕП (*.pfx, *.p12, *.jks)")
+                    f_filter.add_pattern("*.pfx")
+                    f_filter.add_pattern("*.p12")
+                    f_filter.add_pattern("*.jks")
+                    native.add_filter(f_filter)
+
+                    def on_native_response(dialog, response_id):
+                        nonlocal result
+                        if response_id == Gtk.ResponseType.ACCEPT:
+                            chosen = dialog.get_file().get_path()
+                            result = {"status": "ok", "choice": "browse", "path": chosen}
+                            win.close()
+                        dialog.destroy()
+
+                    native.connect("response", on_native_response)
+                    native.show()
+            else:
+                if has_file_key:
+                    result = {"status": "ok", "choice": "file", "path": args.key_path}
+                    win.close()
+
+        btn_continue.connect("clicked", lambda b: proceed_with_selection())
+        btn_box.append(btn_continue)
+        main_box.append(btn_box)
+
+        # Keyboard shortcuts
+        key_controller = Gtk.EventControllerKey.new()
+        def on_key_pressed(controller, keyval, keycode, state):
+            if keyval == Gdk.KEY_Escape:
+                win.close()
+                return True
+            elif keyval == Gdk.KEY_Return or keyval == Gdk.KEY_KP_Enter:
+                proceed_with_selection()
+                return True
+            return False
+        key_controller.connect("key-pressed", on_key_pressed)
+        win.add_controller(key_controller)
+
+        # Layout wrapper
+        content_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        content_box.append(header_bar)
+        content_box.append(main_box)
+        win.set_content(content_box)
+
+        win.present()
+
+    app.connect("activate", on_activate)
+    app.run(None)
+
+    print(json.dumps(result))
+    return 0 if result.get("status") == "ok" else 1
+
+
+def run_password_prompt(args):
+    import gi
+    gi.require_version('Gtk', '4.0')
+    gi.require_version('Adw', '1')
+    from gi.repository import Gtk, Adw, Gdk, GLib
+
+    result = {"status": "cancelled"}
+
+    app = Adw.Application(application_id="org.qestools.dialog.password")
+
+    def on_activate(app):
+        nonlocal result
+
+        provider = Gtk.CssProvider()
+        provider.load_from_data(PAPIRUS_GREEN_CSS.encode())
+        display = Gdk.Display.get_default()
+        if display:
+            Gtk.StyleContext.add_provider_for_display(
+                display, provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+            )
+
+        win = Adw.Window(application=app)
+        win.add_css_class("qes-dialog-window")
+        win.set_default_size(480, 290)
+        win.set_resizable(False)
+
+        title = args.title or (
+            "Authorize Key — QES Tools" if args.lang == "en"
+            else "Авторизація особистого ключа — QES Tools"
+        )
+        win.set_title(title)
+
+        header_bar = Adw.HeaderBar()
+        header_bar.set_show_end_title_buttons(True)
+        header_bar.set_show_start_title_buttons(False)
+
+        main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
+        main_box.add_css_class("qes-main-box")
+
+        top_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=14)
+        lock_icon_path = find_papirus_icon("stock_lock") or find_papirus_icon("status_lock")
+        if lock_icon_path and os.path.exists(lock_icon_path):
+            img_lock = Gtk.Image.new_from_file(lock_icon_path)
+            img_lock.set_pixel_size(42)
+        else:
+            img_lock = Gtk.Image.new_from_icon_name("dialog-password")
+            img_lock.set_pixel_size(42)
+        top_box.append(img_lock)
+
+        info_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        lbl_head = Gtk.Label()
+        hdr_text = args.header or (
+            "PIN Code Authorization" if args.is_pin and args.lang == "en"
+            else ("Авторизація PIN-коду ЗНОК" if args.is_pin
+            else ("Password Authorization" if args.lang == "en" else "Авторизація особистого ключа КЕП"))
+        )
+        lbl_head.set_markup(f"<b>{GLib.markup_escape_text(hdr_text)}</b>")
+        lbl_head.set_halign(Gtk.Align.START)
+        lbl_head.add_css_class("qes-header-title")
+        info_box.append(lbl_head)
+
+        lbl_prompt = Gtk.Label()
+        prompt_txt = args.prompt or (
+            "Enter hardware token PIN code:" if args.is_pin and args.lang == "en"
+            else ("Введіть PIN-код апаратного токена (ЗНОК):" if args.is_pin
+            else ("Enter password for private key:" if args.lang == "en" else "Введіть пароль для розблокування ключа:"))
+        )
+        lbl_prompt.set_text(prompt_txt)
+        lbl_prompt.set_halign(Gtk.Align.START)
+        info_box.append(lbl_prompt)
+
+        top_box.append(info_box)
+        main_box.append(top_box)
+
+        # Password Entry
+        entry = Gtk.PasswordEntry()
+        entry.set_show_peek_icon(True)
+        entry.set_margin_top(6)
+        main_box.append(entry)
+
+        # Subtext (cache notice)
+        sub_text = args.subtext or (
+            ("Key is protected in hardware. Signing executes directly on chip." if args.lang == "en"
+             else "Ключ захищено апаратно. Підписання відбувається всередині чіпа.") if args.is_pin
+            else ("Password will be safely cached in RAM session (TTL 15 min)." if args.lang == "en"
+                  else "Пароль надійно зберігатиметься в оперативній пам'яті сесії RAM (15 хв).")
+        )
+        lbl_sub = Gtk.Label()
+        lbl_sub.set_markup(f"<span size='small' color='#666666'>{GLib.markup_escape_text(sub_text)}</span>")
+        lbl_sub.set_halign(Gtk.Align.START)
+        main_box.append(lbl_sub)
+
+        # Buttons
+        btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        btn_box.set_halign(Gtk.Align.END)
+        btn_box.set_margin_top(6)
+
+        btn_cancel = Gtk.Button(label="Cancel" if args.lang == "en" else "Скасувати")
+        btn_cancel.add_css_class("cancel-btn")
+        btn_cancel.connect("clicked", lambda b: win.close())
+        btn_box.append(btn_cancel)
+
+        btn_ok = Gtk.Button(label="Authorize" if args.lang == "en" else "Підтвердити")
+        btn_ok.add_css_class("suggested-action")
+        
+        def submit():
+            nonlocal result
+            val = entry.get_text()
+            if val:
+                result = {"status": "ok", "password": val}
+                win.close()
+
+        btn_ok.connect("clicked", lambda b: submit())
+        entry.connect("activate", lambda e: submit())
+        btn_box.append(btn_ok)
+        main_box.append(btn_box)
+
+        key_controller = Gtk.EventControllerKey.new()
+        def on_key(controller, keyval, keycode, state):
+            if keyval == Gdk.KEY_Escape:
+                win.close()
+                return True
+            return False
+        key_controller.connect("key-pressed", on_key)
+        win.add_controller(key_controller)
+
+        content_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        content_box.append(header_bar)
+        content_box.append(main_box)
+        win.set_content(content_box)
+
+        win.present()
+        entry.grab_focus()
+
+    app.connect("activate", on_activate)
+    app.run(None)
+
+    print(json.dumps(result))
+    return 0 if result.get("status") == "ok" else 1
+
+
+def main():
+    parser = argparse.ArgumentParser(description="QES Tools GNOME Dialog Engine")
+    subparsers = parser.add_subparsers(dest="subcommand", required=True)
+
+    # select-medium
+    p_sel = subparsers.add_parser("select-medium")
+    p_sel.add_argument("--title", default="")
+    p_sel.add_argument("--doc-desc", default="")
+    p_sel.add_argument("--lang", default="uk")
+    p_sel.add_argument("--key-path", default="")
+    p_sel.add_argument("--key-name", default="")
+    p_sel.add_argument("--is-pades", action="store_true")
+    p_sel.add_argument("--token-detected", action="store_true")
+    p_sel.add_argument("--token-name", default="")
+
+    # password
+    p_pwd = subparsers.add_parser("password")
+    p_pwd.add_argument("--title", default="")
+    p_pwd.add_argument("--header", default="")
+    p_pwd.add_argument("--prompt", default="")
+    p_pwd.add_argument("--subtext", default="")
+    p_pwd.add_argument("--is-pin", action="store_true")
+    p_pwd.add_argument("--lang", default="uk")
+
+    args = parser.parse_args()
+
+    # Check if graphical display is available
+    if not (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")):
+        print(json.dumps({"status": "no_display"}))
+        return 2
+
+    try:
+        if args.subcommand == "select-medium":
+            return run_select_medium(args)
+        elif args.subcommand == "password":
+            return run_password_prompt(args)
+    except Exception as e:
+        print(json.dumps({"status": "error", "message": str(e)}), file=sys.stderr)
+        return 1
+
+if __name__ == "__main__":
+    sys.exit(main() or 0)

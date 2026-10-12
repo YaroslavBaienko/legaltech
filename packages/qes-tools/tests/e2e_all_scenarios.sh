@@ -121,6 +121,19 @@ done
 exit 0
 EOF
 chmod 0755 "$MOCK_BIN/zenity"
+cat << 'EOF' > "$MOCK_BIN/qes-dialog"
+#!/usr/bin/env bash
+if [[ "$1" == "select-medium" ]]; then
+    echo '{"status": "ok", "choice": "file", "path": "'"${TEST_KEY_PATH:-}"'"}'
+    exit 0
+elif [[ "$1" == "password" ]]; then
+    echo '{"status": "ok", "password": "'"${QES_PASSWORD:-test_secret_pass_123}"'"}'
+    exit 0
+fi
+echo '{"status": "cancelled"}'
+exit 0
+EOF
+chmod 0755 "$MOCK_BIN/qes-dialog"
 
 cat << 'EOF' > "$MOCK_BIN/notify-send"
 #!/usr/bin/env bash
@@ -492,11 +505,12 @@ mkdir -p "$MOCK_USER_HOME"
 
 HOME="$MOCK_USER_HOME" qes-config --lang en >/dev/null
 if [ -d "$MOCK_USER_HOME/.local/share/nautilus/scripts/🔐 QES & Security" ]; then
-    en_cnt=$(ls -1 "$MOCK_USER_HOME/.local/share/nautilus/scripts/🔐 QES & Security" | wc -l)
-    if [ "$en_cnt" -ge 16 ]; then
-        assert_ok "qes-config --lang en створив англійське меню Nautilus ($en_cnt скриптів)"
+    en_cats=$(find "$MOCK_USER_HOME/.local/share/nautilus/scripts/🔐 QES & Security" -mindepth 1 -maxdepth 1 -type d | wc -l)
+    en_scripts=$(find "$MOCK_USER_HOME/.local/share/nautilus/scripts/🔐 QES & Security" -mindepth 2 -type f ! -name ".i18n.sh" | wc -l)
+    if [ "$en_cats" -eq 5 ] && [ "$en_scripts" -ge 16 ]; then
+        assert_ok "qes-config --lang en створив англійське меню Nautilus ($en_cats категорій GNOME HIG, $en_scripts скриптів)"
     else
-        echo "Помилка: очікувалось >= 16 скриптів у папці EN, знайдено $en_cnt" >&2; exit 1
+        echo "Помилка: очікувалось 5 категорій та >= 16 скриптів у папці EN, знайдено $en_cats категорій, $en_scripts скриптів" >&2; exit 1
     fi
 else
     echo "Помилка: папка '🔐 QES & Security' не знайдена" >&2; exit 1
@@ -504,11 +518,12 @@ fi
 
 HOME="$MOCK_USER_HOME" qes-config --lang uk >/dev/null
 if [ -d "$MOCK_USER_HOME/.local/share/nautilus/scripts/🔐 КЕП та Безпека" ]; then
-    uk_cnt=$(ls -1 "$MOCK_USER_HOME/.local/share/nautilus/scripts/🔐 КЕП та Безпека" | wc -l)
-    if [ "$uk_cnt" -ge 16 ]; then
-        assert_ok "qes-config --lang uk успішно перемкнув на українське меню ($uk_cnt скриптів)"
+    uk_cats=$(find "$MOCK_USER_HOME/.local/share/nautilus/scripts/🔐 КЕП та Безпека" -mindepth 1 -maxdepth 1 -type d | wc -l)
+    uk_scripts=$(find "$MOCK_USER_HOME/.local/share/nautilus/scripts/🔐 КЕП та Безпека" -mindepth 2 -type f ! -name ".i18n.sh" | wc -l)
+    if [ "$uk_cats" -eq 5 ] && [ "$uk_scripts" -ge 16 ]; then
+        assert_ok "qes-config --lang uk успішно перемкнув на українське меню ($uk_cats категорій GNOME HIG, $uk_scripts скриптів)"
     else
-        echo "Помилка: очікувалось >= 16 скриптів у папці UK, знайдено $uk_cnt" >&2; exit 1
+        echo "Помилка: очікувалось 5 категорій та >= 16 скриптів у папці UK, знайдено $uk_cats категорій, $uk_scripts скриптів" >&2; exit 1
     fi
 else
     echo "Помилка: папка '🔐 КЕП та Безпека' не знайдена" >&2; exit 1
@@ -543,7 +558,7 @@ done
 
 # Перевірка повернення до макету за замовчуванням (categorized)
 HOME="$MOCK_USER_HOME" qes-config --lang uk --layout categorized >/dev/null
-assert_ok "qes-config --layout categorized успішно розгорнув гібридний макет"
+assert_ok "qes-config --layout categorized успішно розгорнув категоризований макет GNOME HIG"
 
 # Тестування помічників Pango-розмітки в _i18n.sh
 w_icon=$(bash -c "source '$PACKAGE_DIR/nautilus-scripts/_i18n.sh'; qes_get_window_icon")

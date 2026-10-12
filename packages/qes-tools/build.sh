@@ -200,6 +200,11 @@ cat << 'EOF' > "${BUILD_ROOT}/usr/bin/qes-tools"
 exec /usr/lib/qes-tools/bin/qes-tool "$@"
 EOF
 
+cat << 'EOF' > "${BUILD_ROOT}/usr/bin/qes-dialog"
+#!/bin/sh
+exec /usr/bin/python3 /usr/lib/qes-tools/bin/qes-dialog "$@"
+EOF
+
 
 find "${BUILD_ROOT}/usr/bin" -type f -exec chmod 0755 {} +
 find "${BUILD_ROOT}/usr/lib/qes-tools/bin" -type f -exec chmod 0755 {} +

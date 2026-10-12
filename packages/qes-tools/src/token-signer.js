@@ -86,9 +86,75 @@ async function chooseSigningMedium(options = {}) {
     ? path.basename(inputFiles[0])
     : (lang === 'en' ? `${inputFiles.length} files in batch` : `${inputFiles.length} файлів у пакеті`);
 
-  // --- GUI MODE (Zenity) ---
+  // --- GUI MODE (GNOME HIG Libadwaita / Zenity fallback) ---
   if (useGui || process.env.DISPLAY || process.env.WAYLAND_DISPLAY) {
     if (useGui) {
+      // 1. First priority: native GNOME HIG Libadwaita dialog (qes-dialog) with Papirus Green theme
+      let qesDialogBin = null;
+      try {
+        const whichRes = spawnSync('which', ['qes-dialog'], { encoding: 'utf-8' });
+        if (whichRes.status === 0 && whichRes.stdout.trim() && fs.existsSync(whichRes.stdout.trim())) {
+          qesDialogBin = whichRes.stdout.trim();
+        }
+      } catch (_) {}
+
+      if (!qesDialogBin) {
+        const qesDialogCandidates = [
+          path.join(__dirname, '../bin/qes-dialog'),
+          '/usr/lib/qes-tools/bin/qes-dialog',
+          '/usr/bin/qes-dialog',
+        ];
+        for (const cand of qesDialogCandidates) {
+          if (fs.existsSync(cand)) {
+            qesDialogBin = cand;
+            break;
+          }
+        }
+      }
+
+      if (qesDialogBin) {
+        const dialogArgs = [
+          'select-medium',
+          `--doc-desc=${docDesc}`,
+          `--lang=${lang}`,
+        ];
+        if (defaultKeyPath) {
+          dialogArgs.push(`--key-path=${defaultKeyPath}`);
+          dialogArgs.push(`--key-name=${defaultKeyName}`);
+        }
+        if (isPades) {
+          dialogArgs.push('--is-pades');
+        }
+        if (activeToken) {
+          dialogArgs.push('--token-detected');
+          dialogArgs.push(`--token-name=${activeToken.displayName}`);
+        }
+
+        try {
+          const res = spawnSync(qesDialogBin, dialogArgs, { encoding: 'utf-8' });
+          if (res.status === 0 && res.stdout) {
+            const parsed = JSON.parse(res.stdout.trim());
+            if (parsed.status === 'ok') {
+              if (parsed.choice === 'file') {
+                return { type: 'file', keyPath: parsed.path || defaultKeyPath };
+              } else if (parsed.choice === 'token') {
+                return { type: 'token', tokenInfo: activeToken };
+              } else if (parsed.choice === 'browse' && parsed.path) {
+                return { type: 'file', keyPath: parsed.path };
+              }
+            } else if (parsed.status === 'cancelled') {
+              return { cancelled: true };
+            }
+          } else if (res.status === 1) {
+            // User cancelled via window close button or Esc
+            return { cancelled: true };
+          }
+        } catch (_) {
+          // If qes-dialog fails, fall back to Zenity
+        }
+      }
+
+      // 2. Secondary fallback: Zenity (clean plain text strings, no raw HTML tags in list columns)
       const userIcon = path.join(process.env.HOME || '', '.local/share/icons/Papirus/48x48/mimetypes/application-certificate.svg');
       const sysIcon = '/usr/share/icons/Papirus/48x48/mimetypes/application-certificate.svg';
       const PAPIRUS_CERT_ICON = fs.existsSync(userIcon) ? userIcon : (fs.existsSync(sysIcon) ? sysIcon : null);
@@ -98,8 +164,8 @@ async function chooseSigningMedium(options = {}) {
         : 'Вибір носія особистого ключа — QES Tools';
 
       const promptText = lang === 'en'
-        ? `<span size="larger" weight="bold" color="#2a75d3">🔐 Electronic Signature (QES / DSTU 4145)</span>\n\n<b>Object:</b> ${docDesc}\n<span size="small" color="#555555">Select key storage medium to perform digital signing:</span>`
-        : `<span size="larger" weight="bold" color="#2a75d3">🔐 Електронний підпис (КЕП / ДСТУ 4145)</span>\n\n<b>Об'єкт:</b> ${docDesc}\n<span size="small" color="#555555">Оберіть носій особистого ключа для накладання підпису:</span>`;
+        ? `<span size="larger" weight="bold" color="#2e7d32">🔐 Electronic Signature (QES / DSTU 4145)</span>\n\n<b>Object:</b> ${docDesc}\n<span size="small" color="#555555">Select key storage medium to perform digital signing:</span>`
+        : `<span size="larger" weight="bold" color="#2e7d32">🔐 Електронний підпис (КЕП / ДСТУ 4145)</span>\n\n<b>Об'єкт:</b> ${docDesc}\n<span size="small" color="#555555">Оберіть носій особистого ключа для накладання підпису:</span>`;
 
       const colChoice = lang === 'en' ? 'Select' : 'Вибір';
       const colCode = 'Code';
@@ -111,27 +177,27 @@ async function chooseSigningMedium(options = {}) {
         : '📁  Файловий ключ';
       const optFileDesc = defaultKeyPath
         ? (isPades
-            ? `${defaultKeyName}  <span size="small" color="#2a75d3">(PAdES штамп + QR)</span>`
-            : `${defaultKeyName}  <span size="small" color="#2a75d3">(~/.secure_keys/)</span>`)
-        : (lang === 'en' ? '<span color="#d97706">No key in ~/.secure_keys/</span>' : '<span color="#d97706">Ключ відсутній у ~/.secure_keys/</span>');
+            ? `${defaultKeyName}  (PAdES штамп + QR)`
+            : `${defaultKeyName}  (~/.secure_keys/)`)
+        : (lang === 'en' ? 'No key in ~/.secure_keys/' : 'Ключ відсутній у ~/.secure_keys/');
 
       const optToken = lang === 'en'
         ? '🔑  Hardware Token (ЗНОК)'
         : '🔑  Апаратний ключ (ЗНОК)';
       const optTokenDesc = activeToken
         ? (isPades
-            ? `<span color="#16a34a"><b>🟢 ${activeToken.displayName}</b></span>  <span size="small" color="#2a75d3">(PAdES штамп + QR / USB ЗНОК)</span>`
-            : `<span color="#16a34a"><b>🟢 ${activeToken.displayName}</b></span>  <span size="small" color="#15803d">(USB смарт-чіп)</span>`)
+            ? `🟢 ${activeToken.displayName}  (PAdES штамп + QR / USB ЗНОК)`
+            : `🟢 ${activeToken.displayName}  (USB смарт-чіп)`)
         : (lang === 'en'
-          ? '<span color="#d97706">⚠️ USB token not connected</span>  <span size="small" color="#777777">(Almaz-1K, SecureToken-337)</span>'
-          : '<span color="#d97706">⚠️ USB-токен не підключено</span>  <span size="small" color="#777777">(Алмаз-1К, SecureToken-337)</span>');
+          ? '⚠️ USB token not connected (Almaz-1K, SecureToken-337)'
+          : '⚠️ USB-токен не підключено (Алмаз-1К, SecureToken-337)');
 
       const optBrowse = lang === 'en'
         ? '📂  Choose Another Key File...'
         : '📂  Обрати інший файл ключа...';
       const descBrowse = lang === 'en'
-        ? '<span color="#6b7280">Browse .pfx / .p12 container from disk or USB flash drive</span>'
-        : '<span color="#6b7280">Вибрати файл .pfx / .p12 з довільної папки або USB-флешки</span>';
+        ? 'Browse .pfx / .p12 container from disk or USB flash drive'
+        : 'Вибрати файл .pfx / .p12 з довільної папки або USB-флешки';
 
       const zenityArgs = [
         '--list',
