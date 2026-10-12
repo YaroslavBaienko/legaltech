@@ -523,14 +523,17 @@ ${CLR_BOLD}ПЕРЕВІРКА ПІДПИСІВ:${CLR_RESET}
             tsp: useTsp,
           });
 
-          console.log(`\n${CLR_GREEN}✅ PDF УСПІШНО ПІДПИСАНО АПАРАТНИМ ТОКЕНОМ (PAdES зі штампом та QR)!${CLR_RESET}`);
-          console.log(`  ${CLR_BOLD}Файл:${CLR_RESET}        ${res.outputPath} (${res.fileSize} байт)`);
-          console.log(`  ${CLR_BOLD}Підписувач:${CLR_RESET}  ${res.certInfo.commonName}`);
-          if (res.certInfo.rnokpp) console.log(`  ${CLR_BOLD}РНОКПП:${CLR_RESET}      ${res.certInfo.rnokpp}`);
-          console.log(`  ${CLR_BOLD}КНЕДП:${CLR_RESET}       ${res.certInfo.issuerName}`);
-          console.log(`  ${CLR_BOLD}Штамп:${CLR_RESET}       ${res.stamped ? 'Накладено зі штампом та QR-кодом' : 'Вимкнено'}`);
+          const padesTitle = res.stamped
+            ? (lang === 'en' ? 'PDF SIGNED WITH HARDWARE TOKEN (PAdES with stamp & QR)!' : 'PDF УСПІШНО ПІДПИСАНО АПАРАТНИМ ТОКЕНОМ (PAdES зі штампом та QR)!')
+            : (lang === 'en' ? 'PDF SIGNED WITH HARDWARE TOKEN (PAdES without stamp)!' : 'PDF УСПІШНО ПІДПИСАНО АПАРАТНИМ ТОКЕНОМ (PAdES без штампа)!');
+          console.log(`\n${CLR_GREEN}✅ ${padesTitle}${CLR_RESET}`);
+          console.log(`  ${CLR_BOLD}${lang === 'en' ? 'File:' : 'Файл:'}${CLR_RESET}        ${res.outputPath} (${res.fileSize} ${lang === 'en' ? 'bytes' : 'байт'})`);
+          console.log(`  ${CLR_BOLD}${lang === 'en' ? 'Signer:' : 'Підписувач:'}${CLR_RESET}  ${res.certInfo.commonName}`);
+          if (res.certInfo.rnokpp) console.log(`  ${CLR_BOLD}${lang === 'en' ? 'Tax ID / RNTR:' : 'РНОКПП:'}${CLR_RESET}      ${res.certInfo.rnokpp}`);
+          console.log(`  ${CLR_BOLD}${lang === 'en' ? 'QTSP:' : 'КНЕДП:'}${CLR_RESET}       ${res.certInfo.issuerName}`);
+          console.log(`  ${CLR_BOLD}${lang === 'en' ? 'Stamp:' : 'Штамп:'}${CLR_RESET}       ${res.stamped ? (lang === 'en' ? 'Applied with stamp and QR code' : 'Накладено зі штампом та QR-кодом') : (lang === 'en' ? 'Disabled' : 'Вимкнено')}`);
         } else {
-          res = signWithHardwareToken({
+          res = await signWithHardwareToken({
             inputPath: curDoc,
             outputPath: curOutput,
             pin,
@@ -538,10 +541,12 @@ ${CLR_BOLD}ПЕРЕВІРКА ПІДПИСІВ:${CLR_RESET}
             devIndex: activeTok.devIndex || 0,
             isAppend: useAppend,
             isInternal: false,
+            tsp: useTsp,
+            certPath,
           });
 
-          console.log(`\n${CLR_GREEN}✅ ДОКУМЕНТ УСПІШНО ПІДПИСАНО АПАРАТНИМ ТОКЕНОМ!${CLR_RESET}`);
-          console.log(`  ${CLR_BOLD}Файл підпису:${CLR_RESET} ${res.outputPath} (${res.fileSize} байт)`);
+          console.log(`\n${CLR_GREEN}✅ ${lang === 'en' ? 'DOCUMENT SIGNED WITH HARDWARE TOKEN!' : 'ДОКУМЕНТ УСПІШНО ПІДПИСАНО АПАРАТНИМ ТОКЕНОМ!'}${CLR_RESET}`);
+          console.log(`  ${CLR_BOLD}${lang === 'en' ? 'Signature file:' : 'Файл підпису:'}${CLR_RESET} ${res.outputPath} (${res.fileSize} ${lang === 'en' ? 'bytes' : 'байт'})`);
         }
 
         if (autoVerify) {

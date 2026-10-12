@@ -9,7 +9,9 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { spawnSync } = require('child_process');
-const { detectHardwareTokens } = require('./providers');
+const jk = require('jkurwa');
+const { queryAdapter, getAlgos } = require('./adapter');
+const { detectHardwareTokens, detectProvider } = require('./providers');
 const { getQESLang, t } = require('./i18n');
 
 const PYTHON_BRIDGE = path.join(__dirname, 'token_bridge.py');
@@ -325,9 +327,180 @@ async function chooseSigningMedium(options = {}) {
 }
 
 /**
+ * Requests an RFC 3161 TimeStampToken from a qualified TSP server (QTSP)
+ * using Gost34311 message imprint over the signature digest.
+ */
+function getStamp(tspUrl, signHash, timeoutMs = 7000) {
+  return new Promise((resolve, reject) => {
+    let timer = null;
+    let settled = false;
+
+    const cleanup = () => {
+      if (timer) clearTimeout(timer);
+      settled = true;
+    };
+
+    timer = setTimeout(() => {
+      if (!settled) {
+        cleanup();
+        reject(new Error(`TSP server timeout (${timeoutMs}ms) for ${tspUrl}`));
+      }
+    }, timeoutMs);
+
+    const tspReq = jk.rfc3161.TimeStampReq.encode(
+      {
+        version: 1,
+        messageImprint: {
+          hashAlgorithm: { algorithm: 'Gost34311' },
+          hashedMessage: signHash,
+        },
+      },
+      'der'
+    );
+
+    queryAdapter(
+      'POST',
+      tspUrl,
+      {
+        'Content-Type': 'application/tsp-request',
+        'Content-Length': tspReq.length,
+      },
+      tspReq,
+      (respBuf, statusCode) => {
+        if (settled) return;
+        cleanup();
+        if (!respBuf || (statusCode && statusCode >= 400)) {
+          return reject(new Error(`TSP server error HTTP ${statusCode || 'unreachable'} (${tspUrl})`));
+        }
+        try {
+          const rtsp = jk.rfc3161.TimeStampResp.decode(respBuf, 'der');
+          if (rtsp.status.status !== 'granted') {
+            return reject(new Error(`TSP server returned status: ${rtsp.status.status}`));
+          }
+          const token = jk.dstszi2010.ContentInfo.encode(rtsp.timeStampToken, 'der');
+          resolve(token);
+        } catch (err) {
+          reject(err);
+        }
+      }
+    );
+  });
+}
+
+/**
+ * Embeds an RFC 3161 Qualified Timestamp Token (CAdES-T / PAdES-T) into an existing
+ * CMS / PKCS#7 signature produced by a hardware token.
+ *
+ * Invariant: RFC 5652 / CAdES places the timestamp in unauthenticatedAttributes
+ * (id-aa-timeStampToken), which does not affect or invalidate the hardware token's
+ * cryptographic signature over the document.
+ */
+async function attachTspToSignature(signatureBuffer, certOrCertPath = null, options = {}) {
+  if (!Buffer.isBuffer(signatureBuffer) || signatureBuffer.length === 0) {
+    return signatureBuffer;
+  }
+
+  let msg;
+  try {
+    msg = new jk.models.Message(signatureBuffer);
+  } catch (err) {
+    return signatureBuffer;
+  }
+
+  if (msg.type !== 'signedData' || !msg.info || !msg.info.signerInfos || !msg.info.signerInfos.length) {
+    return signatureBuffer;
+  }
+
+  // 1. Resolve certificate
+  let cert = null;
+  if (msg.info.certificate && msg.info.certificate.length > 0) {
+    try {
+      cert = new jk.Certificate(msg.info.certificate[0]);
+    } catch (_) {}
+  }
+
+  if (!cert && certOrCertPath) {
+    try {
+      if (typeof certOrCertPath === 'string' && fs.existsSync(certOrCertPath)) {
+        const cBuf = fs.readFileSync(certOrCertPath);
+        cert = jk.Certificate.from_asn1(cBuf);
+      } else if (Buffer.isBuffer(certOrCertPath)) {
+        cert = jk.Certificate.from_asn1(certOrCertPath);
+      } else if (certOrCertPath && typeof certOrCertPath === 'object' && certOrCertPath.subject) {
+        cert = certOrCertPath;
+      }
+    } catch (_) {}
+  }
+
+  if (!cert) {
+    try {
+      const resolved = getHardwareTokenCertificate(options);
+      if (resolved && resolved.cert) {
+        cert = resolved.cert;
+      } else if (resolved && resolved.certBuf) {
+        cert = jk.Certificate.from_asn1(resolved.certBuf);
+      }
+    } catch (_) {}
+  }
+
+  // If cert was missing from CMS info.certificate, inject it so verifiers have full offline cert
+  if ((!msg.info.certificate || !msg.info.certificate.length) && cert && cert.ob) {
+    msg.info.certificate = [cert.ob];
+  }
+
+  // 2. Resolve TSP URL
+  let tspUrl = options.tspUrl;
+  if (!tspUrl && cert && cert.extension && cert.extension.subjectInfoAccess && cert.extension.subjectInfoAccess.link) {
+    tspUrl = cert.extension.subjectInfoAccess.link;
+  }
+  if (!tspUrl && cert) {
+    try {
+      const prov = detectProvider(cert);
+      if (prov && prov.tsp && prov.tsp.length > 0) {
+        tspUrl = prov.tsp[0];
+      }
+    } catch (_) {}
+  }
+  if (!tspUrl) {
+    tspUrl = 'http://ca.depositsign.com/services/tsp/dstu/';
+  }
+
+  // 3. Compute Gost34311 hash over the signature value
+  const algo = getAlgos();
+  const signHash = algo.hash(msg.signature);
+
+  // 4. Request timestamp token from QTSP
+  let token;
+  try {
+    token = await getStamp(tspUrl, signHash, options.tspTimeout || 7000);
+  } catch (tspErr) {
+    if (options.verbose) {
+      console.warn(`[QES TSP] Помилка отримання мітки часу TSP (${tspErr.message}). Збережено підпис CAdES-BES без мітки.`);
+    }
+    return signatureBuffer;
+  }
+
+  // 5. Attach timestamp token to unauthenticatedAttributes (CAdES-T)
+  // Workaround for jkurwa bug where msg.puattrs.list is undefined when parsing external CMS
+  if (!msg.puattrs.list) {
+    msg.puattrs.list = [];
+  }
+  msg.addSignatureToken(token);
+
+  try {
+    return Buffer.from(msg.as_asn1());
+  } catch (err) {
+    if (options.verbose) {
+      console.warn(`[QES TSP] Не вдалося перекодувати підпис з міткою часу (${err.message})`);
+    }
+    return signatureBuffer;
+  }
+}
+
+/**
  * Signs a file or package using the hardware token via token_bridge.py
  */
-function signWithHardwareToken(options = {}) {
+async function signWithHardwareToken(options = {}) {
   const {
     inputPath,
     outputPath,
@@ -336,6 +509,7 @@ function signWithHardwareToken(options = {}) {
     devIndex = 0,
     isAppend = false,
     isInternal = false,
+    tsp = true,
   } = options;
 
   if (!fs.existsSync(PYTHON_BRIDGE)) {
@@ -363,15 +537,31 @@ function signWithHardwareToken(options = {}) {
     throw new Error(errText);
   }
 
+  let res;
   try {
-    const res = JSON.parse(proc.stdout);
+    res = JSON.parse(proc.stdout);
     if (!res.success) {
       throw new Error(res.error || 'Помилка підписання токеном');
     }
-    return res;
   } catch (e) {
     throw new Error(e.message || 'Помилка парсингу відповіді токена');
   }
+
+  // Attach RFC 3161 Qualified Timestamp Token (CAdES-T) if requested and output exists
+  if (tsp !== false && fs.existsSync(outputPath)) {
+    try {
+      const sigBuf = fs.readFileSync(outputPath);
+      const updatedBuf = await attachTspToSignature(sigBuf, options.cert || options.certPath, options);
+      if (updatedBuf && updatedBuf.length !== sigBuf.length) {
+        fs.writeFileSync(outputPath, updatedBuf);
+        res.fileSize = updatedBuf.length;
+      }
+    } catch (_) {
+      // Graceful offline fallback
+    }
+  }
+
+  return res;
 }
 
 /**
@@ -529,4 +719,6 @@ module.exports = {
   signWithHardwareToken,
   signDataWithHardwareToken,
   getHardwareTokenCertificate,
+  getStamp,
+  attachTspToSignature,
 };

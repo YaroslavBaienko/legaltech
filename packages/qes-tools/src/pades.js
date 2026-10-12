@@ -56,11 +56,24 @@ class HardwareTokenSigner extends Signer {
   }
 
   async sign(pdfBuffer) {
-    const { signDataWithHardwareToken } = require('./token-signer');
-    const signatureBuffer = signDataWithHardwareToken({
+    const { signDataWithHardwareToken, attachTspToSignature } = require('./token-signer');
+    let signatureBuffer = signDataWithHardwareToken({
       ...this.tokenOptions,
       data: pdfBuffer,
     });
+    if (this.options.tsp !== false) {
+      try {
+        signatureBuffer = await attachTspToSignature(
+          signatureBuffer,
+          this.tokenOptions.cert || this.tokenOptions.certPath,
+          this.options
+        );
+      } catch (e) {
+        if (this.options.verbose) {
+          console.warn(`[HardwareTokenSigner] TSP failed: ${e.message}`);
+        }
+      }
+    }
     return signatureBuffer;
   }
 }

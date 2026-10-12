@@ -12,6 +12,8 @@
  * 7. ETSI ASiC-E archive container (.asice) + Monobank QTSP (verifies manifest + TSP)
  * 8. ASiC-E Multi-signature (--append) with 2 different keys & QTSPs
  * 9. CAdES Parallel Multi-signature (--append) with 2 different keys & QTSPs
+ * 10. attachTspToSignature attaches live QTSP timestamp to raw CMS signature
+ * 11. HardwareTokenSigner attaches live RFC 3161 TSP to PAdES PDF embedded signature
  */
 
 'use strict';
@@ -499,3 +501,109 @@ test('Scenario 9: CAdES Parallel Multi-signature merges two signers in one .p7s 
   assert.strictEqual(verification[0].has_tsp, true, 'Multi-signer CAdES must retain valid TSP');
   assertValidTimestamp(verification[0].tsp_time);
 });
+
+test('Scenario 10: attachTspToSignature attaches live QTSP timestamp to raw CMS signature without unauthenticatedAttributes', async () => {
+  const { attachTspToSignature } = require('../src/token-signer');
+
+  // Sign a file without TSP first (pure CAdES-BES)
+  const noTspP7s = path.join(WORK_DIR, 'raw_bes.p7s');
+  const res = spawnSync('node', [
+    CLI_SIGN,
+    '--no-tsp',
+    '--key', KEY1_PATH,
+    '--cert', CERT1_PATH,
+    '-o', noTspP7s,
+    SAMPLE_TXT,
+  ], {
+    encoding: 'utf-8',
+    env: {
+      ...process.env,
+      PATH: `${MOCK_BIN_DIR}:${process.env.PATH}`,
+      QES_PASSWORD: KEY1_PASS,
+    },
+  });
+  assert.strictEqual(res.status, 0);
+
+  const initialVerification = verifyFileJson(noTspP7s);
+  assert.strictEqual(initialVerification[0].has_tsp, false);
+
+  // Read raw signature buffer
+  const rawSig = fs.readFileSync(noTspP7s);
+
+  // Attach TSP using attachTspToSignature
+  const certBuf = fs.readFileSync(CERT1_PATH);
+  const cert = jk.Certificate.from_asn1(certBuf);
+  const sigWithTsp = await attachTspToSignature(rawSig, cert, { tspUrl: MONOBANK_TSP });
+
+  assert.ok(sigWithTsp.length > rawSig.length, 'Signature with TSP should be larger');
+
+  const tspP7s = path.join(WORK_DIR, 'attached_tsp.p7s');
+  fs.writeFileSync(tspP7s, sigWithTsp);
+
+  const verified = verifyFileJson(tspP7s);
+  assert.strictEqual(verified[0].has_tsp, true, 'Must have has_tsp === true after attachTspToSignature');
+  assertValidTimestamp(verified[0].tsp_time);
+});
+
+test('Scenario 11: HardwareTokenSigner attaches live RFC 3161 TSP to PAdES PDF embedded signature', async () => {
+  const { pdflibAddPlaceholder } = require('@signpdf/placeholder-pdf-lib');
+  const { SignPdf } = require('@signpdf/signpdf');
+  const { SUBFILTER_ETSI_CADES_DETACHED } = require('@signpdf/utils');
+  const { HardwareTokenSigner } = require('../src/pades');
+  const tokenSignerMod = require('../src/token-signer');
+
+  const algo = getAlgos();
+  const priv1Buf = fs.readFileSync(path.join(DATA_DIR, 'PRIV1.cer'));
+  const cert1Buf = fs.readFileSync(path.join(DATA_DIR, 'SELF_SIGNED1.cer'));
+  const priv1 = jk.Priv.from_asn1(priv1Buf);
+  const cert1 = jk.Certificate.from_asn1(cert1Buf);
+
+  const signer = new HardwareTokenSigner({ cert: cert1 }, {
+    tsp: true,
+    tspUrl: MONOBANK_TSP,
+  });
+
+  // Mock signDataWithHardwareToken to simulate hardware token returning raw CAdES-BES
+  const origSignData = tokenSignerMod.signDataWithHardwareToken;
+  tokenSignerMod.signDataWithHardwareToken = (opts) => {
+    const dataHash = algo.hash(opts.data);
+    const msg = new jk.models.Message({
+      type: 'signedData',
+      cert: cert1,
+      data: null,
+      dataHash,
+      signer: priv1,
+      hash: algo.hash,
+    });
+    return Buffer.from(msg.as_asn1());
+  };
+
+  try {
+    const doc = await PDFDocument.create();
+    doc.addPage([595.28, 841.89]);
+    pdflibAddPlaceholder({
+      pdfDoc: doc,
+      reason: 'Hardware Token TSP Test',
+      contactInfo: 'Test QTSP',
+      name: 'Test Signer',
+      location: 'Kyiv',
+      subFilter: SUBFILTER_ETSI_CADES_DETACHED,
+      signatureLength: 16384,
+    });
+    const pdfWithPlaceholder = Buffer.from(await doc.save({ useObjectStreams: false }));
+
+    const signPdf = new SignPdf();
+    const signedPdf = await signPdf.sign(pdfWithPlaceholder, signer);
+
+    const tokenPdf = path.join(WORK_DIR, 'token_pades_tsp.pdf');
+    fs.writeFileSync(tokenPdf, signedPdf);
+
+    const verified = verifyFileJson(tokenPdf);
+    assert.strictEqual(verified[0].container_format, 'PAdES (PDF Embedded Signature)');
+    assert.strictEqual(verified[0].has_tsp, true, 'Hardware token PAdES must have has_tsp === true');
+    assertValidTimestamp(verified[0].tsp_time);
+  } finally {
+    tokenSignerMod.signDataWithHardwareToken = origSignData;
+  }
+});
+
