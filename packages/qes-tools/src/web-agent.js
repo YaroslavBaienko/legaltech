@@ -198,6 +198,31 @@ function getOrCreateLocalhostCert(certDir = null) {
   return null;
 }
 
+// Validates whether the browser request comes from a trusted origin (official government portals, public e-services, or localhost)
+function isAllowedOrigin(origin) {
+  if (!origin) return true; // Local non-browser CLI / curl requests
+  try {
+    const url = new URL(origin);
+    const host = url.hostname.toLowerCase();
+    if (host === 'localhost' || host === '127.0.0.1' || host === '::1') return true;
+    if (host.endsWith('.gov.ua') || host === 'gov.ua') return true;
+    if (host.endsWith('.court.gov.ua')) return true;
+    if (host.endsWith('.diia.gov.ua')) return true;
+    if (host.endsWith('.tax.gov.ua')) return true;
+    if (host.endsWith('.prozorro.gov.ua') || host.endsWith('.prozorro.sale')) return true;
+    if (host.endsWith('.depositsign.com') || host === 'depositsign.com') return true;
+    if (host.endsWith('.privatbank.ua') || host === 'privatbank.ua') return true;
+    if (host.endsWith('.vchasno.ua') || host === 'vchasno.ua') return true;
+    if (host.endsWith('.iit.com.ua') || host === 'iit.com.ua') return true;
+    if (host.endsWith('.czo.gov.ua') || host === 'czo.gov.ua') return true;
+    if (host.endsWith('.dps.gov.ua') || host === 'dps.gov.ua') return true;
+    if (host.endsWith('.me.gov.ua') || host === 'me.gov.ua') return true;
+  } catch (e) {
+    return false;
+  }
+  return false;
+}
+
 /**
  * Starts the HTTP and HTTPS Web Signing Agent daemon.
  */
@@ -207,8 +232,19 @@ function startWebAgentServer(options = {}) {
   const bridge = new NmhBridge(options.nmhBinaryPath);
 
   function handleRequest(req, res) {
+    const origin = req.headers.origin;
+    if (origin && !isAllowedOrigin(origin)) {
+      res.writeHead(403, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({
+        error: 'Forbidden',
+        message: `Origin ${origin} is not authorized to access local QES Signing Agent. Only official Ukrainian public services and localhost are permitted.`
+      }));
+      return;
+    }
+
     // CORS headers required by browsers and IIT SignWidget
-    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Origin', origin || '*');
+    res.setHeader('Vary', 'Origin');
     res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, *');
     res.setHeader('Access-Control-Max-Age', '86400');
@@ -224,7 +260,7 @@ function startWebAgentServer(options = {}) {
       res.end(JSON.stringify({
         status: 'ok',
         service: 'qes-web-agent',
-        version: '1.0.14',
+        version: '1.0.15',
         eusw: '1.3.109',
         nmhAlive: bridge.isAlive,
         ports: { http: portHttp, https: portHttps },

@@ -66,9 +66,6 @@ find_source_scripts_dir() {
         "$bin_parent/nautilus-scripts"
         "$bin_parent/../nautilus-scripts"
         "$(cd "$(dirname "${BASH_SOURCE[0]}")/../nautilus-scripts" 2>/dev/null && pwd || true)"
-        "$(cd "$(dirname "${BASH_SOURCE[0]}")/../../nautilus-scripts" 2>/dev/null && pwd || true)"
-        "/home/attor/legaltech/packages/qes-tools/nautilus-scripts"
-        "/home/attor/ai-debian-admin/tools/nautilus-scripts"
         "/usr/share/qes-tools/nautilus-scripts"
         "/usr/share/nautilus-scripts"
     )

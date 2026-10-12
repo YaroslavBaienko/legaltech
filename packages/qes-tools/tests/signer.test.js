@@ -30,7 +30,9 @@ test('CLI fails gracefully when file is missing', () => {
 });
 
 test('Engine rejects wrong password without crash or leak', async () => {
-  const keyPath = path.join(process.env.HOME || '/home/attor', '.secure_keys', 'Баєнко_Я_В_monoКЕП_2025-09-15T20_12_28.pfx');
+  const defaultKey = path.join(process.env.HOME || '/home/attor', '.secure_keys', 'Баєнко_Я_В_monoКЕП_2025-09-15T20_12_28.pfx');
+  const ciKey = path.join(__dirname, '../node_modules/jkurwa/test/data/STORE_A040.dat');
+  const keyPath = fs.existsSync(defaultKey) ? defaultKey : ciKey;
   if (!fs.existsSync(keyPath)) {
     return; // Skip if test environment doesn't have key
   }
@@ -56,20 +58,37 @@ test('CA bundle mono.p7b exists and is valid', () => {
 
 test('Visual stamp generator produces valid stamped PDF with QR code', async () => {
   const { applyVisualStamp } = require('../src/pades');
+  const { PDFDocument } = require('pdf-lib');
   const samplePdf = '/home/attor/test_kep/test_doc.pdf';
-  if (!fs.existsSync(samplePdf)) return;
+  let targetPdf = samplePdf;
+  let tmpPdfCreated = false;
 
-  const mockCertInfo = {
-    commonName: 'Баєнко Ярослав Володимирович',
-    rnokpp: '3255419579',
-    issuerName: 'КНЕДП monobank | Universal Bank',
-    serialHex: '10FF6F932221FA00CB4407000000000130616768',
-    validTo: new Date('2027-09-14T23:59:59Z'),
-  };
+  if (!fs.existsSync(targetPdf)) {
+    const doc = await PDFDocument.create();
+    doc.addPage([595.28, 841.89]);
+    const pdfBytes = await doc.save();
+    targetPdf = path.join(os.tmpdir(), `test_pades_fixture_${Date.now()}.pdf`);
+    fs.writeFileSync(targetPdf, pdfBytes);
+    tmpPdfCreated = true;
+  }
 
-  const stampedBytes = await applyVisualStamp(samplePdf, mockCertInfo, { page: 'z' });
-  assert.ok(stampedBytes.length > 20000, 'Stamped PDF should have valid size');
-  assert.strictEqual(stampedBytes.subarray(0, 5).toString('ascii'), '%PDF-');
+  try {
+    const mockCertInfo = {
+      commonName: 'Баєнко Ярослав Володимирович',
+      rnokpp: '3255419579',
+      issuerName: 'КНЕДП monobank | Universal Bank',
+      serialHex: '10FF6F932221FA00CB4407000000000130616768',
+      validTo: new Date('2027-09-14T23:59:59Z'),
+    };
+
+    const stampedBytes = await applyVisualStamp(targetPdf, mockCertInfo, { page: 'z' });
+    assert.ok(stampedBytes.length > 20000, 'Stamped PDF should have valid size');
+    assert.strictEqual(stampedBytes.subarray(0, 5).toString('ascii'), '%PDF-');
+  } finally {
+    if (tmpPdfCreated && fs.existsSync(targetPdf)) {
+      try { fs.unlinkSync(targetPdf); } catch (e) {}
+    }
+  }
 });
 
 test('ASiC-E manifest and ZIP archive conform to ETSI TS 102 918', () => {
@@ -855,6 +874,38 @@ test('web-agent module bridges JSON-RPC to euscpnmh over HTTP and manages browse
   });
   assert.strictEqual(postRes.id, 202);
   assert.strictEqual(postRes.result.result, '1.3.109');
+
+  // Test CORS security: untrusted origin should be rejected with 403 Forbidden
+  const forbiddenRes = await new Promise((resolve) => {
+    const http = require('http');
+    const req = http.request({
+      hostname: '127.0.0.1',
+      port: 18091,
+      method: 'GET',
+      headers: { Origin: 'https://evil-untrusted-site.com' },
+    }, (res) => {
+      resolve(res.statusCode);
+    });
+    req.end();
+  });
+  assert.strictEqual(forbiddenRes, 403, 'Untrusted origin should be rejected with 403');
+
+  // Test CORS security: trusted government origin should be accepted with matching Access-Control-Allow-Origin
+  const allowedRes = await new Promise((resolve) => {
+    const http = require('http');
+    const req = http.request({
+      hostname: '127.0.0.1',
+      port: 18091,
+      method: 'GET',
+      headers: { Origin: 'https://cabinet.tax.gov.ua' },
+    }, (res) => {
+      resolve({ statusCode: res.statusCode, allowOrigin: res.headers['access-control-allow-origin'] });
+    });
+    req.end();
+  });
+  assert.strictEqual(allowedRes.statusCode, 200);
+  assert.strictEqual(allowedRes.allowOrigin, 'https://cabinet.tax.gov.ua');
+
   srv.close();
 
   // 3. Test setupBrowserManifests in temp home

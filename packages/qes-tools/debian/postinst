@@ -102,9 +102,6 @@ if [ "$1" = "configure" ]; then
                 chown -R "$SUDO_USER:" "$sudo_home/.config/qes" 2>/dev/null || true
             fi
         fi
-
-        # Перезавантаження процесів Nautilus для миттєвого оновлення меню
-        pkill -x nautilus 2>/dev/null || true
     fi
 
     # 1. Реєстрація Native Messaging Host для роботи з токенами у браузерах (Дія, Е-Суд, ДПС, DepositSign)
@@ -227,7 +224,7 @@ EOF_NMH_FX
     done
 
     echo "================================================================================"
-    echo " 🇺🇦 Встановлено комплекс електронного підпису та шифрування qes-tools v1.0.14"
+    echo " 🇺🇦 Встановлено комплекс електронного підпису та шифрування qes-tools v1.0.15"
     echo " • qes-sign        — підписання (CAdES .p7s, PAdES .pdf, ASiC-E .asice, мультипідпис)"
     echo " • qes-verify      — перевірка підписів (.p7s, .pdf, .asice) та сертифікатів"
     echo " • qes-cert        — швидкий інспектор сертифікатів КНЕДП / АЦСК (X.509, ДСТУ 4145)"

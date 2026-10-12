@@ -30,7 +30,7 @@ clean:
 lint:
 	@if command -v shellcheck >/dev/null 2>&1; then \
 		echo "==> Linting shell scripts with shellcheck..."; \
-		shellcheck tools/*.sh packages/qes-tools/build.sh packages/qes-tools/nautilus-scripts/*.sh; \
+		shellcheck -e SC1091 tools/*.sh packages/qes-tools/build.sh packages/qes-tools/nautilus-scripts/*.sh; \
 	else \
 		echo "shellcheck not found (install via: sudo apt install shellcheck)"; \
 	fi

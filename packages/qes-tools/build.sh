@@ -8,7 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PKG_ROOT="${SCRIPT_DIR}"
 
 PKG_NAME="qes-tools"
-PKG_VERSION="$(grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' "${PKG_ROOT}/package.json" 2>/dev/null | cut -d'"' -f4 || echo "1.0.14")"
+PKG_VERSION="$(grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' "${PKG_ROOT}/package.json" 2>/dev/null | cut -d'"' -f4 || echo "1.0.15")"
 PKG_ARCH="amd64"
 DEB_FILENAME="${PKG_NAME}_${PKG_VERSION}_${PKG_ARCH}.deb"
 
@@ -262,7 +262,7 @@ if [ -f "${PKG_ROOT}/systemd/qes-agent.service" ]; then
     chmod 0644 "${BUILD_ROOT}/usr/lib/systemd/user/qes-agent.service"
 fi
 
-# Авторські права / документація
+# Авторські права / документація (DEP-5)
 cat << 'EOF' > "${BUILD_ROOT}/usr/share/doc/qes-tools/copyright"
 Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/
 Upstream-Name: qes-tools
@@ -271,7 +271,20 @@ Source: https://github.com/YaroslavBaienko/legaltech
 Files: *
 Copyright: 2026 Yaroslav Baienko <zerhug@gmail.com>
 License: Apache-2.0
+
+Files: opt/iit/*
+Copyright: JSC Institute of Informational Technologies (IIT / АТ «ІІТ»)
+License: Proprietary-IIT-End-User
+ Redistribution permitted for end-user signing and verification
+ with Ukrainian PKI services and qualified trust service providers.
+
+License: Apache-2.0
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ On Debian systems, the full text of the Apache-2.0 license can be
+ found in /usr/share/common-licenses/Apache-2.0.
 EOF
+cp "${BUILD_ROOT}/usr/share/doc/qes-tools/copyright" "${PKG_ROOT}/debian/copyright" 2>/dev/null || true
 
 # Нормалізація прав доступу
 find "${BUILD_ROOT}" -type d -exec chmod 0755 {} +

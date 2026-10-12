@@ -17,7 +17,6 @@ if [ "$1" = "purge" ] || [ "$1" = "remove" ]; then
                    "$sudo_home/.local/share/nautilus/scripts/🔐 QES & Security" 2>/dev/null || true
         fi
     fi
-    pkill -x nautilus 2>/dev/null || true
 fi
 
 exit 0

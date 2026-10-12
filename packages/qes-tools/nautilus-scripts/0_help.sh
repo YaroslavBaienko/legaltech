@@ -25,7 +25,7 @@ get_version() {
     if [[ -z "$v" && -f "${SCRIPT_DIR}/../package.json" ]]; then
         v=$(grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' "${SCRIPT_DIR}/../package.json" 2>/dev/null | head -n1 | cut -d'"' -f4 || true)
     fi
-    echo "${v:-1.0.14}"
+    echo "${v:-1.0.15}"
 }
 VERSION="$(get_version)"
 [[ "$VERSION" != v* ]] && VERSION="v${VERSION}"
@@ -341,8 +341,11 @@ HELP_ZEN_ARGS=(
     --extra-button="$EXTRA_BTN"
     --icon-name="help-browser"
 )
-if [[ -f "/home/attor/.local/share/icons/Papirus/48x48/mimetypes/application-certificate.svg" ]]; then
-    HELP_ZEN_ARGS+=(--window-icon="/home/attor/.local/share/icons/Papirus/48x48/mimetypes/application-certificate.svg")
+local_cert_icon="${XDG_DATA_HOME:-$HOME/.local/share}/icons/Papirus/48x48/mimetypes/application-certificate.svg"
+if [[ -f "$local_cert_icon" ]]; then
+    HELP_ZEN_ARGS+=(--window-icon="$local_cert_icon")
+elif [[ -f "/usr/share/icons/Papirus/48x48/mimetypes/application-certificate.svg" ]]; then
+    HELP_ZEN_ARGS+=(--window-icon="/usr/share/icons/Papirus/48x48/mimetypes/application-certificate.svg")
 fi
 
 RES=$(echo -e "$HELP_TEXT" | zenity "${HELP_ZEN_ARGS[@]}" 2>/dev/null || true)
