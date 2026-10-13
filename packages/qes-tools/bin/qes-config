@@ -358,7 +358,7 @@ show_status() {
 
 show_help() {
     echo -e "
-${CLR_BOLD}${CLR_CYAN}qes-config — Керування конфігурацією та мовою інтерфейсу QES Tools${CLR_RESET}
+${CLR_BOLD}${CLR_CYAN}qes-config — Керування конфігурацією, макетом меню та мовою інтерфейсу QES Tools${CLR_RESET}
 
 ${CLR_BOLD}ВИКОРИСТАННЯ / USAGE:${CLR_RESET}
   qes-config [ОПЦІЇ / OPTIONS]
@@ -367,8 +367,8 @@ ${CLR_BOLD}ОПЦІЇ / OPTIONS:${CLR_RESET}
   ${CLR_GREEN}--lang uk | ua${CLR_RESET}           Встановити українську мову інтерфейсу (меню: '${FOLDER_UK}')
   ${CLR_GREEN}--lang en${CLR_RESET}                Set English interface language (menu: '${FOLDER_EN}')
   ${CLR_GREEN}--lang auto${CLR_RESET}              Автовизначення за мовою системи (\$LANG) / Auto-detect locale
-  ${CLR_GREEN}--layout categorized${CLR_RESET}     Категоризовані підменю за стандартами GNOME HIG (за замовчуванням)
-  ${CLR_GREEN}--layout flat${CLR_RESET}            Традиційний плоский список дій (16 пунктів)
+  ${CLR_GREEN}--layout categorized${CLR_RESET}     5 категорій за стандартами GNOME HIG (18 дій, за замовчуванням)
+  ${CLR_GREEN}--layout flat${CLR_RESET}            Традиційний плоский список дій (18 пунктів)
   ${CLR_GREEN}--status${CLR_RESET}                 Показати поточні налаштування / Show current configuration
   ${CLR_GREEN}--refresh${CLR_RESET}                Перевстановити скрипти Nautilus / Re-deploy scripts
   ${CLR_GREEN}--all-users${CLR_RESET}              Розгорнути для всіх користувачів системи (потрібні права root)
@@ -377,7 +377,7 @@ ${CLR_BOLD}ОПЦІЇ / OPTIONS:${CLR_RESET}
 ${CLR_BOLD}ПРИКЛАДИ / EXAMPLES:${CLR_RESET}
   qes-config --lang en                   # Switch to English
   qes-config --lang uk                   # Перемкнути на українську
-  qes-config --layout categorized        # Використовувати категоризовані підменю GNOME HIG
+  qes-config --layout categorized        # 5 категорій підменю GNOME HIG
   qes-config --layout flat               # Традиційний плоский список
   qes-config --status                    # Перевірити поточний стан
 "

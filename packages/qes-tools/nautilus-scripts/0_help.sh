@@ -39,159 +39,157 @@ HELP_TEXT="=====================================================================
 📖 QES TOOLS USER GUIDE & DOCUMENTATION (${VERSION})
 ================================================================================
 Suite Version: ${VERSION}
-100% Offline-First | DSTU 4145-2002 | PAdES | CAdES | ASiC-E | GOST 28147:89
+100% Offline-First | DSTU 4145-2002 | PAdES-LTA | CAdES-LTA | ASiC-E | GOST 28147:89
 ================================================================================
 
 OVERVIEW:
 QES Tools is a 100% offline-first cryptographic suite for Ukrainian Qualified
-Electronic Signatures (QES / DSTU 4145-2002), encryption (GOST 28147:89),
-and Ukrainian E-Court document workflows.
+Electronic Signatures (QES / DSTU 4145-2002), Archival LTV (PAdES-LTA / CAdES-LTA
+for 25+ years), Official PDF Verification & Trust Chain Protocols (UA / EN),
+asymmetric encryption (GOST 28147:89), and Ukrainian E-Court document workflows.
 
-All cryptographic operations run entirely on your local machine without sending
-files, keys, or passwords to any external server.
+All cryptographic operations run entirely on your local workstation without
+transmitting files, keys, or passwords to any external cloud server.
 
-All operations are accessible either via CLI or via the Nautilus context menu:
-Right-click on file(s) ➔ Scripts ➔ 🔐 QES & Security.
+GNOME FILES (NAUTILUS) CONTEXT MENU STRUCTURE (5 GNOME HIG CATEGORIES):
+Right-click on file(s) ➔ Scripts ➔ 🔐 QES & Security:
+  1. ✍️ Signing
+  2. 🔍 Verification & Certificates
+  3. ⚖️ Court & OCR
+  4. 🛡️ Encryption & Vault
+  5. ⚙️ Management & Help
 
 ================================================================================
-1. SIGNING DOCUMENTS (QES / AES)
+1. ✍️ SIGNING (QES / AES / PAdES-LTA / CAdES-LTA / ASiC-E)
 ================================================================================
-• PAdES (PDF with Visual Stamp & QR Code):
-  - Nautilus: «✍️ Sign (PAdES PDF with Stamp & QR)»
-  - Description: Embeds a cryptographic signature, vector official stamp,
-    and a verification QR code onto the last page of the PDF.
-    Produces: document_signed.pdf
+• Sign PDF (with Stamp & QR):
+  - Nautilus: 🔐 QES & Security ➔ ✍️ Signing ➔ Sign PDF (with Stamp & QR)
+  - Description: Embeds a cryptographic PAdES-LTA signature, vector attorney
+    stamp, verification QR code, TSP timestamp, and archival LTV (/DSS) onto
+    the PDF. Produces: document_signed.pdf
   - CLI: qes-sign --pades document.pdf
 
-• PAdES (PDF without Stamp & QR Code):
-  - Nautilus: «✍️ Sign (PAdES PDF without Stamp & QR)»
-  - Description: Applies an invisible cryptographic PAdES signature without
-    modifying page visual content.
+• Sign PDF (without Stamp):
+  - Nautilus: 🔐 QES & Security ➔ ✍️ Signing ➔ Sign PDF (without Stamp)
+  - Description: Applies an invisible cryptographic PAdES-LTA signature without
+    modifying visual page content.
   - CLI: qes-sign --pades --no-stamp document.pdf
 
-• Multi-Signing (Secondary Signatures):
-  - Nautilus: «✍️ Add Secondary Signature (Multi-Sign)»
-  - Description: Appends an additional signature to an already signed PDF,
-    ASiC-E, or .p7s without invalidating previous signatures. In PDFs, stamps
-    automatically stack neatly.
-  - CLI: qes-sign --append document_signed.pdf
-
-• Detached Signature (.p7s / CAdES):
-  - Nautilus: «✍️ Sign (Detached Signature .p7s)»
-  - Description: Creates a detached signature file «document.p7s» alongside
-    the original file. Fully compatible with Prozorro, courts, M.E.Doc, Vchasno.
+• Sign with Detached File (.p7s):
+  - Nautilus: 🔐 QES & Security ➔ ✍️ Signing ➔ Sign with Detached File (.p7s)
+  - Description: Creates a detached CAdES-LTA signature file «document.p7s»
+    alongside the original file (Prozorro, courts, M.E.Doc, Vchasno).
   - CLI: qes-sign document.docx
 
-• Package Container ASiC-E (.asice):
-  - Nautilus: «📦 Sign (Package Container ASiC-E)»
-  - Description: Bundles multiple selected files or folders into a standardized
-    European ETSI TS 102 918 ZIP archive with signatures for all items.
+• Sign Package Container (ASiC-E):
+  - Nautilus: 🔐 QES & Security ➔ ✍️ Signing ➔ Sign Package Container (ASiC-E)
+  - Description: Bundles multiple selected files or folders into an ETSI TS 102 918
+    (.asice) archive signed with QES and archival LTV evidence.
   - CLI: qes-sign --asice file1.pdf file2.xlsx -o bundle.asice
 
-• Archival LTV Upgrade (PAdES-LTA / CAdES-LTA — 25+ Years Validity):
-  - Nautilus: «🔏 Upgrade to Archival LTV (PAdES-LTA / 25 Years)»
-  - Description: Automatically embeds the full CA certificate chain and OCSP
-    revocation status (plus PDF /DSS dictionary) into any signed document
-    without needing a private key or password. Note: new signatures embed LTV
-    automatically during signing!
-  - CLI: qes-sign --upgrade-ltv document_signed.pdf
+• Add Second Signature (Multi-Sign):
+  - Nautilus: 🔐 QES & Security ➔ ✍️ Signing ➔ Add Second Signature (Multi-Sign)
+  - Description: Appends an additional signature to an already signed PDF,
+    ASiC-E, or .p7s without invalidating previous signatures.
+  - CLI: qes-sign --append document_signed.pdf
+
+• Batch Sign Folder:
+  - Nautilus: 🔐 QES & Security ➔ ✍️ Signing ➔ Batch Sign Folder
+  - Description: Signs all documents inside a selected folder in a single pass.
 
 ================================================================================
-2. VERIFYING SIGNATURES & INSPECTING CERTIFICATES
+2. 🔍 VERIFICATION, PDF PROTOCOLS & CERTIFICATES
 ================================================================================
 • Verify QES Signature:
-  - Nautilus: «🔍 Verify QES Signature»
-  - Description: Validates signature validity, mathematical integrity, signer
-    identity (Name, Tax ID / USREOU), TSP timestamp, and full CA Trust Chain
-    (Signer ➔ QTSP / CA ➔ Root CA / CZO). Includes a 1-click «📄 Save PDF Protocol»
-    button and «Extract Documents» for ASiC-E containers.
+  - Nautilus: 🔐 QES & Security ➔ 🔍 Verification & Certificates ➔ Verify QES Signature
+  - Description: Validates signature integrity, signer identity (Name, Tax ID,
+    USREOU), TSP timestamp, Archival LTV status (25+ years), and full
+    Certificate Trust Chain ([1] Signer ➔ [2] Accredited QTSP ➔ [3] Root CA CZO).
+    Includes «📄 Save PDF Protocol» button (with 🇺🇦 UA / 🇬🇧 EN language choice)
+    and «Extract Documents» for ASiC-E archives.
   - CLI: qes-verify document_signed.pdf
-         qes-verify bundle.asice
+         qes-verify --gui document_signed.pdf
 
-• Generate PDF Verification & Certificate Chain Protocol:
-  - Nautilus: «📄 Generate PDF Verification Protocol»
-  - Description: Generates a standalone, print-ready official PDF verification
-    protocol (<file>_protocol.pdf) containing the SHA-256 document hash, signer
-    details, TSP/LTV status, and the full cryptographic certificate trust chain.
-  - CLI: qes-verify --protocol document_signed.pdf
+• Generate PDF Verification Protocol (UA / EN):
+  - Nautilus: 🔐 QES & Security ➔ 🔍 Verification & Certificates ➔ Generate PDF Verification Protocol
+  - Description: Prompts to choose the protocol language (🇺🇦 Ukrainian UA or
+    🇬🇧 English EN) and generates a standalone, print-ready vector PDF protocol
+    (<file>_protocol.pdf) with SHA-256 digest, signer requisites, TSP/LTV
+    status, and the full 3-tier CA Certificate Trust Chain table.
+  - CLI: qes-verify --protocol --lang ua document_signed.pdf
+         qes-verify --protocol --lang en document_signed.pdf
+         qes-tool protocol --lang ua document_signed.pdf
+
+• Upgrade to Archival LTV (PAdES-LTA, 25 Years):
+  - Nautilus: 🔐 QES & Security ➔ 🔍 Verification & Certificates ➔ Upgrade to Archival LTV (PAdES-LTA, 25 Years)
+  - Description: Keylessly upgrades any existing signed document (.pdf, .p7s,
+    .asice) to archival LTV (embeds full CA chain, live OCSP status, and PDF
+    /DSS + /VRI dictionary) without needing a private key or password.
+  - CLI: qes-sign --upgrade-ltv document_signed.pdf
+         qes-tool ltv document_signed.pdf
 
 • View CA Certificate Details:
-  - Nautilus: «📜 View CA Certificate Details»
-  - Description: Inspects public certificates (.cer, .crt, .p7b) with 1-click
-    buttons to copy Tax ID, USREOU, or full formatted legal requisites to clipboard.
+  - Nautilus: 🔐 QES & Security ➔ 🔍 Verification & Certificates ➔ View CA Certificate Details
+  - Description: Inspects certificates (.cer, .crt, .p7b) with 1-click buttons
+    to copy Tax ID, USREOU, or formatted legal requisites to the clipboard.
   - CLI: qes-cert cert.cer  (or qes-cert --gui cert.cer)
 
-• Export Public Certificate:
+• Export Public Certificate (.cer):
+  - Nautilus: 🔐 QES & Security ➔ 🔍 Verification & Certificates ➔ Export Public Certificate (.cer)
   - CLI: qes-export-cert -o my_cert.cer
-  - Description: Safely extracts the public X.509 certificate from a private key (.pfx).
 
 ================================================================================
-3. OPTICAL CHARACTER RECOGNITION (OCR)
+3. ⚖️ COURT & OCR (ELECTRONIC COURT WORKFLOWS)
 ================================================================================
-• 1-Click English OCR:
-  - Nautilus: «👁️ OCR Text Recognition (🇬🇧 English)»
-  - Description: Instantly converts scanned English documents and invoices
-    into searchable, selectable text PDFs.
-  - CLI: qes-ocr --eng contract.pdf  (or qes-ocr -e contract.pdf)
+• Prepare Document for E-Court (All-in-One):
+  - Nautilus: 🔐 QES & Security ➔ ⚖️ Court & OCR ➔ Prepare Document for E-Court (All-in-One)
+  - Description: Runs OCR text layer recognition + court PDF optimization (<50MB)
+    + PAdES-LTA signing in one guided workflow.
 
-• Court OCR Wizard (Language Selector):
-  - Nautilus: «👁️ OCR Text Recognition (Court PDF)»
-  - Description: Interactive dialog to choose English, Ukrainian, or Bilingual
-    (ukr+eng), with automatic deskewing and linearization (<50MB).
-  - CLI: qes-ocr --sidecar document.pdf  (saves text to .txt sidecar)
+• Optimize PDF for E-Court (<50 MB):
+  - Nautilus: 🔐 QES & Security ➔ ⚖️ Court & OCR ➔ Optimize PDF for E-Court (<50 MB)
+  - CLI: qes-pdf-court lawsuit_evidence.pdf
+
+• OCR Text Recognition (Choose Language / Pure English):
+  - Nautilus: 🔐 QES & Security ➔ ⚖️ Court & OCR ➔ OCR Text Recognition (Choose Language)
+              🔐 QES & Security ➔ ⚖️ Court & OCR ➔ OCR Text Recognition (Pure English)
+  - CLI: qes-ocr --sidecar document.pdf
+         qes-ocr --eng contract.pdf
 
 ================================================================================
-4. CRYPTO VAULT ENCRYPTION (DSTU 4145 / GOST 28147:89)
+4. 🛡️ ENCRYPTION & VAULT (DSTU 4145 / GOST 28147:89)
 ================================================================================
-• Encrypt to Personal Vault:
-  - Nautilus: «🛡️ Encrypt to Personal Vault (.enc)»
-  - Description: Encrypts files specifically for your own key. Only you can decrypt.
+• Encrypt to Personal Vault (.enc):
+  - Nautilus: 🔐 QES & Security ➔ 🛡️ Encryption & Vault ➔ Encrypt to Personal Vault (.enc)
   - CLI: qes-encrypt private.pdf
 
-• Encrypt for Recipient:
-  - Nautilus: «📨 Encrypt for Recipient (.enc)»
-  - Description: Encrypts file using recipient's public certificate (.cer).
+• Encrypt for Recipient (.cer -> .enc):
+  - Nautilus: 🔐 QES & Security ➔ 🛡️ Encryption & Vault ➔ Encrypt for Recipient (.cer -> .enc)
   - CLI: qes-encrypt -r recipient.cer contract.pdf
 
-• Decrypt File:
-  - Nautilus: «🔓 Decrypt with Personal Key»
-  - Description: Restores original file using your private key and password.
+• Decrypt File (.enc):
+  - Nautilus: 🔐 QES & Security ➔ 🛡️ Encryption & Vault ➔ Decrypt File (.enc)
   - CLI: qes-decrypt document.pdf.enc
 
 ================================================================================
-5. E-COURT PDF OPTIMIZATION
+5. ⚙️ MANAGEMENT, HARDWARE TOKENS & HELP
 ================================================================================
-• Nautilus: «⚖️ Optimize PDF for Court»
-• Description: Shrinks and linearizes PDF files to comply with the 50MB
-  subsystem limit and enables Fast Web View.
-• CLI: qes-pdf-court lawsuit_evidence.pdf
-
-================================================================================
-6. RAM PASSWORD CACHING & SECURITY (SESSION TTL)
-================================================================================
-• In-Memory Password Caching:
-  - Private key passwords are cached exclusively in volatile RAM (/run/user/... tmpfs)
-    for 15-30 minutes. Passwords and private keys are NEVER written to disk.
-• Lock Session:
-  - Nautilus: «🔒 Lock Session (Clear Password Cache)»
+• Clear Password Cache (Lock Session):
+  - Nautilus: 🔐 QES & Security ➔ ⚙️ Management & Help ➔ Clear Password Cache (Lock Session)
   - CLI: qes-agent clear  (status: qes-agent status)
 
-================================================================================
-7. MASTER MANAGEMENT UTILITY: QES-TOOL
-================================================================================
-• Check Version:
-  $ qes-tool --version       (or qes-tool -v)
-• Full Help and Usage Guide:
-  $ qes-tool --help          (or qes-tool -h)
-• Switch Nautilus Language:
-  $ qes-config --lang en     # Switch menu to English (🔐 QES & Security)
-  $ qes-config --lang uk     # Switch menu to Ukrainian (🔐 КЕП та Безпека)
-  $ qes-config --lang auto   # Auto-detect from system desktop locale
-• Direct Subcommands:
-  $ qes-tool sign [...]      # Runs qes-sign
-  $ qes-tool verify [...]    # Runs qes-verify
-  $ qes-tool encrypt [...]   # Runs qes-encrypt
-  $ qes-tool decrypt [...]   # Runs qes-decrypt
+• Hardware Token Diagnostics (USB):
+  - Nautilus: 🔐 QES & Security ➔ ⚙️ Management & Help ➔ Hardware Token Diagnostics (USB)
+  - CLI: qes-tool token  (or qes-cert --tokens)
+
+• Master CLI & Configuration (qes-tool / qes-config):
+  $ qes-tool --version                  # Check suite version (${VERSION})
+  $ qes-tool --help                     # Full CLI manual & examples
+  $ qes-tool protocol --lang en doc.pdf # Generate English PDF protocol
+  $ qes-tool ltv doc_signed.pdf         # Keyless archival LTV upgrade
+  $ qes-config --lang en                # English menu (🔐 QES & Security)
+  $ qes-config --lang uk                # Ukrainian menu (🔐 КЕП та Безпека)
+  $ qes-config --layout categorized     # 5 GNOME HIG category submenus
 ================================================================================
 "
 TITLE="QES Tools — User Guide & Documentation (${VERSION})"
@@ -203,161 +201,158 @@ HELP_TEXT="=====================================================================
 📖 ДОВІДНИК ТА ПОСІБНИК КОРИСТУВАЧА QES TOOLS (${VERSION})
 ================================================================================
 Версія комплексу: ${VERSION}
-100% Offline-First | ДСТУ 4145-2002 | PAdES | CAdES | ASiC-E | ГОСТ 28147:89
+100% Offline-First | ДСТУ 4145-2002 | PAdES-LTA | CAdES-LTA | ASiC-E | ГОСТ 28147:89
 ================================================================================
 
 ОПИС КОМПЛЕКСУ:
 QES Tools — це автономний комплекс для роботи з кваліфікованим електронним
-підписом (КЕП / ДСТУ 4145-2002), шифруванням файлів (ГОСТ 28147:89) та судовою
+підписом (КЕП / ДСТУ 4145-2002), архівною валідацією LTV (PAdES-LTA / CAdES-LTA
+на 25+ років), офіційними PDF-протоколами перевірки КЕП та ланцюгів сертифікатів
+двома мовами (🇺🇦 UA / 🇬🇧 EN), шифруванням файлів (ГОСТ 28147:89) та судовою
 підсистемою «Електронний суд».
 
 Усі криптографічні операції виконуються 100% автономно на вашому комп'ютері.
 Жодні дані, файли чи паролі ніколи не передаються у хмару чи сторонні сервери.
 
-Усі функції доступні як у терміналі (CLI), так і в контекстному меню файлового
-менеджера Nautilus: клік правою кнопкою миші ➔ Скрипти ➔ 🔐 КЕП та Безпека.
+СТРУКТУРА МЕНЮ NAUTILUS (5 КАТЕГОРІЙ ЗА СТАНДАРТОМ GNOME HIG):
+Правий клік мишею на файлі ➔ Скрипти ➔ 🔐 КЕП та Безпека:
+  1. ✍️ Підписання
+  2. 🔍 Перевірка та Сертифікати
+  3. ⚖️ Суд та OCR
+  4. 🛡️ Шифрування та Сховище
+  5. ⚙️ Керування та Довідка
 
 ================================================================================
-1. ПІДПИСАННЯ ДОКУМЕНТІВ (КЕП / УЕП)
+1. ✍️ ПІДПИСАННЯ ДОКУМЕНТІВ (КЕП / УЕП / PAdES-LTA / CAdES-LTA / ASiC-E)
 ================================================================================
-• PAdES (PDF зі штампом та QR-кодом):
-  - Меню Nautilus: «✍️ Підписати (PAdES PDF зі штампом та QR)»
-  - Опис: Накладає офіційний векторизований штамп та QR-код перевірки на
-    останню сторінку. Створює файл «документ_signed.pdf».
+• Підписати PDF (зі штампом та QR):
+  - Меню Nautilus: 🔐 КЕП та Безпека ➔ ✍️ Підписання ➔ Підписати PDF (зі штампом та QR)
+  - Опис: Накладає вбудований підпис PAdES-LTA, офіційний векторний штамп,
+    QR-код перевірки, мітку часу TSP та архівний словник LTV (/DSS) на останню
+    сторінку. Створює файл «документ_signed.pdf».
   - Термінал: qes-sign --pades document.pdf
 
-• PAdES (PDF без штампу та QR-коду):
-  - Меню Nautilus: «✍️ Підписати (PAdES PDF без штампу та QR)»
-  - Опис: Накладає чистий цифровий підпис без візуальних позначок на сторінках
-    (невидимий підпис PAdES).
+• Підписати PDF (без штампа):
+  - Меню Nautilus: 🔐 КЕП та Безпека ➔ ✍️ Підписання ➔ Підписати PDF (без штампа)
+  - Опис: Накладає чистий криптографічний підпис PAdES-LTA без візуальних
+    позначок на сторінках.
   - Термінал: qes-sign --pades --no-stamp document.pdf
 
-• Мультипідписання (другий і наступні підписи):
-  - Меню Nautilus: «✍️ Додати другий підпис (Мультипідпис)»
-  - Опис: Додає підпис наступного підписанта без пошкодження попередніх
-    підписів. Штампи в PDF автоматично розміщуються вертикально один над іншим.
-  - Термінал: qes-sign --append document_signed.pdf
-
-• Відокремлений підпис (.p7s):
-  - Меню Nautilus: «✍️ Підписати (Відокремлений підпис .p7s)»
-  - Опис: Створює файл «документ.p7s» поруч з оригіналом. Для тендерів
-    Prozorro, судів, M.E.Doc, Вчасно та ЦЗО.
+• Підписати окремим файлом (.p7s):
+  - Меню Nautilus: 🔐 КЕП та Безпека ➔ ✍️ Підписання ➔ Підписати окремим файлом (.p7s)
+  - Опис: Створює відокремлений підпис CAdES-LTA «документ.p7s» поруч з
+    оригіналом (для Prozorro, судів, M.E.Doc, Вчасно та ЦЗО).
   - Термінал: qes-sign document.docx
 
-• Пакетний контейнер ASiC-E (.asice):
-  - Меню Nautilus: «📦 Підписати (Пакетний контейнер ASiC-E)»
+• Підписати контейнер (ASiC-E):
+  - Меню Nautilus: 🔐 КЕП та Безпека ➔ ✍️ Підписання ➔ Підписати контейнер (ASiC-E)
   - Опис: Об'єднує виділені файли або папку у стандартизований європейський
-    архів ETSI TS 102 918 з підписами всіх файлів.
+    архів ETSI TS 102 918 (.asice) з підписами та архівними доказами LTV.
   - Термінал: qes-sign --asice file1.pdf file2.xlsx -o bundle.asice
 
-• Архівна мітка LTV (PAdES-LTA / CAdES-LTA — чинність 25+ років):
-  - Меню Nautilus: «🔏 Додати архівну мітку LTV (PAdES-LTA / 25 років)»
-  - Опис: Автоматично вшиває у підписаний документ повний ланцюжок сертифікатів
-    КНЕДП/ЦЗО та статус OCSP (і словник PDF /DSS) без потреби у ключі чи паролі.
-    При новому підписанні LTV вбудовується автоматично!
-  - Термінал: qes-sign --upgrade-ltv document_signed.pdf
+• Додати другий підпис (Мультипідпис):
+  - Меню Nautilus: 🔐 КЕП та Безпека ➔ ✍️ Підписання ➔ Додати другий підпис (Мультипідпис)
+  - Опис: Додає підпис наступного підписанта без пошкодження попередніх підписів.
+  - Термінал: qes-sign --append document_signed.pdf
+
+• Пакетно підписати папку:
+  - Меню Nautilus: 🔐 КЕП та Безпека ➔ ✍️ Підписання ➔ Пакетно підписати папку
+  - Опис: Пакетно підписує всі документи у вибраній теці за один прохід.
 
 ================================================================================
-2. ПЕРЕВІРКА ПІДПИСІВ ТА СЕРТИФІКАТІВ
+2. 🔍 ПЕРЕВІРКА ПІДПИСІВ, PDF-ПРОТОКОЛИ ТА СЕРТИФІКАТИ
 ================================================================================
-• Перевірка підпису КЕП:
-  - Меню Nautilus: «🔍 Перевірити підпис КЕП»
-  - Опис: Перевіряє чинність підпису, математичну цілісність, ПІБ підписувачів,
-    РНОКПП, мітку точного часу TSP та повний ланцюг довіри сертифікатів
-    (Підписувач ➔ КНЕДП ➔ ЦЗО). Містить кнопки «📄 Зберегти PDF-протокол» та
+• Перевірити КЕП (Детальний звіт):
+  - Меню Nautilus: 🔐 КЕП та Безпека ➔ 🔍 Перевірка та Сертифікати ➔ Перевірити КЕП (Детальний звіт)
+  - Опис: Перевіряє чинність підпису, математичну цілісність, ПІБ, РНОКПП,
+    мітку часу TSP, архівний статус LTV (25+ років) та повний ланцюг довіри
+    сертифікатів ([1] Підписувач ➔ [2] КНЕДП ➔ [3] Кореневий ЦЗО). Містить
+    кнопку «📄 Зберегти PDF-протокол» (з вибором мови 🇺🇦 UA або 🇬🇧 EN) та
     «Видобути документи» (для архівів ASiC-E).
   - Термінал: qes-verify document_signed.pdf
-              qes-verify bundle.asice
+              qes-verify --gui document_signed.pdf
 
-• Офіційний PDF-протокол перевірки КЕП та ланцюга сертифікатів:
-  - Меню Nautilus: «📄 Сформувати PDF-протокол перевірки КЕП»
-  - Опис: Формує окремий векторний PDF-протокол (<файл>_protocol.pdf) для суду
-    або аудиту з SHA-256 гешем документа, реквізитами підписувача, міткою TSP/LTV
-    та таблицею повного ланцюга сертифікатів (Підписувач ➔ КНЕДП ➔ ЦЗО).
-  - Термінал: qes-verify --protocol document_signed.pdf
+• Сформувати PDF-протокол перевірки КЕП (UA / EN):
+  - Меню Nautilus: 🔐 КЕП та Безпека ➔ 🔍 Перевірка та Сертифікати ➔ Сформувати PDF-протокол перевірки КЕП
+  - Опис: Наступним кроком пропонує обрати мову протоколу (🇺🇦 Українська UA або
+    🇬🇧 English EN) та формує окремий друкований векторний PDF-протокол
+    (<файл>_protocol.pdf) із SHA-256 гешем документа, реквізитами підписувача,
+    статусом TSP/LTV і таблицею повного ланцюга сертифікатів (Підписувач ➔ КНЕДП ➔ ЦЗО).
+  - Термінал: qes-verify --protocol --lang ua document_signed.pdf
+              qes-verify --protocol --lang en document_signed.pdf
+              qes-tool protocol --lang ua document_signed.pdf
 
-• Перегляд сертифіката КНЕДП:
-  - Меню Nautilus: «📜 Переглянути сертифікат КНЕДП»
-  - Опис: Показує всі реквізити сертифіката (.cer / .crt / .p7b) та надає
-    кнопки швидкого копіювання до буфера обміну:
-    * «Скопіювати РНОКПП»
-    * «Скопіювати ЄДРПОУ»
-    * «Скопіювати повні реквізити» (для позовних заяв та договорів)
+• Додати архівну LTV-мітку (PAdES-LTA, 25 років):
+  - Меню Nautilus: 🔐 КЕП та Безпека ➔ 🔍 Перевірка та Сертифікати ➔ Додати архівну LTV-мітку (PAdES-LTA, 25 років)
+  - Опис: Автоматично вшиває у вже підписаний документ (.pdf, .p7s, .asice)
+    повний ланцюжок сертифікатів КНЕДП/ЦЗО, статус OCSP та словник PDF /DSS
+    без потреби в особистому ключі чи паролі.
+  - Термінал: qes-sign --upgrade-ltv document_signed.pdf
+              qes-tool ltv document_signed.pdf
+
+• Переглянути сертифікат ЦСК:
+  - Меню Nautilus: 🔐 КЕП та Безпека ➔ 🔍 Перевірка та Сертифікати ➔ Переглянути сертифікат ЦСК
+  - Опис: Показує всі реквізити сертифіката (.cer / .crt / .p7b) та кнопки
+    копіювання РНОКПП, ЄДРПОУ або повних реквізитів до буфера обміну.
   - Термінал: qes-cert cert.cer  (або qes-cert --gui cert.cer)
 
-• Експорт сертифіката з ключа:
+• Експортувати мій сертифікат (.cer):
+  - Меню Nautilus: 🔐 КЕП та Безпека ➔ 🔍 Перевірка та Сертифікати ➔ Експортувати мій сертифікат (.cer)
   - Термінал: qes-export-cert -o Мій_Сертифікат_КЕП.cer
-  - Опис: Безпечно експортує відкритий сертифікат із закритого ключа (.pfx).
 
 ================================================================================
-3. ОПТИЧНЕ РОЗПІЗНАВАННЯ ТЕКСТУ (OCR) ДЛЯ «ЕЛЕКТРОННОГО СУДУ»
+3. ⚖️ СУД ТА OCR (ПІДСИСТЕМА «ЕЛЕКТРОННИЙ СУД»)
 ================================================================================
-• Чиста Англійська мова (1-клік):
-  - Меню Nautilus: «👁️ Розпізнати текст OCR (🇬🇧 Чиста Англійська)»
-  - Опис: Миттєве розпізнавання англомовних контрактів та інвойсів без діалогів.
-  - Термінал: qes-ocr --eng contract.pdf  (або qes-ocr -e contract.pdf)
+• Підготувати документ до Е-Суду (Все-в-одному):
+  - Меню Nautilus: 🔐 КЕП та Безпека ➔ ⚖️ Суд та OCR ➔ Підготувати документ до Е-Суду (Все-в-одному)
+  - Опис: Поєднує OCR-розпізнавання + судову оптимізацію (<50 МБ) + накладання
+    КЕП PAdES-LTA в один автоматизований процес.
 
-• Майстер розпізнавання (вибір мови):
-  - Меню Nautilus: «👁️ Розпізнати текст OCR (Е-Суд)»
-  - Опис: Дозволяє обрати мову: Англійська, Українська чи Двомовне (ukr+eng).
-    Автоматично вирівнює перекошені сторінки, лінеаризує (Fast Web View)
-    та перевіряє ліміт 50 МБ.
-  - Термінал: qes-ocr --sidecar file.pdf  (зберігає розпізнаний текст у .txt)
+• Оптимізувати PDF для Е-Суду (<50 МБ):
+  - Меню Nautilus: 🔐 КЕП та Безпека ➔ ⚖️ Суд та OCR ➔ Оптимізувати PDF для Е-Суду (<50 МБ)
+  - Термінал: qes-pdf-court lawsuit_materials.pdf
+
+• Розпізнати текст OCR (Вибір мови / Чиста Англійська):
+  - Меню Nautilus: 🔐 КЕП та Безпека ➔ ⚖️ Суд та OCR ➔ Розпізнати текст OCR (Вибір мови)
+                   🔐 КЕП та Безпека ➔ ⚖️ Суд та OCR ➔ Розпізнати текст OCR (Чиста Англійська)
+  - Термінал: qes-ocr --sidecar file.pdf
+              qes-ocr --eng contract.pdf
 
 ================================================================================
-4. КРИПТОГРАФІЧНИЙ СЕЙФ (ШИФРУВАННЯ ДСТУ 4145 / ГОСТ 28147:89)
+4. 🛡️ ШИФРУВАННЯ ТА СХОВИЩЕ (ДСТУ 4145 / ГОСТ 28147:89)
 ================================================================================
-• Особистий сейф:
-  - Меню Nautilus: «🛡️ Зашифрувати в особистий сейф (.enc)»
-  - Опис: Шифрує документ або папку виключно для вашого ключа. Відкрити
-    зможете тільки ви.
+• Зашифрувати в особистий сейф (.enc):
+  - Меню Nautilus: 🔐 КЕП та Безпека ➔ 🛡️ Шифрування та Сховище ➔ Зашифрувати в особистий сейф (.enc)
   - Термінал: qes-encrypt private.pdf
 
-• Шифрування для адресата:
-  - Меню Nautilus: «📨 Зашифрувати для адресата (.enc)»
-  - Опис: Оберіть відкритий сертифікат (.cer) клієнта, колеги або суду.
+• Зашифрувати для отримувача (.cer -> .enc):
+  - Меню Nautilus: 🔐 КЕП та Безпека ➔ 🛡️ Шифрування та Сховище ➔ Зашифрувати для отримувача (.cer -> .enc)
   - Термінал: qes-encrypt -r client.cer lawsuit.pdf
 
-• Розшифрування:
-  - Меню Nautilus: «🔓 Розшифрувати особистим КЕП»
-  - Опис: Розшифровує файл за допомогою вашого закритого ключа та пароля.
+• Розшифрувати файл (.enc):
+  - Меню Nautilus: 🔐 КЕП та Безпека ➔ 🛡️ Шифрування та Сховище ➔ Розшифрувати файл (.enc)
   - Термінал: qes-decrypt file.enc
 
 ================================================================================
-5. СУДОВА ОПТИМІЗАЦІЯ ДЛЯ «ЕЛЕКТРОННОГО СУДУ»
+5. ⚙️ КЕРУВАННЯ, АПАРАТНІ ТОКЕНИ ТА ДОВІДКА
 ================================================================================
-• Меню Nautilus: «⚖️ Оптимізувати PDF для Е-Суду»
-• Опис: Стискає та лінеаризує PDF-файл, гарантуючи сумісність із вимогами
-  підсистеми «Електронний суд» (обмеження 50 МБ, Fast Web View).
-• Термінал: qes-pdf-court lawsuit_materials.pdf
-
-================================================================================
-6. БЕЗПЕКА ТА КЕШУВАННЯ ПАРОЛЯ В СЕСІЇ (SESSION TTL)
-================================================================================
-• Пароль кешується виключно в оперативній пам'яті (RAM tmpfs) на 15–30 хвилин.
-• Жоден символ пароля чи ключа ніколи не записується на диск.
-• Блокування сесії та очищення пам'яті:
-  - Меню Nautilus: «🔒 Скинути кеш пароля (Заблокувати)»
+• Очистити кеш пароля (Заблокувати):
+  - Меню Nautilus: 🔐 КЕП та Безпека ➔ ⚙️ Керування та Довідка ➔ Очистити кеш пароля (Заблокувати)
   - Термінал: qes-agent clear  (перегляд стану: qes-agent status)
 
-================================================================================
-7. ЄДИНА КОМАНДА КЕРУВАННЯ ТА ДОВІДНИК QES-TOOL
-================================================================================
-• Перевірка поточної версії:
-  $ qes-tool --version       (або qes-tool -v)
-• Повна довідка з детальними прикладами:
-  $ qes-tool --help          (або qes-tool -h)
-• Перемикання мови меню Nautilus:
-  $ qes-config --lang en     # Перемкнути на англійську (🔐 QES & Security)
-  $ qes-config --lang uk     # Перемкнути на українську (🔐 КЕП та Безпека)
-  $ qes-config --lang auto   # Автовизначення за мовою системи
-• Прямі підкоманди через диспетчер:
-  $ qes-tool sign [опції...]
-  $ qes-tool verify [файл...]
-  $ qes-tool encrypt [файл...]
-  $ qes-tool decrypt [файл.enc]
-  $ qes-tool cert [файл.cer]
-  $ qes-tool agent [status|clear]
+• Діагностика апаратного токена (USB):
+  - Меню Nautilus: 🔐 КЕП та Безпека ➔ ⚙️ Керування та Довідка ➔ Діагностика апаратного токена (USB)
+  - Термінал: qes-tool token  (або qes-cert --tokens)
+
+• Головна команда керування (qes-tool / qes-config):
+  $ qes-tool --version                  # Перевірка версії (${VERSION})
+  $ qes-tool --help                     # Повна довідка CLI з прикладами
+  $ qes-tool protocol --lang ua doc.pdf # PDF-протокол українською мовою
+  $ qes-tool protocol --lang en doc.pdf # PDF-протокол англійською мовою
+  $ qes-tool ltv doc_signed.pdf         # Додати архівну LTV-мітку без ключа
+  $ qes-config --lang uk                # Меню українською (🔐 КЕП та Безпека)
+  $ qes-config --lang en                # Меню англійською (🔐 QES & Security)
+  $ qes-config --layout categorized     # 5 тематичних категорій GNOME HIG
 ================================================================================
 "
 TITLE="Довідка та Інструкції — QES Tools (${VERSION})"

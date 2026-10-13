@@ -1037,7 +1037,7 @@ def generate_pdf_protocol(
     #grid(
       columns: (1fr, auto),
       text(size: 7.5pt, fill: rgb("#64748b"))[
-        {"Generated offline by QES Tools v1.0.25 • DSTU 4145-2002 / ETSI EN 319 142 (PAdES-LTA / CAdES-LTA)" if is_en else "Сформовано автономно комплексом QES Tools v1.0.25 • ДСТУ 4145-2002 / ETSI EN 319 142 (PAdES-LTA / CAdES-LTA)"}
+        {"Generated offline by QES Tools v1.0.26 • DSTU 4145-2002 / ETSI EN 319 142 (PAdES-LTA / CAdES-LTA)" if is_en else "Сформовано автономно комплексом QES Tools v1.0.26 • ДСТУ 4145-2002 / ETSI EN 319 142 (PAdES-LTA / CAdES-LTA)"}
       ],
       text(size: 7.5pt, weight: "bold", fill: rgb("#475569"))[
         {"Page " if is_en else "Стор. "} #counter(page).display("1 / 1", both: true)
@@ -1276,21 +1276,21 @@ def show_help_dialog():
     if lang == "en":
         help_pango = (
             "<span size='x-large' weight='bold' color='#1a5fb4'>📖 Help &amp; Instructions: QES / AES Verification</span>\n"
-            "<span size='small' color='#666666'>Offline-first signature validator for DSTU 4145, CAdES, PAdES, ASiC-E</span>\n\n"
+            "<span size='small' color='#666666'>Offline-first signature validator for DSTU 4145, CAdES-LTA, PAdES-LTA, ASiC-E</span>\n\n"
             "<b>1. SUPPORTED FORMATS:</b>\n"
             "• <b>PAdES (.pdf):</b> embedded signatures in court rulings, contracts, and applications.\n"
             "• <b>ASiC-E (.asice):</b> European container archives bundling signed document packages.\n"
             "• <b>CAdES / PKCS#7 (.p7s):</b> detached signatures (Diia, M.E.Doc, Vchasno).\n"
             "• <b>Certificates (.cer, .crt, .p7b):</b> automatically inspected via <tt>qes-cert</tt>.\n\n"
-            "<b>2. VERIFICATION STATUSES:</b>\n"
-            "• <span color='#1e7e34'><b>✅ SIGNATURE VALID:</b></span> mathematically valid, integrity confirmed.\n"
+            "<b>2. VERIFICATION STATUSES &amp; PROTOCOLS:</b>\n"
+            "• <span color='#1e7e34'><b>✅ SIGNATURE VALID:</b></span> mathematically valid, integrity &amp; CA trust chain confirmed.\n"
             "• <span color='#d9534f'><b>❌ INVALID:</b></span> document altered after signing or corrupted.\n"
             "• <b>🕒 TSP Stamp:</b> cryptographic timestamp from accredited time-stamping authority.\n"
-            "• <b>🔏 Archival LTV (PAdES-LTA / CAdES-X-Long):</b> embedded CA chain, OCSP &amp; PDF /DSS for 25+ years validity.\n"
-            "• <b>📄 PDF Verification Protocol:</b> generates a standalone printable PDF report with full CA trust chain.\n\n"
+            "• <b>🔏 Archival LTV (PAdES-LTA / CAdES-LTA):</b> embedded CA chain, OCSP &amp; PDF /DSS for 25+ years validity.\n"
+            "• <b>📄 PDF Verification Protocol (UA / EN):</b> generates a standalone printable PDF report (<tt>&lt;file&gt;_protocol.pdf</tt>) with full 3-tier CA trust chain (<tt>[1] Signer ➔ [2] QTSP ➔ [3] Root CA CZO</tt>) in Ukrainian or English.\n\n"
             "<b>3. CLI COMMANDS:</b>\n"
             "• <tt>qes-verify document_signed.pdf</tt> — verify PDF with stamp\n"
-            "• <tt>qes-verify --protocol document_signed.pdf</tt> — generate PDF Verification Protocol\n"
+            "• <tt>qes-verify --protocol --lang ua|en document_signed.pdf</tt> — generate PDF Protocol (UA or EN)\n"
             "• <tt>qes-verify doc.pdf doc.pdf.p7s</tt> — verify matching detached signature\n"
             "• <tt>qes-verify package.asice</tt> — verify ASiC-E archive integrity\n"
             "• <tt>qes-verify -x /folder package.asice</tt> — extract original documents\n"
@@ -1302,21 +1302,21 @@ def show_help_dialog():
     else:
         help_pango = (
             "<span size='x-large' weight='bold' color='#1a5fb4'>📖 Довідка та Інструкції: Перевірка КЕП / УЕП</span>\n"
-            "<span size='small' color='#666666'>Автономний аналізатор підписів ДСТУ 4145, CAdES, PAdES, ASiC-E</span>\n\n"
+            "<span size='small' color='#666666'>Автономний аналізатор підписів ДСТУ 4145, CAdES-LTA, PAdES-LTA, ASiC-E</span>\n\n"
             "<b>1. ПІДТРИМУВАНІ ФОРМАТИ:</b>\n"
             "• <b>PAdES (.pdf):</b> вбудовані підписи в судових рішеннях, договорах, заявах.\n"
             "• <b>ASiC-E (.asice):</b> європейські контейнери архівів із пакетами підписаних файлів.\n"
             "• <b>CAdES / PKCS#7 (.p7s):</b> класичні відокремлені підписи (Дія, M.E.Doc, Вчасно).\n"
             "• <b>Сертифікати (.cer, .crt, .p7b):</b> автоматично відкриваються в інспекторі <tt>qes-cert</tt>.\n\n"
-            "<b>2. СТАТУСИ ПЕРЕВІРКИ:</b>\n"
-            "• <span color='#1e7e34'><b>✅ КЕП ДІЙСНИЙ:</b></span> підпис математично валідний, цілісність підтверджена.\n"
+            "<b>2. СТАТУСИ ПЕРЕВІРКИ ТА PDF-ПРОТОКОЛ:</b>\n"
+            "• <span color='#1e7e34'><b>✅ КЕП ДІЙСНИЙ:</b></span> підпис математично валідний, цілісність та ланцюг ЦСК підтверджено.\n"
             "• <span color='#d9534f'><b>❌ НЕВАЛІДНИЙ:</b></span> документ змінено після підписання або пошкоджено.\n"
             "• <b>🕒 Мітка TSP:</b> підтвердження точного астрономічного часу від акредитованого сервера.\n"
-            "• <b>🔏 Архівна мітка LTV (PAdES-LTA / CAdES-X-Long):</b> вбудований ланцюжок ЦСК, OCSP та PDF /DSS для чинності 25+ років.\n"
-            "• <b>📄 PDF-протокол перевірки КЕП:</b> формує окремий друкований PDF-протокол із повним ланцюжком сертифікатів довіри.\n\n"
+            "• <b>🔏 Архівна мітка LTV (PAdES-LTA / CAdES-LTA):</b> вбудований ланцюжок ЦСК, OCSP та PDF /DSS для чинності 25+ років.\n"
+            "• <b>📄 PDF-протокол перевірки КЕП (UA / EN):</b> формує окремий друкований PDF-протокол (<tt>&lt;файл&gt;_protocol.pdf</tt>) із повним ланцюжком сертифікатів (<tt>[1] Підписувач ➔ [2] КНЕДП ➔ [3] ЦЗО</tt>) українською або англійською мовою.\n\n"
             "<b>3. КОМАНДИ ТЕРМІНАЛА:</b>\n"
             "• <tt>qes-verify document_signed.pdf</tt> — перевірка PDF зі штампом\n"
-            "• <tt>qes-verify --protocol document_signed.pdf</tt> — сформувати PDF-протокол перевірки КЕП\n"
+            "• <tt>qes-verify --protocol --lang ua|en document_signed.pdf</tt> — PDF-протокол (UA або EN)\n"
             "• <tt>qes-verify doc.pdf doc.pdf.p7s</tt> — перевірка відповідності оригіналу та підпису\n"
             "• <tt>qes-verify package.asice</tt> — перевірка цілісності архіву ASiC-E\n"
             "• <tt>qes-verify -x /папка package.asice</tt> — видобування оригінальних документів\n"
@@ -1556,7 +1556,7 @@ def delegate_to_qes_cert(file_path: str, args: argparse.Namespace) -> int:
 
 def main():
     is_en = (get_qes_lang() == "en")
-    ver_str = "1.0.25"
+    ver_str = "1.0.26"
     parser = argparse.ArgumentParser(
         description=f"""================================================================================
   qes-verify — {"Ukrainian & EU QES/AES validator (.p7s, .asice, .pdf)" if is_en else "автономний валідатор КЕП/УЕП (.p7s, .asice, .pdf)"}

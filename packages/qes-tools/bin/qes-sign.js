@@ -206,7 +206,7 @@ function findDefaultKey() {
 async function main() {
   const lang = getQESLang();
   const args = process.argv.slice(2);
-  let pkgVersion = '1.0.25';
+  let pkgVersion = '1.0.26';
   try { pkgVersion = require('../package.json').version; } catch (_) {}
   if (args.length === 0 || args.includes('-h') || args.includes('--help')) {
     console.log(`
@@ -247,7 +247,7 @@ ${CLR_BOLD}ПАРАМЕТРИ КЛЮЧА ТА БЕЗПЕКИ:${CLR_RESET}
   ${CLR_GREEN}--no-ltv${CLR_RESET}            Не вбудовувати архівні дані LTV (повний ланцюжок сертифікатів CA та OCSP-відповіді)
   ${CLR_GREEN}--ocsp-url <url>${CLR_RESET}    Явно вказати URL OCSP-сервера АЦСК/КНЕДП для архівної мітки LTV
   ${CLR_GREEN}--no-verify${CLR_RESET}         Вимкнути автоматичну перевірку qes-verify після завершення підпису
-  ${CLR_GREEN}-h, --help${CLR_RESET}          Показати цей розширений мануал та приклади команд
+  ${CLR_GREEN}-h, --help${CLR_RESET}          Показати цей розширений мануал та прикладами команд
 
 ${CLR_BOLD}ПРИКЛАДИ КОМАНД:${CLR_RESET}
 
@@ -295,20 +295,21 @@ ${CLR_BOLD}ПРИКЛАДИ КОМАНД:${CLR_RESET}
   ${CLR_BOLD}10. Збереження результату у спеціальну папку:${CLR_RESET}
      $ qes-sign --pades statement.pdf -o /home/attor/signed_docs/statement_final.pdf
 
-  ${CLR_BOLD}11. Архівна мітка LTV (PAdES-LTA / CAdES-X-Long / 25+ років) для вже підписаного документа без ключа:${CLR_RESET}
+  ${CLR_BOLD}11. Архівна мітка LTV (PAdES-LTA / CAdES-LTA / 25+ років) для вже підписаного документа без ключа:${CLR_RESET}
      $ qes-sign --upgrade-ltv contract_signed.pdf
      ${CLR_GRAY}-> Додає вшитий словник /DSS (/Certs, /OCSPs, /VRI) та повний ланцюжок сертифікатів без потреби в ключі чи паролі.${CLR_RESET}
 
 ${CLR_BOLD}СХОВИЩЕ КЛЮЧІВ: ~/.secure_keys/${CLR_RESET}
   • Якщо в ~/.secure_keys/ лежить один ключ, команда працює без вказування --key.
   • Відкриті сертифікати (.cer): більшість КНЕДП (ПриватБанк, Дія) вшивають відкритий
-    сертифікат всередину .pfx. Для monobank достатньо покласти .cer поруч із .pfx.
+    сертифікат всередині .pfx. Для monobank достатньо покласти .cer поруч із .pfx.
 
-${CLR_BOLD}ПЕРЕВІРКА ПІДПИСІВ:${CLR_RESET}
-  Для швидкої перевірки будь-яких файлів використовуйте:
+${CLR_BOLD}ПЕРЕВІРКА ПІДПИСІВ ТА PDF-ПРОТОКОЛ (UA / EN):${CLR_RESET}
+  Для швидкої перевірки та формування офіційного PDF-протоколу з ланцюгом сертифікатів:
   $ qes-verify statement_signed.pdf
+  $ qes-verify --protocol --lang ua statement_signed.pdf
+  $ qes-verify --protocol --lang en statement_signed.pdf
   $ qes-verify package.asice
-  $ qes-verify act_service.docx.p7s
 ================================================================================
 `);
     process.exit(0);

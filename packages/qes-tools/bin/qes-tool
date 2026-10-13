@@ -177,30 +177,39 @@ ${CLR_BOLD}ПРИКЛАДИ КОМАНД (CLI):${CLR_RESET}
 
   ${CLR_YELLOW}16. Модернізувати існуючий підпис до архівного формату LTV (PAdES-LTA / 25+ років):${CLR_RESET}
      $ qes-sign --upgrade-ltv договір_signed.pdf
-     ${CLR_GRAY}# Вшиває словник /DSS (/Certs, /OCSPs, /VRI) без ключа чи пароля${CLR_RESET}
+     $ qes-tool ltv договір_signed.pdf
+     ${CLR_GRAY}# Вшиває словник /DSS (/Certs, /OCSPs, /VRI) та ланцюжок ЦСК без ключа чи пароля${CLR_RESET}
 
-  ${CLR_YELLOW}17. Сформувати офіційний PDF-протокол перевірки КЕП та ланцюга сертифікатів:${CLR_RESET}
-     $ qes-verify --protocol договір_signed.pdf
-     ${CLR_GRAY}# Створює договір_signed_protocol.pdf з ланцюгом Підписувач ➔ КНЕДП ➔ ЦЗО${CLR_RESET}
+  ${CLR_YELLOW}17. Сформувати офіційний PDF-протокол перевірки КЕП та ланцюга сертифікатів (UA / EN):${CLR_RESET}
+     $ qes-verify --protocol --lang ua договір_signed.pdf
+     $ qes-verify --protocol --lang en договір_signed.pdf
+     $ qes-tool protocol --lang ua договір_signed.pdf
+     ${CLR_GRAY}# Створює договір_signed_protocol.pdf з ланцюгом [1] Підписувач ➔ [2] КНЕДП ➔ [3] ЦЗО${CLR_RESET}
 
-${CLR_BOLD}ГРАФІЧНИЙ ІНТЕРФЕЙС (ПРАВА КНОПКА МИШІ В GNOME / NAUTILUS):${CLR_RESET}
-  Усі 18 функцій комплексу доступні в 1 клік без термінала:
-  Клацніть правою кнопкою миші на файлі ➔ ${CLR_BOLD}Скрипти (Scripts)${CLR_RESET} ➔ ${CLR_CYAN}🔐 КЕП та Безпека${CLR_RESET}.
+${CLR_BOLD}ГРАФІЧНИЙ ІНТЕРФЕЙС (ПРАВА КНОПКА МИШІ В GNOME / NAUTILUS — 5 КАТЕГОРІЙ GNOME HIG):${CLR_RESET}
+  Клацніть правою кнопкою миші на файлі ➔ ${CLR_BOLD}Скрипти (Scripts)${CLR_RESET} ➔ ${CLR_CYAN}🔐 КЕП та Безпека${CLR_RESET}:
+  • ${CLR_BOLD}✍️ Підписання:${CLR_RESET} PDF зі штампом та QR, PDF без штампа, .p7s, ASiC-E, мультипідпис, пакет папки
+  • ${CLR_BOLD}🔍 Перевірка та Сертифікати:${CLR_RESET} перевірка КЕП, PDF-протокол (UA/EN), LTV (25 років), сертифікати ЦСК
+  • ${CLR_BOLD}⚖️ Суд та OCR:${CLR_RESET} підготовка до Е-Суду (все-в-одному), оптимізація <50 МБ, OCR (вибір мови / EN)
+  • ${CLR_BOLD}🛡️ Шифрування та Сховище:${CLR_RESET} особистий сейф (.enc), шифрування для адресата (.cer), розшифрування
+  • ${CLR_BOLD}⚙️ Керування та Довідка:${CLR_RESET} скидання кешу пароля, діагностика USB-токена, повна інструкція
 
 ${CLR_BOLD}ПРЯМИЙ ВИКЛИК ПІДКОМАНД ЧЕРЕЗ QES-TOOL:${CLR_RESET}
   Ви можете викликати будь-яку утиліту або напряму, або через команду 'qes-tool':
-  $ qes-tool sign [опції...]       (еквівалент qes-sign)
-  $ qes-tool ltv [файл...]         (еквівалент qes-sign --upgrade-ltv)
-  $ qes-tool verify [файл...]      (еквівалент qes-verify)
-  $ qes-tool protocol [файл...]    (еквівалент qes-verify --protocol)
-  $ qes-tool encrypt [файл...]     (еквівалент qes-encrypt)
-  $ qes-tool decrypt [файл.enc]    (еквівалент qes-decrypt)
-  $ qes-tool export-cert           (еквівалент qes-export-cert)
-  $ qes-tool cert [файл.cer]       (еквівалент qes-cert)
-  $ qes-tool agent [status|clear]  (еквівалент qes-agent)
-  $ qes-tool config [--lang...]    (еквівалент qes-config)
-  $ qes-tool pdf-court [файл.pdf]  (еквівалент qes-pdf-court)
-  $ qes-tool ocr [файл...]         (еквівалент qes-ocr)
+  $ qes-tool sign [опції...]             (еквівалент qes-sign)
+  $ qes-tool ltv [файл...]               (еквівалент qes-sign --upgrade-ltv)
+  $ qes-tool verify [файл...]            (еквівалент qes-verify)
+  $ qes-tool protocol [--lang ua|en]     (еквівалент qes-verify --protocol)
+  $ qes-tool encrypt [файл...]           (еквівалент qes-encrypt)
+  $ qes-tool decrypt [файл.enc]          (еквівалент qes-decrypt)
+  $ qes-tool export-cert                 (еквівалент qes-export-cert)
+  $ qes-tool cert [файл.cer]             (еквівалент qes-cert)
+  $ qes-tool token                       (діагностика підключених апаратних USB-токенів ЗНОК)
+  $ qes-tool providers                   (реєстр акредитованих КНЕДП України: CMP, TSP, OCSP)
+  $ qes-tool agent [status|clear]        (еквівалент qes-agent)
+  $ qes-tool config [--lang uk|en]       (еквівалент qes-config)
+  $ qes-tool pdf-court [файл.pdf]        (еквівалент qes-pdf-court)
+  $ qes-tool ocr [файл...]               (еквівалент qes-ocr)
 ${CLR_BOLD}${CLR_CYAN}================================================================================${CLR_RESET}
 EOF
 }
@@ -209,12 +218,13 @@ show_help_en() {
     cat << EOF
 ${CLR_BOLD}${CLR_CYAN}================================================================================${CLR_RESET}
 ${CLR_BOLD}${CLR_CYAN}  qes-tool v${VERSION} — Ukrainian QES & Cryptographic LegalTech Suite${CLR_RESET}
-${CLR_BOLD}${CLR_CYAN}  100% Offline-First | DSTU 4145-2002 | PAdES | CAdES | ASiC-E | GOST 28147:89${CLR_RESET}
+${CLR_BOLD}${CLR_CYAN}  100% Offline-First | DSTU 4145-2002 | PAdES-LTA | CAdES-LTA | ASiC-E | GOST 28147:89${CLR_RESET}
 ${CLR_BOLD}${CLR_CYAN}================================================================================${CLR_RESET}
 
 ${CLR_BOLD}DESCRIPTION:${CLR_RESET}
   ${CLR_BOLD}qes-tool${CLR_RESET} (or ${CLR_BOLD}qes-tools${CLR_RESET}) is the master control center and documentation
   guide for Ukrainian Qualified Electronic Signatures (QES / DSTU 4145-2002),
+  Archival LTV (25+ years), Official PDF Verification Protocols (UA / EN),
   legal attorney-client privilege encryption, and "Electronic Court" automation.
 
   All operations run ${CLR_GREEN}100% offline and locally on your workstation${CLR_RESET} without
@@ -229,14 +239,14 @@ ${CLR_BOLD}MAIN OPTIONS:${CLR_RESET}
   ${CLR_GREEN}-h, --help, help${CLR_RESET}         Display this documentation guide and command examples
 
 ${CLR_BOLD}AVAILABLE SUITE TOOLS:${CLR_RESET}
-  ${CLR_CYAN}qes-sign${CLR_RESET}        ✍️  Signing (PAdES PDF with stamp/QR, CAdES .p7s, ASiC-E)
-  ${CLR_CYAN}qes-verify${CLR_RESET}      🔍  Signature verification, certificate inspection & integrity
+  ${CLR_CYAN}qes-sign${CLR_RESET}        ✍️  Signing (PAdES-LTA PDF with stamp/QR, CAdES-LTA .p7s, ASiC-E, LTV upgrade)
+  ${CLR_CYAN}qes-verify${CLR_RESET}      🔍  Signature verification, CA trust chain & PDF protocol (UA/EN)
   ${CLR_CYAN}qes-encrypt${CLR_RESET}     🛡️  Asymmetric encryption (personal vault or recipient's .cer)
   ${CLR_CYAN}qes-decrypt${CLR_RESET}     🔓  Decryption using personal QES private key (.enc -> original)
   ${CLR_CYAN}qes-export-cert${CLR_RESET} 📤  Export public certificate (.cer) from container (.pfx)
   ${CLR_CYAN}qes-cert${CLR_RESET}        📜  Certificate inspector, CA trust chains & PKCS#7 bundles (.p7b)
   ${CLR_CYAN}qes-agent${CLR_RESET}       🔒  Memory session manager (RAM password cache & instant lock)
-  ${CLR_CYAN}qes-config${CLR_RESET}      ⚙️  Language settings (UA/EN) & Nautilus desktop menu integration
+  ${CLR_CYAN}qes-config${CLR_RESET}      ⚙️  Language settings (UA/EN) & Nautilus GNOME HIG menu integration
   ${CLR_CYAN}qes-pdf-court${CLR_RESET}   ⚖️  PDF optimization & linearization for "Electronic Court" (<50 MB)
   ${CLR_CYAN}qes-ocr${CLR_RESET}         👁️  OCR text recognition into searchable PDF with sidecar export
 
@@ -258,7 +268,7 @@ ${CLR_BOLD}COMMAND EXAMPLES (CLI):${CLR_RESET}
      $ qes-sign contract.docx
      ${CLR_GRAY}# Creates contract.docx.p7s next to the original document${CLR_RESET}
 
-  ${CLR_YELLOW}6. Verify signature and mathematical integrity:${CLR_RESET}
+  ${CLR_YELLOW}6. Verify signature, LTV status, and full CA trust chain:${CLR_RESET}
      $ qes-verify contract_signed.pdf
      $ qes-verify case_42.asice
 
@@ -297,30 +307,39 @@ ${CLR_BOLD}COMMAND EXAMPLES (CLI):${CLR_RESET}
 
   ${CLR_YELLOW}16. Upgrade existing signature to archival LTV (PAdES-LTA / 25+ years):${CLR_RESET}
      $ qes-sign --upgrade-ltv contract_signed.pdf
-     ${CLR_GRAY}# Embeds /DSS (/Certs, /OCSPs, /VRI) keylessly without password${CLR_RESET}
+     $ qes-tool ltv contract_signed.pdf
+     ${CLR_GRAY}# Embeds /DSS (/Certs, /OCSPs, /VRI) and CA chain keylessly without password${CLR_RESET}
 
-  ${CLR_YELLOW}17. Generate official PDF verification & certificate chain protocol:${CLR_RESET}
-     $ qes-verify --protocol contract_signed.pdf
-     ${CLR_GRAY}# Generates contract_signed_protocol.pdf with Signer ➔ QTSP ➔ Root CA chain${CLR_RESET}
+  ${CLR_YELLOW}17. Generate official PDF verification & certificate chain protocol (UA / EN):${CLR_RESET}
+     $ qes-verify --protocol --lang ua contract_signed.pdf
+     $ qes-verify --protocol --lang en contract_signed.pdf
+     $ qes-tool protocol --lang en contract_signed.pdf
+     ${CLR_GRAY}# Generates contract_signed_protocol.pdf with [1] Signer ➔ [2] QTSP ➔ [3] Root CA chain${CLR_RESET}
 
-${CLR_BOLD}DESKTOP FILE MANAGER (GNOME / NAUTILUS CONTEXT MENU):${CLR_RESET}
-  All 18 tools are available with a single right-click in Nautilus:
-  Right-click on any file ➔ ${CLR_BOLD}Scripts${CLR_RESET} ➔ ${CLR_CYAN}🔐 QES & Security${CLR_RESET}.
+${CLR_BOLD}DESKTOP FILE MANAGER (GNOME / NAUTILUS — 5 GNOME HIG CATEGORIES):${CLR_RESET}
+  Right-click on any file ➔ ${CLR_BOLD}Scripts${CLR_RESET} ➔ ${CLR_CYAN}🔐 QES & Security${CLR_RESET}:
+  • ${CLR_BOLD}✍️ Signing:${CLR_RESET} PAdES PDF (with/without stamp), .p7s, ASiC-E, Multi-Sign, Batch Folder
+  • ${CLR_BOLD}🔍 Verification & Certificates:${CLR_RESET} Verify QES, PDF Protocol (UA/EN), LTV (25y), CA Certs
+  • ${CLR_BOLD}⚖️ Court & OCR:${CLR_RESET} E-Court All-in-One, Optimize PDF (<50 MB), OCR (Language Picker / EN)
+  • ${CLR_BOLD}🛡️ Encryption & Vault:${CLR_RESET} Personal Vault (.enc), Encrypt for Recipient (.cer), Decrypt
+  • ${CLR_BOLD}⚙️ Management & Help:${CLR_RESET} Clear Password Cache, USB Token Diagnostics, User Guide
 
 ${CLR_BOLD}RUNNING SUBCOMMANDS VIA QES-TOOL:${CLR_RESET}
   You can execute any subcommand directly or via 'qes-tool':
-  $ qes-tool sign [options...]     (equivalent to qes-sign)
-  $ qes-tool ltv [file...]         (equivalent to qes-sign --upgrade-ltv)
-  $ qes-tool verify [file...]      (equivalent to qes-verify)
-  $ qes-tool protocol [file...]    (equivalent to qes-verify --protocol)
-  $ qes-tool encrypt [file...]     (equivalent to qes-encrypt)
-  $ qes-tool decrypt [file.enc]    (equivalent to qes-decrypt)
-  $ qes-tool export-cert           (equivalent to qes-export-cert)
-  $ qes-tool cert [file.cer]       (equivalent to qes-cert)
-  $ qes-tool agent [status|clear]  (equivalent to qes-agent)
-  $ qes-tool config [--lang...]    (equivalent to qes-config)
-  $ qes-tool pdf-court [file.pdf]  (equivalent to qes-pdf-court)
-  $ qes-tool ocr [file...]         (equivalent to qes-ocr)
+  $ qes-tool sign [options...]           (equivalent to qes-sign)
+  $ qes-tool ltv [file...]               (equivalent to qes-sign --upgrade-ltv)
+  $ qes-tool verify [file...]            (equivalent to qes-verify)
+  $ qes-tool protocol [--lang ua|en]     (equivalent to qes-verify --protocol)
+  $ qes-tool encrypt [file...]           (equivalent to qes-encrypt)
+  $ qes-tool decrypt [file.enc]          (equivalent to qes-decrypt)
+  $ qes-tool export-cert                 (equivalent to qes-export-cert)
+  $ qes-tool cert [file.cer]             (equivalent to qes-cert)
+  $ qes-tool token                       (inspect connected hardware USB tokens)
+  $ qes-tool providers                   (list accredited Ukrainian QTSPs: CMP, TSP, OCSP)
+  $ qes-tool agent [status|clear]        (equivalent to qes-agent)
+  $ qes-tool config [--lang uk|en]       (equivalent to qes-config)
+  $ qes-tool pdf-court [file.pdf]        (equivalent to qes-pdf-court)
+  $ qes-tool ocr [file...]               (equivalent to qes-ocr)
 ${CLR_BOLD}${CLR_CYAN}================================================================================${CLR_RESET}
 EOF
 }
