@@ -900,7 +900,7 @@ def show_single_cert_gui(d: Dict[str, Any], file_path: str, allow_back: bool = F
 
 
 def main():
-    ver_str = "1.0.21"
+    ver_str = "1.0.22"
     is_en = (get_qes_lang() == "en")
     parser = argparse.ArgumentParser(
         description=f"""================================================================================

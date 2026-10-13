@@ -607,3 +607,155 @@ test('Scenario 11: HardwareTokenSigner attaches live RFC 3161 TSP to PAdES PDF e
   }
 });
 
+test('Scenario 12: Hardware token signs ETSI ASiC-E container with manifest and live DepositSign TSP', async () => {
+  const { createAsiceContainer } = require('../src/asice');
+  const tokenSignerMod = require('../src/token-signer');
+
+  const algo = getAlgos();
+  const priv1Buf = fs.readFileSync(path.join(DATA_DIR, 'PRIV1.cer'));
+  const cert1Buf = fs.readFileSync(path.join(DATA_DIR, 'SELF_SIGNED1.cer'));
+  const priv1 = jk.Priv.from_asn1(priv1Buf);
+  const cert1 = jk.Certificate.from_asn1(cert1Buf);
+
+  const origSignData = tokenSignerMod.signDataWithHardwareToken;
+  const origGetCert = tokenSignerMod.getHardwareTokenCertificate;
+
+  tokenSignerMod.signDataWithHardwareToken = (opts) => {
+    const dataHash = algo.hash(opts.data);
+    const msg = new jk.models.Message({
+      type: 'signedData',
+      cert: cert1,
+      data: null,
+      dataHash,
+      signer: priv1,
+      hash: algo.hash,
+    });
+    return Buffer.from(msg.as_asn1());
+  };
+
+  tokenSignerMod.getHardwareTokenCertificate = () => ({
+    certBuf: cert1Buf,
+    certPath: null,
+    certObj: cert1,
+  });
+
+  const asiceOut = path.join(WORK_DIR, 'token_package.asice');
+
+  try {
+    const res = await createAsiceContainer(null, [SAMPLE_TXT, SAMPLE_ANNEX], {
+      outputPath: asiceOut,
+      tsp: true,
+      tspUrl: DEPOSITSIGN_TSP,
+      tokenOptions: {
+        pin: '12345678',
+        typeIndex: 1,
+        devIndex: 0,
+      },
+    });
+
+    assert.strictEqual(res.isMultiSignature, false);
+    assert.strictEqual(res.fileCount, 2);
+    assert.ok(fs.existsSync(asiceOut), 'Hardware token ASiC-E archive must exist');
+
+    const verified = verifyFileJson(asiceOut);
+    assert.strictEqual(verified.length, 1);
+    assert.strictEqual(verified[0].manifest_verified, true, 'Manifest checksums must match');
+    assert.strictEqual(verified[0].has_tsp, true, 'Hardware token ASiC-E signature must have TSP');
+    assertValidTimestamp(verified[0].tsp_time);
+    assert.strictEqual(verified[0].signed_files.length, 2);
+  } finally {
+    tokenSignerMod.signDataWithHardwareToken = origSignData;
+    tokenSignerMod.getHardwareTokenCertificate = origGetCert;
+  }
+});
+
+test('Scenario 13: ASiC-E Multi-signature combining Monobank key and Hardware token with live TSPs', async () => {
+  const { appendAsiceSignature } = require('../src/asice');
+  const tokenSignerMod = require('../src/token-signer');
+
+  // Step 1: Create initial ASiC-E with Key 1 (Monobank PBES2 file key)
+  const asiceMono = path.join(WORK_DIR, 'asice_mono_initial.asice');
+  const res1 = spawnSync('node', [
+    CLI_SIGN,
+    '--asice',
+    '--key', KEY1_PATH,
+    '--cert', CERT1_PATH,
+    '--tsp-url', MONOBANK_TSP,
+    '-o', asiceMono,
+    SAMPLE_TXT,
+    SAMPLE_PDF,
+  ], {
+    encoding: 'utf-8',
+    env: {
+      ...process.env,
+      PATH: `${MOCK_BIN_DIR}:${process.env.PATH}`,
+      QES_PASSWORD: KEY1_PASS,
+    },
+  });
+  assert.strictEqual(res1.status, 0);
+
+  // Step 2: Append hardware token signature to existing Monobank ASiC-E
+  const algo = getAlgos();
+  const priv1Buf = fs.readFileSync(path.join(DATA_DIR, 'PRIV1.cer'));
+  const cert1Buf = fs.readFileSync(path.join(DATA_DIR, 'SELF_SIGNED1.cer'));
+  const priv1 = jk.Priv.from_asn1(priv1Buf);
+  const cert1 = jk.Certificate.from_asn1(cert1Buf);
+
+  const origSignData = tokenSignerMod.signDataWithHardwareToken;
+  const origGetCert = tokenSignerMod.getHardwareTokenCertificate;
+
+  tokenSignerMod.signDataWithHardwareToken = (opts) => {
+    const dataHash = algo.hash(opts.data);
+    const msg = new jk.models.Message({
+      type: 'signedData',
+      cert: cert1,
+      data: null,
+      dataHash,
+      signer: priv1,
+      hash: algo.hash,
+    });
+    return Buffer.from(msg.as_asn1());
+  };
+
+  tokenSignerMod.getHardwareTokenCertificate = () => ({
+    certBuf: cert1Buf,
+    certPath: null,
+    certObj: cert1,
+  });
+
+  const asiceDual = path.join(WORK_DIR, 'asice_mono_and_token.asice');
+
+  try {
+    const resAppend = await appendAsiceSignature(null, asiceMono, {
+      outputPath: asiceDual,
+      tsp: true,
+      tspUrl: DEPOSITSIGN_TSP,
+      tokenOptions: {
+        pin: '12345678',
+        typeIndex: 1,
+        devIndex: 0,
+      },
+    });
+
+    assert.strictEqual(resAppend.isMultiSignature, true);
+    assert.strictEqual(resAppend.sigCount, 2);
+
+    const verified = verifyFileJson(asiceDual);
+    assert.strictEqual(verified.length, 2, 'Must contain 2 signatures');
+    assert.strictEqual(verified[0].manifest_verified, true, 'Manifest verified for sig 1');
+    assert.strictEqual(verified[1].manifest_verified, true, 'Manifest verified for sig 2');
+
+    // Signature 1: Monobank TSP
+    assert.strictEqual(verified[0].has_tsp, true, 'Signature 1 (Monobank) must have TSP');
+    assertValidTimestamp(verified[0].tsp_time);
+
+    // Signature 2: DepositSign TSP (Hardware Token)
+    assert.strictEqual(verified[1].has_tsp, true, 'Signature 2 (Hardware Token) must have TSP');
+    assertValidTimestamp(verified[1].tsp_time);
+  } finally {
+    tokenSignerMod.signDataWithHardwareToken = origSignData;
+    tokenSignerMod.getHardwareTokenCertificate = origGetCert;
+  }
+});
+
+

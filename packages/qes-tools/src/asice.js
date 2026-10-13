@@ -214,6 +214,51 @@ function buildManifestXml(fileInfos) {
 }
 
 /**
+ * Signs manifest buffer using either jkurwa Box (file key) or hardware token (ЗНОК).
+ */
+async function signManifestBuffer(box, manifestBuf, options = {}) {
+  if (options.tokenOptions) {
+    const { signDataWithHardwareToken, attachTspToSignature, getHardwareTokenCertificate } = require('./token-signer');
+    let sigDer = signDataWithHardwareToken({
+      data: manifestBuf,
+      pin: options.tokenOptions.pin,
+      typeIndex: options.tokenOptions.typeIndex || 1,
+      devIndex: options.tokenOptions.devIndex || 0,
+      isAppend: false,
+    });
+    if (options.tsp !== false) {
+      try {
+        const certObj = getHardwareTokenCertificate({
+          certPath: options.tokenOptions.certPath,
+          pin: options.tokenOptions.pin,
+          typeIndex: options.tokenOptions.typeIndex || 1,
+          devIndex: options.tokenOptions.devIndex || 0,
+        });
+        const stamped = await attachTspToSignature(sigDer, certObj.certPath || certObj.certBuf, options);
+        if (stamped && stamped.length > 0) {
+          sigDer = stamped;
+        }
+      } catch (e) {
+        if (options.verbose) {
+          console.warn(`[ASiC-E Token TSP] Warning: ${e.message}`);
+        }
+      }
+    }
+    return Buffer.isBuffer(sigDer) ? sigDer : Buffer.from(sigDer);
+  } else {
+    const signOpts = {
+      detached: true,
+      tsp: options.tsp !== false ? 'all' : false,
+      tspUrl: options.tspUrl,
+      includeChain: true,
+      time: options.time ? Math.floor(new Date(options.time).getTime() / 1000) : undefined,
+    };
+    const message = await safeBoxSign(box, manifestBuf, null, null, signOpts);
+    return Buffer.from(message.as_asn1());
+  }
+}
+
+/**
  * Appends a secondary or subsequent signature to an existing ETSI ASiC-E container.
  */
 async function appendAsiceSignature(box, asicePath, options = {}) {
@@ -235,17 +280,8 @@ async function appendAsiceSignature(box, asicePath, options = {}) {
   const nextSigIndex = existingSigs.length + 1;
   const nextSigName = `META-INF/signature-${nextSigIndex}.p7s`;
 
-  // Sign manifest with box.sign
-  const signOpts = {
-    detached: true,
-    tsp: options.tsp !== false ? 'all' : false,
-    tspUrl: options.tspUrl,
-    includeChain: true,
-    time: options.time ? Math.floor(new Date(options.time).getTime() / 1000) : undefined,
-  };
-
-  const message = await safeBoxSign(box, manifestEntry.data, null, null, signOpts);
-  const sigDer = Buffer.from(message.as_asn1());
+  // Sign manifest
+  const sigDer = await signManifestBuffer(box, manifestEntry.data, options);
 
   entries.push({
     name: nextSigName,
@@ -306,24 +342,36 @@ async function createAsiceContainer(box, filePaths, options = {}) {
     compress: false,
   });
 
+  const seenNames = new Set();
   for (const fp of filePaths) {
     if (!fs.existsSync(fp)) {
       throw new Error(`Файл не знайдено: ${fp}`);
     }
     const data = fs.readFileSync(fp);
-    const basename = path.basename(fp);
+    let entryName = path.basename(fp);
+    if (seenNames.has(entryName)) {
+      const ext = path.extname(entryName);
+      const base = path.basename(entryName, ext);
+      let counter = 2;
+      while (seenNames.has(`${base}_${counter}${ext}`)) {
+        counter++;
+      }
+      entryName = `${base}_${counter}${ext}`;
+    }
+    seenNames.add(entryName);
+
     const mime = getMimeType(fp);
     const sha256Base64 = crypto.createHash('sha256').update(data).digest('base64');
 
     fileInfos.push({
-      name: basename,
+      name: entryName,
       mime,
       sha256Base64,
       size: data.length,
     });
 
     zipEntries.push({
-      name: basename,
+      name: entryName,
       data,
       compress: true,
     });
@@ -339,17 +387,8 @@ async function createAsiceContainer(box, filePaths, options = {}) {
     compress: true,
   });
 
-  // 3. Sign manifest with CAdES (box.sign)
-  const signOpts = {
-    detached: true,
-    tsp: options.tsp !== false ? 'all' : false,
-    tspUrl: options.tspUrl,
-    includeChain: true,
-    time: options.time ? Math.floor(new Date(options.time).getTime() / 1000) : undefined,
-  };
-
-  const message = await safeBoxSign(box, manifestBuffer, null, null, signOpts);
-  const sigDer = Buffer.from(message.as_asn1());
+  // 3. Sign manifest with CAdES
+  const sigDer = await signManifestBuffer(box, manifestBuffer, options);
 
   zipEntries.push({
     name: 'META-INF/signature.p7s',
@@ -367,7 +406,7 @@ async function createAsiceContainer(box, filePaths, options = {}) {
       const parsed = path.parse(filePaths[0]);
       outputPath = path.join(parsed.dir, `${parsed.name}.asice`);
     } else {
-      outputPath = path.resolve('package.asice');
+      outputPath = path.join(path.dirname(filePaths[0]), 'package.asice');
     }
   }
 

@@ -788,7 +788,7 @@ def delegate_to_qes_cert(file_path: str, args: argparse.Namespace) -> int:
 
 def main():
     is_en = (get_qes_lang() == "en")
-    ver_str = "1.0.21"
+    ver_str = "1.0.22"
     parser = argparse.ArgumentParser(
         description=f"""================================================================================
   qes-verify — {"Ukrainian & EU QES/AES validator (.p7s, .asice, .pdf)" if is_en else "автономний валідатор КЕП/УЕП (.p7s, .asice, .pdf)"}

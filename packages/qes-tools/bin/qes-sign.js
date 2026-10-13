@@ -205,7 +205,7 @@ function findDefaultKey() {
 async function main() {
   const lang = getQESLang();
   const args = process.argv.slice(2);
-  let pkgVersion = '1.0.21';
+  let pkgVersion = '1.0.22';
   try { pkgVersion = require('../package.json').version; } catch (_) {}
   if (args.length === 0 || args.includes('-h') || args.includes('--help')) {
     console.log(`
@@ -496,6 +496,55 @@ ${CLR_BOLD}ПЕРЕВІРКА ПІДПИСІВ:${CLR_RESET}
       process.exit(1);
     }
 
+    const isSingleAsice = inputFiles.length === 1 && inputFiles[0].toLowerCase().endsWith('.asice');
+
+    if (useAsice || isSingleAsice) {
+      console.log(`${CLR_GRAY}⏳ ${lang === 'en' ? 'Creating / updating ETSI ASiC-E container with hardware token...' : 'Формування / оновлення контейнера ETSI ASiC-E апаратним токеном...'}${CLR_RESET}`);
+
+      try {
+        const { createAsiceContainer } = require('../src/asice');
+        const res = await createAsiceContainer(null, inputFiles, {
+          outputPath: outputPath,
+          tsp: useTsp,
+          tspUrl: tspUrl,
+          append: useAppend,
+          tokenOptions: {
+            pin,
+            typeIndex: activeTok.typeIndex || 1,
+            devIndex: activeTok.devIndex || 0,
+            certPath,
+          },
+        });
+
+        if (res.isMultiSignature) {
+          console.log(`\n${CLR_GREEN}✅ ${lang === 'en' ? `MULTI-SIGNATURE ADDED TO ASiC-E! (Signature #${res.sigCount})` : `МУЛЬТИПІДПИС УСПІШНО ДОДАНО ДО ASiC-E! (Підпис #${res.sigCount})`}${CLR_RESET}`);
+        } else {
+          console.log(`\n${CLR_GREEN}✅ ${lang === 'en' ? 'ETSI ASiC-E CONTAINER CREATED SUCCESSFULLY WITH HARDWARE TOKEN!' : 'ПАКЕТНИЙ КОНТЕЙНЕР ASiC-E УСПІШНО СТВОРЕНО АПАРАТНИМ ТОКЕНОМ!'}${CLR_RESET}`);
+        }
+        console.log(`  ${CLR_BOLD}${lang === 'en' ? 'Container file:' : 'Файл контейнера:'}${CLR_RESET} ${res.outputPath} (${res.containerSize} ${lang === 'en' ? 'bytes' : 'байт'})`);
+        console.log(`  ${CLR_CYAN}${lang === 'en' ? `Signed files (${res.fileCount}):` : `Підписані файли (${res.fileCount}):`}${CLR_RESET} ${res.signedFiles.join(', ')}\n`);
+
+        if (autoVerify) {
+          console.log(`${CLR_CYAN}── ${lang === 'en' ? 'Verification via qes-verify' : 'Контрольна перевірка через qes-verify'} ──────────────────────────────────────────${CLR_RESET}`);
+          const vRes = spawnSync('qes-verify', [res.outputPath], { stdio: 'inherit' });
+          if (vRes.status !== 0) {
+            console.warn(`${CLR_YELLOW}⚠️ ${lang === 'en' ? `Validator returned exit code ${vRes.status}` : `Валідатор повернув статус ${vRes.status}`}${CLR_RESET}`);
+          }
+        }
+        process.exit(0);
+      } catch (asiceErr) {
+        if (useGui) {
+          spawnSync('zenity', [
+            '--error',
+            `--title=${lang === 'en' ? 'Hardware Token Error' : 'Помилка апаратного токена'}`,
+            `--text=❌ ${asiceErr.message}`,
+          ]);
+        }
+        console.error(`\n${CLR_RED}❌ ${lang === 'en' ? 'Error processing ASiC-E container' : 'Помилка обробки ASiC-E контейнера'}: ${asiceErr.message}${CLR_RESET}\n`);
+        process.exit(1);
+      }
+    }
+
     for (let fIdx = 0; fIdx < inputFiles.length; fIdx++) {
       const curDoc = inputFiles[fIdx];
       const isPdf = curDoc.toLowerCase().endsWith('.pdf');
@@ -654,6 +703,13 @@ ${CLR_BOLD}ПЕРЕВІРКА ПІДПИСІВ:${CLR_RESET}
         }
       }
     } catch (asiceErr) {
+      if (useGui) {
+        spawnSync('zenity', [
+          '--error',
+          `--title=${lang === 'en' ? 'QES Signing Error' : 'Помилка підписання КЕП'}`,
+          `--text=❌ ${asiceErr.message}`,
+        ]);
+      }
       console.error(`\n${CLR_RED}❌ ${lang === 'en' ? 'Error processing ASiC-E container' : 'Помилка обробки ASiC-E контейнера'}: ${asiceErr.message}${CLR_RESET}\n`);
       process.exit(1);
     }
