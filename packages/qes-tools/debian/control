@@ -1,5 +1,5 @@
 Package: qes-tools
-Version: 1.0.22
+Version: 1.0.23
 Section: utils
 Priority: optional
 Architecture: amd64
@@ -12,9 +12,10 @@ Conflicts: eusw (<< 1.3.1.109)
 Homepage: https://github.com/YaroslavBaienko/legaltech
 Description: Ukrainian Qualified Electronic Signature & Encryption LegalTech Suite
  Offline-first CLI & GUI toolkit for signing, verifying, and encrypting documents
- conforming to Ukrainian DSTU 4145-2002, GOST 28147:89, PKCS#7/CAdES,
- ETSI ASiC-E containers, PAdES (embedded PDF signatures with official visual stamps),
- and asymmetric cryptographic envelopes (qes-encrypt, qes-decrypt).
+ conforming to Ukrainian DSTU 4145-2002, GOST 28147:89, PKCS#7/CAdES, CAdES-LTA,
+ ETSI ASiC-E containers, PAdES / PAdES-LTA (embedded PDF signatures with official
+ visual stamps and archival LTV validation for 25+ years), and asymmetric
+ cryptographic envelopes (qes-encrypt, qes-decrypt).
  Fully integrates IIT End-User CA-1 drivers (eusw, pkcs11.eka1c.so, pkcs11.ekc1.so,
  libav337p11d.so) for native hardware USB tokens (DepositSign Almaz-1K, Crystal-1K,
  SecureToken-337) and browser signing extension (Native Messaging Host).

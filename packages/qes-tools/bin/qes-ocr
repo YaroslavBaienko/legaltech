@@ -180,7 +180,7 @@ if ! command -v ocrmypdf >/dev/null 2>&1; then
     err_msg="Утиліту 'ocrmypdf' не знайдено. Встановіть через 'sudo apt install ocrmypdf tesseract-ocr-ukr tesseract-ocr-eng'."
     echo -e "${CLR_RED}Помилка: ${err_msg}${CLR_RESET}" >&2
     if [[ "$USE_GUI" = true ]]; then
-        zenity --error --title="Помилка OCR" --text="$err_msg"
+        zenity --error --no-markup --title="Помилка OCR" --text="$err_msg"
     fi
     exit 1
 fi
@@ -200,10 +200,10 @@ show_ocr_help_dialog() {
 • <b>Контроль ліміту 50 МБ:</b> попереджає, якщо розмір перевищує максимальний ліміт «Електронного суду».
 
 <b>3. КОМАНДИ ТЕРМІНАЛА:</b>
-• <code>qes-ocr --eng contract.pdf</code> — чиста англійська мова (швидкий запуск)
-• <code>qes-ocr --ukr petition.pdf</code> — чиста українська мова
-• <code>qes-ocr --sidecar file.pdf</code> — зберегти також розпізнаний текст у .txt поруч
-• <code>qes-ocr scan.png -o document.pdf</code> — перетворення зображення у PDF"
+• <tt>qes-ocr --eng contract.pdf</tt> — чиста англійська мова (швидкий запуск)
+• <tt>qes-ocr --ukr petition.pdf</tt> — чиста українська мова
+• <tt>qes-ocr --sidecar file.pdf</tt> — зберегти також розпізнаний текст у .txt поруч
+• <tt>qes-ocr scan.png -o document.pdf</tt> — перетворення зображення у PDF"
 
     zenity --info \
         --title="Довідка — qes-ocr" \
@@ -361,7 +361,7 @@ for file in "${FILES[@]}"; do
     if [[ ! -f "$target_out" ]]; then
         echo -e "${CLR_RED}❌ Помилка: не вдалося створити вихідний PDF.${CLR_RESET}" >&2
         if [[ "$USE_GUI" = true ]]; then
-            zenity --error --title="Помилка OCR" --text="Не вдалося розпізнати документ '${base_name}'."
+            zenity --error --no-markup --title="Помилка OCR" --text="Не вдалося розпізнати документ '${base_name}'."
         fi
         continue
     fi

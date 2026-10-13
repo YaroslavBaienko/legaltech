@@ -185,7 +185,8 @@ for file in "${FILES[@]}"; do
         warn_msg="⚠️ УВАГА: Розмір файлу перевищує 50 МБ! Підсистема «Електронний суд» відхилить такий додаток. Розбийте документ на частини."
         echo -e "${CLR_YELLOW}${warn_msg}${CLR_RESET}\n"
         if [[ "$USE_GUI" = true ]]; then
-            zenity --warning --title="Електронний суд: Ліміт перевищено" --text="Файл <b>${target_out}</b> має розмір $(numfmt --to=iec-i --suffix=B "$new_size"), що перевищує ліміт 50 МБ!"
+            safe_target_out=$(printf '%s' "$target_out" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g')
+            zenity --warning --title="Електронний суд: Ліміт перевищено" --text="Файл <b>${safe_target_out}</b> має розмір $(numfmt --to=iec-i --suffix=B "$new_size"), що перевищує ліміт 50 МБ!"
         fi
     else
         echo -e "${CLR_GREEN}   [Сумісність]: Відповідає вимогам підсистеми «Електронний суд» (ліміт < 50 МБ).${CLR_RESET}\n"

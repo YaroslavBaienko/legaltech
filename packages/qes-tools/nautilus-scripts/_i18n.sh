@@ -76,6 +76,10 @@ qes_notify() {
     fi
 }
 
+qes_escape_pango() {
+    printf '%s' "$1" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g'
+}
+
 # Двомовне діалогове вікно попередження zenity з Pango-розміткою (GNOME Adwaita HIG)
 qes_warn_dialog() {
     local title_uk="$1"
@@ -86,13 +90,15 @@ qes_warn_dialog() {
     w_icon="$(qes_get_window_icon)"
 
     if command -v zenity >/dev/null 2>&1; then
-        local dlg_title dlg_text
+        local dlg_title dlg_text safe_title
         if [[ "$QES_LANG" == "en" ]]; then
             dlg_title="$title_en"
-            dlg_text="<span weight='bold' size='larger'>${title_en}</span>\n\n${text_en}"
+            safe_title="$(qes_escape_pango "$title_en")"
+            dlg_text="<span weight='bold' size='larger'>${safe_title}</span>\n\n${text_en}"
         else
             dlg_title="$title_uk"
-            dlg_text="<span weight='bold' size='larger'>${title_uk}</span>\n\n${text_uk}"
+            safe_title="$(qes_escape_pango "$title_uk")"
+            dlg_text="<span weight='bold' size='larger'>${safe_title}</span>\n\n${text_uk}"
         fi
         zenity --warning --title="$dlg_title" --text="$dlg_text" --width=450 --icon-name="dialog-warning" --window-icon="$w_icon" 2>/dev/null || true
     fi
@@ -108,13 +114,15 @@ qes_info_dialog() {
     w_icon="$(qes_get_window_icon)"
 
     if command -v zenity >/dev/null 2>&1; then
-        local dlg_title dlg_text
+        local dlg_title dlg_text safe_title
         if [[ "$QES_LANG" == "en" ]]; then
             dlg_title="$title_en"
-            dlg_text="<span weight='bold' size='larger'>${title_en}</span>\n\n${text_en}"
+            safe_title="$(qes_escape_pango "$title_en")"
+            dlg_text="<span weight='bold' size='larger'>${safe_title}</span>\n\n${text_en}"
         else
             dlg_title="$title_uk"
-            dlg_text="<span weight='bold' size='larger'>${title_uk}</span>\n\n${text_uk}"
+            safe_title="$(qes_escape_pango "$title_uk")"
+            dlg_text="<span weight='bold' size='larger'>${safe_title}</span>\n\n${text_uk}"
         fi
         zenity --info --title="$dlg_title" --text="$dlg_text" --width=450 --icon-name="security-high" --window-icon="$w_icon" 2>/dev/null || true
     fi
@@ -130,13 +138,15 @@ qes_error_dialog() {
     w_icon="$(qes_get_window_icon)"
 
     if command -v zenity >/dev/null 2>&1; then
-        local dlg_title dlg_text
+        local dlg_title dlg_text safe_title
         if [[ "$QES_LANG" == "en" ]]; then
             dlg_title="$title_en"
-            dlg_text="<span weight='bold' size='larger'>${title_en}</span>\n\n${text_en}"
+            safe_title="$(qes_escape_pango "$title_en")"
+            dlg_text="<span weight='bold' size='larger'>${safe_title}</span>\n\n${text_en}"
         else
             dlg_title="$title_uk"
-            dlg_text="<span weight='bold' size='larger'>${title_uk}</span>\n\n${text_uk}"
+            safe_title="$(qes_escape_pango "$title_uk")"
+            dlg_text="<span weight='bold' size='larger'>${safe_title}</span>\n\n${text_uk}"
         fi
         zenity --error --title="$dlg_title" --text="$dlg_text" --width=450 --icon-name="dialog-error" --window-icon="$w_icon" 2>/dev/null || true
     fi

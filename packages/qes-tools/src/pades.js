@@ -23,6 +23,7 @@ const { pdflibAddPlaceholder } = require('@signpdf/placeholder-pdf-lib');
 const { SignPdf } = require('@signpdf/signpdf');
 const { Signer, SUBFILTER_ETSI_CADES_DETACHED, ANNOTATION_FLAGS, SIG_FLAGS } = require('@signpdf/utils');
 const { safeBoxSign } = require('./adapter');
+const { embedPdfDss } = require('./ltv');
 
 class EngineSigner extends Signer {
   constructor(box, options = {}) {
@@ -36,6 +37,8 @@ class EngineSigner extends Signer {
       detached: true,
       tsp: this.options.tsp !== false ? 'all' : false,
       tspUrl: this.options.tspUrl,
+      ltv: this.options.ltv,
+      ocspUrl: this.options.ocspUrl,
       includeChain: true,
       time: this.options.time ? Math.floor(new Date(this.options.time).getTime() / 1000) : undefined,
     };
@@ -66,7 +69,7 @@ class HardwareTokenSigner extends Signer {
         signatureBuffer = await attachTspToSignature(
           signatureBuffer,
           this.tokenOptions.cert || this.tokenOptions.certPath,
-          this.options
+          { ...this.options, ltv: false }
         );
       } catch (e) {
         if (this.options.verbose) {
@@ -405,7 +408,7 @@ async function signPdfPAdESIncremental(box, inputPdfPath, options = {}) {
   byteRange.push(PDFName.of('**********'));
   byteRange.push(PDFName.of('**********'));
 
-  const placeholder = PDFHexString.of(String.fromCharCode(0).repeat(16384));
+  const placeholder = PDFHexString.of(String.fromCharCode(0).repeat(65536));
   const signatureDict = pdfDoc.context.obj({
     Type: 'Sig',
     Filter: 'Adobe.PPKLite',
@@ -481,7 +484,18 @@ async function signPdfPAdESIncremental(box, inputPdfPath, options = {}) {
     ? new HardwareTokenSigner(options.tokenOptions, options)
     : new EngineSigner(box, options);
   const signPdf = new SignPdf();
-  const signedPdfBuffer = await signPdf.sign(pdfWithPlaceholder, signer);
+  let signedPdfBuffer = await signPdf.sign(pdfWithPlaceholder, signer);
+
+  // 6b. Embed PDF /DSS (Document Security Store) for PAdES-LTA if LTV is enabled
+  let hasLtvDss = false;
+  if (options.ltv !== false && options.tsp !== false) {
+    try {
+      signedPdfBuffer = await embedPdfDss(signedPdfBuffer, box, options);
+      hasLtvDss = true;
+    } catch (_) {
+      // Non-fatal: keep valid signedPdfBuffer
+    }
+  }
 
   // 7. Output path resolution
   let outPath = options.outputPath;
@@ -503,6 +517,7 @@ async function signPdfPAdESIncremental(box, inputPdfPath, options = {}) {
     certInfo,
     isMultiSignature: true,
     sigCount,
+    hasLtvDss,
   };
 }
 
@@ -539,7 +554,7 @@ async function signPdfPAdES(box, inputPdfPath, options = {}) {
     name: certInfo.commonName,
     location: certInfo.locality || 'Україна',
     subFilter: SUBFILTER_ETSI_CADES_DETACHED,
-    signatureLength: 16384, // plenty of space for full CAdES-T with certs and TSP
+    signatureLength: 65536, // plenty of space for full CAdES-X-Long with OCSP, certs, and TSP
   });
 
   const pdfWithPlaceholder = Buffer.from(await pdfDoc.save({ useObjectStreams: false }));
@@ -549,7 +564,18 @@ async function signPdfPAdES(box, inputPdfPath, options = {}) {
     ? new HardwareTokenSigner(options.tokenOptions, options)
     : new EngineSigner(box, options);
   const signPdf = new SignPdf();
-  const signedPdfBuffer = await signPdf.sign(pdfWithPlaceholder, signer);
+  let signedPdfBuffer = await signPdf.sign(pdfWithPlaceholder, signer);
+
+  // 3b. Embed PDF /DSS (Document Security Store) for PAdES-LTA if LTV is enabled
+  let hasLtvDss = false;
+  if (options.ltv !== false && options.tsp !== false) {
+    try {
+      signedPdfBuffer = await embedPdfDss(signedPdfBuffer, box, options);
+      hasLtvDss = true;
+    } catch (_) {
+      // Non-fatal: keep valid signedPdfBuffer
+    }
+  }
 
   // 4. Determine output path
   let outPath = options.outputPath;
@@ -567,6 +593,7 @@ async function signPdfPAdES(box, inputPdfPath, options = {}) {
     certInfo,
     isMultiSignature: false,
     sigCount: 1,
+    hasLtvDss,
   };
 }
 

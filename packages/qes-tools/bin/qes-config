@@ -19,6 +19,7 @@ declare -A SCRIPTS_UK=(
   ["2_sign_p7s.sh"]="✍️ Підписати окремим файлом (.p7s)"
   ["3_sign_asice.sh"]="📦 Підписати контейнер (ASiC-E)"
   ["10_append_signature.sh"]="✍️ Додати другий підпис (Мультипідпис)"
+  ["15_upgrade_ltv.sh"]="🔏 Додати архівну мітку LTV (PAdES-LTA, 25 років)"
   ["4_verify.sh"]="🔍 Перевірити підпис КЕП"
   ["13_view_cert.sh"]="📜 Переглянути сертифікат КНЕДП"
   ["8_export_cert.sh"]="📤 Експортувати відкритий сертифікат (.cer)"
@@ -38,6 +39,7 @@ declare -A SCRIPTS_EN=(
   ["2_sign_p7s.sh"]="✍️ Sign Detached Signature (.p7s)"
   ["3_sign_asice.sh"]="📦 Sign Package Container (ASiC-E)"
   ["10_append_signature.sh"]="✍️ Add Secondary Signature (Multi-Sign)"
+  ["15_upgrade_ltv.sh"]="🔏 Upgrade to Archival LTV (PAdES-LTA, 25 Years)"
   ["4_verify.sh"]="🔍 Verify QES Signature"
   ["13_view_cert.sh"]="📜 View CA Certificate Details"
   ["8_export_cert.sh"]="📤 Export Public Certificate (.cer)"
@@ -61,8 +63,8 @@ ORDERED_CATEGORIES_UK=(
 )
 
 declare -A CATEGORIES_UK=(
-  ["✍️ Підписання"]="1_sign_pades.sh:Підписати PDF (зі штампом та QR)|1b_sign_pades_no_stamp.sh:Підписати PDF (без штампа)|2_sign_p7s.sh:Підписати окремим файлом (.p7s)|3_sign_asice.sh:Пакетний контейнер (ASiC-E)|10_append_signature.sh:Додати другий підпис (Мультипідпис)"
-  ["🔍 Перевірка та Сертифікати"]="4_verify.sh:Перевірити підпис КЕП|13_view_cert.sh:Переглянути сертифікат КНЕДП|8_export_cert.sh:Експортувати відкритий сертифікат (.cer)"
+  ["✍️ Підписання"]="1_sign_pades.sh:Підписати PDF (зі штампом та QR)|1b_sign_pades_no_stamp.sh:Підписати PDF (без штампа)|2_sign_p7s.sh:Підписати окремим файлом (.p7s)|3_sign_asice.sh:Пакетний контейнер (ASiC-E)|10_append_signature.sh:Додати другий підпис (Мультипідпис)|15_upgrade_ltv.sh:🔏 Додати архівну мітку LTV (PAdES-LTA, 25 років)"
+  ["🔍 Перевірка та Сертифікати"]="4_verify.sh:Перевірити підпис КЕП|15_upgrade_ltv.sh:🔏 Додати архівну мітку LTV (PAdES-LTA, 25 років)|13_view_cert.sh:Переглянути сертифікат КНЕДП|8_export_cert.sh:Експортувати відкритий сертифікат (.cer)"
   ["🛡️ Шифрування та Сейф"]="5_encrypt_self.sh:Зашифрувати в особистий сейф (.enc)|6_encrypt_recipient.sh:Зашифрувати для адресата (.enc)|7_decrypt.sh:Розшифрувати особистим КЕП"
   ["⚖️ Судові документи та OCR"]="9_pdf_court.sh:Оптимізувати PDF для Е-Суду|12_ocr_court.sh:Розпізнати текст OCR (Е-Суд)|14_ocr_english.sh:Розпізнати текст OCR (Англійська мова)"
   ["⚙️ Керування та Довідка"]="11_lock_session.sh:Скинути кеш пароля (Заблокувати)|0_help.sh:Довідка та Інструкції КЕП"
@@ -77,8 +79,8 @@ ORDERED_CATEGORIES_EN=(
 )
 
 declare -A CATEGORIES_EN=(
-  ["✍️ Signing"]="1_sign_pades.sh:Sign PDF (with Stamp & QR)|1b_sign_pades_no_stamp.sh:Sign PDF (without Stamp & QR)|2_sign_p7s.sh:Detached Signature (.p7s)|3_sign_asice.sh:Package Container (ASiC-E)|10_append_signature.sh:Add Secondary Signature (Multi-Sign)"
-  ["🔍 Verification & Certificates"]="4_verify.sh:Verify QES Signature|13_view_cert.sh:View CA Certificate Details|8_export_cert.sh:Export Public Certificate (.cer)"
+  ["✍️ Signing"]="1_sign_pades.sh:Sign PDF (with Stamp & QR)|1b_sign_pades_no_stamp.sh:Sign PDF (without Stamp & QR)|2_sign_p7s.sh:Detached Signature (.p7s)|3_sign_asice.sh:Package Container (ASiC-E)|10_append_signature.sh:Add Secondary Signature (Multi-Sign)|15_upgrade_ltv.sh:🔏 Upgrade to Archival LTV (PAdES-LTA, 25 Years)"
+  ["🔍 Verification & Certificates"]="4_verify.sh:Verify QES Signature|15_upgrade_ltv.sh:🔏 Upgrade to Archival LTV (PAdES-LTA, 25 Years)|13_view_cert.sh:View CA Certificate Details|8_export_cert.sh:Export Public Certificate (.cer)"
   ["🛡️ Encryption & Vault"]="5_encrypt_self.sh:Encrypt to Personal Vault (.enc)|6_encrypt_recipient.sh:Encrypt for Recipient (.enc)|7_decrypt.sh:Decrypt with Personal Key"
   ["⚖️ Court & OCR"]="9_pdf_court.sh:Optimize PDF for Court|12_ocr_court.sh:OCR Text Recognition (Court PDF)|14_ocr_english.sh:OCR Text Recognition (English)"
   ["⚙️ Management & Help"]="11_lock_session.sh:Lock Session (Clear Password Cache)|0_help.sh:Help & QES Documentation"
@@ -191,7 +193,7 @@ deploy_nautilus_scripts_for_dir() {
     fi
 
     if [[ "$layout" == "categorized" || "$layout" == "submenus" || "$layout" == "compact" ]]; then
-        # GNOME HIG Категоризовані підменю (чиста ієрархія без засмічення кореневого каталогу)
+        # GNOME HIG Категоризовані підменю + прямий доступ до архівної мітки LTV у корені меню
         if [[ "$effective_lang" == "en" ]]; then
             for cat_name in "${ORDERED_CATEGORIES_EN[@]}"; do
                 local cat_dir="$target_folder/$cat_name"
@@ -210,6 +212,10 @@ deploy_nautilus_scripts_for_dir() {
                     fi
                 done
             done
+            if [[ -f "$src_dir/15_upgrade_ltv.sh" ]]; then
+                cp "$src_dir/15_upgrade_ltv.sh" "$target_folder/🔏 Upgrade to Archival LTV (PAdES-LTA, 25 Years)"
+                chmod 0755 "$target_folder/🔏 Upgrade to Archival LTV (PAdES-LTA, 25 Years)"
+            fi
         else
             for cat_name in "${ORDERED_CATEGORIES_UK[@]}"; do
                 local cat_dir="$target_folder/$cat_name"
@@ -228,6 +234,10 @@ deploy_nautilus_scripts_for_dir() {
                     fi
                 done
             done
+            if [[ -f "$src_dir/15_upgrade_ltv.sh" ]]; then
+                cp "$src_dir/15_upgrade_ltv.sh" "$target_folder/🔏 Додати архівну мітку LTV (PAdES-LTA, 25 років)"
+                chmod 0755 "$target_folder/🔏 Додати архівну мітку LTV (PAdES-LTA, 25 років)"
+            fi
         fi
     elif [[ "$layout" == "hybrid" ]]; then
         # Гібридний макет: категорії + плоскі посилання у корені

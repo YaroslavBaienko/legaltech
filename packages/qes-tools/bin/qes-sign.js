@@ -105,7 +105,8 @@ function askPassword(promptText, forceGui = false) {
         }
 
         // 2. Fallback to Zenity with Papirus Green theme
-        const pangoText = `<span size="larger" weight="bold" color="#2e7d32">${header}</span>\n\n${cleanPrompt}\n<span size="small" color="#666666">${sub}</span>`;
+        const escPango = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const pangoText = `<span size="larger" weight="bold" color="#2e7d32">${escPango(header)}</span>\n\n${escPango(cleanPrompt)}\n<span size="small" color="#666666">${escPango(sub)}</span>`;
 
         const userLockIcon = path.join(process.env.HOME || '', '.local/share/icons/Papirus/48x48/status/stock_lock.svg');
         const sysLockIcon = '/usr/share/icons/Papirus/48x48/status/stock_lock.svg';
@@ -205,7 +206,7 @@ function findDefaultKey() {
 async function main() {
   const lang = getQESLang();
   const args = process.argv.slice(2);
-  let pkgVersion = '1.0.22';
+  let pkgVersion = '1.0.23';
   try { pkgVersion = require('../package.json').version; } catch (_) {}
   if (args.length === 0 || args.includes('-h') || args.includes('--help')) {
     console.log(`
@@ -226,6 +227,7 @@ ${CLR_BOLD}РЕЖИМИ ПІДПИСАННЯ:${CLR_RESET}
   ${CLR_GREEN}--pades${CLR_RESET}             Вшити підпис у структуру PDF (PAdES) зі штампом та QR-кодом
   ${CLR_GREEN}--asice${CLR_RESET}             Створити європейський пакетний архів ASiC-E (.asice) для кількох файлів
   ${CLR_GREEN}-a, --append${CLR_RESET}        Додати другий/черговий підпис (Мультипідписання: PDF PAdES, ASiC-E або .p7s)
+  ${CLR_GREEN}--upgrade-ltv${CLR_RESET}       Модернізувати існуючий підпис (.pdf, .p7s, .asice) до архівного LTV (PAdES-LTA / 25 років) без ключа
   ${CLR_GREEN}--no-stamp${CLR_RESET}          Вимкнути накладання візуального штампа (для режиму --pades)
   ${CLR_GREEN}--stamp-page <стор>${CLR_RESET} Номер сторінки для розміщення штампа (за замовчуванням 'z' — остання)
   ${CLR_YELLOW}(за замовчуванням)${CLR_RESET}  Якщо прапорці відсутні: створює відокремлений файл підпису <файл>.p7s
@@ -242,6 +244,8 @@ ${CLR_BOLD}ПАРАМЕТРИ КЛЮЧА ТА БЕЗПЕКИ:${CLR_RESET}
   ${CLR_GREEN}--gui${CLR_RESET}               Відображати графічне вікно введення пароля (Zenity) замість консолі
   ${CLR_GREEN}-o, --output <шлях>${CLR_RESET} Шлях та назва збереження вихідного файлу
   ${CLR_GREEN}--no-tsp${CLR_RESET}            Не додавати позначку точного часу TSP від АЦСК/КНЕДП
+  ${CLR_GREEN}--no-ltv${CLR_RESET}            Не вбудовувати архівні дані LTV (повний ланцюжок сертифікатів CA та OCSP-відповіді)
+  ${CLR_GREEN}--ocsp-url <url>${CLR_RESET}    Явно вказати URL OCSP-сервера АЦСК/КНЕДП для архівної мітки LTV
   ${CLR_GREEN}--no-verify${CLR_RESET}         Вимкнути автоматичну перевірку qes-verify після завершення підпису
   ${CLR_GREEN}-h, --help${CLR_RESET}          Показати цей розширений мануал та приклади команд
 
@@ -291,6 +295,10 @@ ${CLR_BOLD}ПРИКЛАДИ КОМАНД:${CLR_RESET}
   ${CLR_BOLD}10. Збереження результату у спеціальну папку:${CLR_RESET}
      $ qes-sign --pades statement.pdf -o /home/attor/signed_docs/statement_final.pdf
 
+  ${CLR_BOLD}11. Архівна мітка LTV (PAdES-LTA / CAdES-X-Long / 25+ років) для вже підписаного документа без ключа:${CLR_RESET}
+     $ qes-sign --upgrade-ltv contract_signed.pdf
+     ${CLR_GRAY}-> Додає вшитий словник /DSS (/Certs, /OCSPs, /VRI) та повний ланцюжок сертифікатів без потреби в ключі чи паролі.${CLR_RESET}
+
 ${CLR_BOLD}СХОВИЩЕ КЛЮЧІВ: ~/.secure_keys/${CLR_RESET}
   • Якщо в ~/.secure_keys/ лежить один ключ, команда працює без вказування --key.
   • Відкриті сертифікати (.cer): більшість КНЕДП (ПриватБанк, Дія) вшивають відкритий
@@ -313,6 +321,9 @@ ${CLR_BOLD}ПЕРЕВІРКА ПІДПИСІВ:${CLR_RESET}
   let outputPath = null;
   let useTsp = true;
   let tspUrl = null;
+  let useLtv = true;
+  let ocspUrl = null;
+  let useUpgradeLtv = false;
   let autoVerify = true;
   let useGui = false;
   let usePades = false;
@@ -336,8 +347,17 @@ ${CLR_BOLD}ПЕРЕВІРКА ПІДПИСІВ:${CLR_RESET}
       outputPath = path.resolve(args[++i]);
     } else if (arg === '--no-tsp') {
       useTsp = false;
+      useLtv = false;
     } else if (arg === '--tsp-url' && i + 1 < args.length) {
       tspUrl = args[++i];
+    } else if (arg === '--ltv') {
+      useLtv = true;
+    } else if (arg === '--no-ltv') {
+      useLtv = false;
+    } else if (arg === '--ocsp-url' && i + 1 < args.length) {
+      ocspUrl = args[++i];
+    } else if (arg === '--upgrade-ltv') {
+      useUpgradeLtv = true;
     } else if (arg === '--no-verify') {
       autoVerify = false;
     } else if (arg === '--gui') {
@@ -438,6 +458,59 @@ ${CLR_BOLD}ПЕРЕВІРКА ПІДПИСІВ:${CLR_RESET}
     ? (lang === 'en' ? `${path.basename(inputFiles[0])} (${fs.statSync(inputFiles[0]).size} bytes)` : `${path.basename(inputFiles[0])} (${fs.statSync(inputFiles[0]).size} байт)`)
     : (lang === 'en' ? `${inputFiles.length} files in batch` : `${inputFiles.length} файлів у пакеті`);
 
+  // Режим безключової архівної модернізації існуючого підпису до LTV (PAdES-LTA / CAdES-X-Long)
+  if (useUpgradeLtv) {
+    console.log(`${CLR_CYAN}╔═══════════════════════════════════════════════════════════════════════════════════════╗${CLR_RESET}`);
+    console.log(`${CLR_CYAN}║ ${lang === 'en' ? 'ARCHIVAL LTV SIGNATURE UPGRADE (PAdES-LTA / CAdES-X-Long / 25+ YEARS)' : 'МОДЕРНІЗАЦІЯ ПІДПИСУ ДО АРХІВНОГО ФОРМАТУ LTV (PAdES-LTA / 25+ РОКІВ)'}${CLR_RESET}`);
+    console.log(`${CLR_CYAN}║ ${lang === 'en' ? 'Object:' : 'Об\'єкт:'} ${docDesc}${CLR_RESET}`);
+    console.log(`${CLR_CYAN}╚═══════════════════════════════════════════════════════════════════════════════════════╝${CLR_RESET}`);
+
+    const caBundlePath = path.join(__dirname, '..', 'certs', 'ua-all-cas.p7b');
+    const fallbackCaBundlePath = path.join(__dirname, '..', 'certs', 'mono.p7b');
+    let casBuffer = null;
+    if (fs.existsSync(caBundlePath)) {
+      casBuffer = fs.readFileSync(caBundlePath);
+    } else if (fs.existsSync(fallbackCaBundlePath)) {
+      casBuffer = fs.readFileSync(fallbackCaBundlePath);
+    }
+    const engine = new QESEngine({ casBuffer });
+    const box = engine.createBox();
+    const { upgradeExistingFileToLtv } = require('../src/ltv');
+
+    let hasUpgradeErrors = false;
+    for (let fIdx = 0; fIdx < inputFiles.length; fIdx++) {
+      const curDoc = inputFiles[fIdx];
+      const curOutput = (inputFiles.length === 1 && outputPath) ? outputPath : curDoc;
+      console.log(`\n${CLR_GRAY}⏳ [${fIdx + 1}/${inputFiles.length}] ${lang === 'en' ? 'Upgrading to LTV:' : 'Архівна модернізація LTV:'} ${path.basename(curDoc)}...${CLR_RESET}`);
+      try {
+        const res = await upgradeExistingFileToLtv(curDoc, {
+          outputPath: curOutput,
+          box,
+          ocspUrl,
+          tspUrl,
+          tsp: useTsp,
+        });
+        console.log(`${CLR_GREEN}✅ ${lang === 'en' ? `LTV ARCHIVAL UPGRADE COMPLETE (${res.format}):` : `АРХІВНУ МІТКУ LTV УСПІШНО ВБУДОВАНО (${res.format}):`}${CLR_RESET} ${res.outputPath} (${res.fileSize} ${lang === 'en' ? 'bytes' : 'байт'})`);
+        console.log(`  ${CLR_CYAN}${lang === 'en' ? 'Embedded CA & Signer certs:' : 'Вшито сертифікатів ланцюжка:'}${CLR_RESET} ${res.certCount || res.caCount || 1} | ${CLR_CYAN}${lang === 'en' ? 'OCSP responses:' : 'Відповідей OCSP:'}${CLR_RESET} ${res.ocspCount || 0}`);
+        if (autoVerify) {
+          spawnSync('qes-verify', [res.outputPath], { stdio: 'inherit' });
+        }
+      } catch (upErr) {
+        hasUpgradeErrors = true;
+        if (useGui) {
+          spawnSync('zenity', [
+            '--error',
+            '--no-markup',
+            `--title=${lang === 'en' ? 'LTV Upgrade Error' : 'Помилка модернізації LTV'}`,
+            `--text=❌ ${upErr.message}`,
+          ]);
+        }
+        console.error(`${CLR_RED}❌ ${lang === 'en' ? `LTV upgrade error for '${path.basename(curDoc)}'` : `Помилка модернізації LTV для '${path.basename(curDoc)}'`}: ${upErr.message}${CLR_RESET}`);
+      }
+    }
+    process.exit(hasUpgradeErrors ? 1 : 0);
+  }
+
   // Контекстне вікно вибору носія підпису (файловий ключ або апаратний токен)
   if (!keyPath && !useToken) {
     const defaultCand = findDefaultKey();
@@ -468,6 +541,7 @@ ${CLR_BOLD}ПЕРЕВІРКА ПІДПИСІВ:${CLR_RESET}
       if (useGui) {
         spawnSync('zenity', [
           '--warning',
+          '--no-markup',
           `--title=${lang === 'en' ? 'Hardware Key QES' : 'Апаратний ключ КЕП'}`,
           `--text=${lang === 'en' ? '⚠️ No hardware token detected in USB ports.\n\nPlease connect your hardware device (Almaz-1K, Crystal-1K, SecureToken-337, etc.) into a USB port and try again.' : '⚠️ Жодного апаратного токена не виявлено в USB-портах.\n\nБудь ласка, підключіть ваш апаратний носій (Алмаз-1К, Кристал-1К, SecureToken-337 тощо) у USB-порт комп\'ютера та спробуйте ще раз.'}`,
         ]);
@@ -507,6 +581,8 @@ ${CLR_BOLD}ПЕРЕВІРКА ПІДПИСІВ:${CLR_RESET}
           outputPath: outputPath,
           tsp: useTsp,
           tspUrl: tspUrl,
+          ltv: useLtv,
+          ocspUrl: ocspUrl,
           append: useAppend,
           tokenOptions: {
             pin,
@@ -536,6 +612,7 @@ ${CLR_BOLD}ПЕРЕВІРКА ПІДПИСІВ:${CLR_RESET}
         if (useGui) {
           spawnSync('zenity', [
             '--error',
+            '--no-markup',
             `--title=${lang === 'en' ? 'Hardware Token Error' : 'Помилка апаратного токена'}`,
             `--text=❌ ${asiceErr.message}`,
           ]);
@@ -574,6 +651,9 @@ ${CLR_BOLD}ПЕРЕВІРКА ПІДПИСІВ:${CLR_RESET}
             append: useAppend,
             outputPath: curOutput,
             tsp: useTsp,
+            tspUrl: tspUrl,
+            ltv: useLtv,
+            ocspUrl: ocspUrl,
           });
 
           const padesTitle = res.stamped
@@ -595,6 +675,9 @@ ${CLR_BOLD}ПЕРЕВІРКА ПІДПИСІВ:${CLR_RESET}
             isAppend: useAppend,
             isInternal: false,
             tsp: useTsp,
+            tspUrl: tspUrl,
+            ltv: useLtv,
+            ocspUrl: ocspUrl,
             certPath,
           });
 
@@ -610,6 +693,7 @@ ${CLR_BOLD}ПЕРЕВІРКА ПІДПИСІВ:${CLR_RESET}
         if (useGui) {
           spawnSync('zenity', [
             '--error',
+            '--no-markup',
             `--title=${lang === 'en' ? 'Hardware Token Error' : 'Помилка апаратного токена'}`,
             `--text=❌ ${err.message}`,
           ]);
@@ -684,6 +768,8 @@ ${CLR_BOLD}ПЕРЕВІРКА ПІДПИСІВ:${CLR_RESET}
         outputPath: outputPath,
         tsp: useTsp,
         tspUrl: tspUrl,
+        ltv: useLtv,
+        ocspUrl: ocspUrl,
         append: useAppend,
       });
 
@@ -706,6 +792,7 @@ ${CLR_BOLD}ПЕРЕВІРКА ПІДПИСІВ:${CLR_RESET}
       if (useGui) {
         spawnSync('zenity', [
           '--error',
+          '--no-markup',
           `--title=${lang === 'en' ? 'QES Signing Error' : 'Помилка підписання КЕП'}`,
           `--text=❌ ${asiceErr.message}`,
         ]);
@@ -731,6 +818,8 @@ ${CLR_BOLD}ПЕРЕВІРКА ПІДПИСІВ:${CLR_RESET}
           page: stampPage,
           tsp: useTsp,
           tspUrl: tspUrl,
+          ltv: useLtv,
+          ocspUrl: ocspUrl,
           append: useAppend,
         });
 
@@ -759,6 +848,8 @@ ${CLR_BOLD}ПЕРЕВІРКА ПІДПИСІВ:${CLR_RESET}
           detached: true,
           tsp: useTsp,
           tspUrl: tspUrl,
+          ltv: useLtv,
+          ocspUrl: ocspUrl,
           append: useAppend,
         });
 

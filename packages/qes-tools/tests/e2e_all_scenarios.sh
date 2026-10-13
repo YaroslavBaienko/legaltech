@@ -843,10 +843,32 @@ if [[ -f "$PACKAGE_DIR/debian/postinst" ]]; then
     assert_ok "Скрипт debian/postinst містить автоматичне розгортання обох мов меню"
 fi
 
+# ------------------------------------------------------------------------------
+# 51. ТЕСТ: Архівна валідація LTV (PAdES-LTA / CAdES-LTA) та 15_upgrade_ltv.sh
+# ------------------------------------------------------------------------------
+log_test "LTV (PAdES-LTA / CAdES-LTA): доштампування архівних доказів (/DSS) без приватного ключа"
+LTV_PDF="$TEST_DIR/sample_ltv_upgrade.pdf"
+cp "$SIGNED_PDF" "$LTV_PDF"
+
+# Перевірка безпарольного оновлення через qes-tool ltv
+qes-tool ltv --no-tsp "$LTV_PDF"
+v_ltv=$(qes-verify -j "$LTV_PDF")
+has_dss=$(echo "$v_ltv" | jq -r '.[0].has_pdf_dss')
+if [[ "$has_dss" == "true" ]]; then
+    assert_ok "qes-tool ltv успішно вшив словник /DSS (/Certs, /VRI) у підписаний PDF"
+else
+    echo "Помилка LTV /DSS: $v_ltv" >&2; exit 1
+fi
+
+# Перевірка Nautilus скрипта 15_upgrade_ltv.sh
+NAUTILUS_SCRIPT_SELECTED_FILE_PATHS="$LTV_PDF"$'\n'"$SAMPLE_TXT.p7s" bash "$PACKAGE_DIR/nautilus-scripts/15_upgrade_ltv.sh"
+assert_ok "Nautilus скрипт '15_upgrade_ltv.sh' успішно оновив вибрані документи до LTV"
+
 # Очищення тимчасового тестового ключа з ~/.secure_keys
 rm -f "$TEST_LINK" "$TEST_LINK_CER"
 
 echo -e "\n${CLR_BOLD}${CLR_GREEN}==============================================================================${CLR_RESET}"
 echo -e "${CLR_BOLD}${CLR_GREEN} 🎉 ВСІ $PASSED_COUNT ТЕСТІВ ТА СЦЕНАРІЇВ УСПІШНО ПРОЙДЕНО БЕЗ ЖОДНОЇ ПОМИЛКИ!${CLR_RESET}"
 echo -e "${CLR_BOLD}${CLR_GREEN}==============================================================================${CLR_RESET}"
-echo -e "Покриття: 100% CLI утиліт, 100% Nautilus скриптів (16/16), EUSW/PKCS#11, Hardware PAdES/CAdES/ASiC-E/OCR/Vault."
+echo -e "Покриття: 100% CLI утиліт, 100% Nautilus скриптів (17/17), LTV (PAdES-LTA/CAdES-LTA), EUSW/PKCS#11, Hardware PAdES/CAdES/ASiC-E/OCR/Vault."
+

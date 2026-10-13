@@ -175,13 +175,18 @@ ${CLR_BOLD}ПРИКЛАДИ КОМАНД (CLI):${CLR_RESET}
      $ qes-config --lang uk    ${CLR_GRAY}# Меню українською: 🔐 КЕП та Безпека${CLR_RESET}
      $ qes-config --status     ${CLR_GRAY}# Переглянути стан конфігурації${CLR_RESET}
 
+  ${CLR_YELLOW}16. Модернізувати існуючий підпис до архівного формату LTV (PAdES-LTA / 25+ років):${CLR_RESET}
+     $ qes-sign --upgrade-ltv договір_signed.pdf
+     ${CLR_GRAY}# Вшиває словник /DSS (/Certs, /OCSPs, /VRI) без ключа чи пароля${CLR_RESET}
+
 ${CLR_BOLD}ГРАФІЧНИЙ ІНТЕРФЕЙС (ПРАВА КНОПКА МИШІ В GNOME / NAUTILUS):${CLR_RESET}
-  Усі 16 функцій комплексу доступні в 1 клік без термінала:
+  Усі 17 функцій комплексу доступні в 1 клік без термінала:
   Клацніть правою кнопкою миші на файлі ➔ ${CLR_BOLD}Скрипти (Scripts)${CLR_RESET} ➔ ${CLR_CYAN}🔐 КЕП та Безпека${CLR_RESET}.
 
 ${CLR_BOLD}ПРЯМИЙ ВИКЛИК ПІДКОМАНД ЧЕРЕЗ QES-TOOL:${CLR_RESET}
   Ви можете викликати будь-яку утиліту або напряму, або через команду 'qes-tool':
   $ qes-tool sign [опції...]       (еквівалент qes-sign)
+  $ qes-tool ltv [файл...]         (еквівалент qes-sign --upgrade-ltv)
   $ qes-tool verify [файл...]      (еквівалент qes-verify)
   $ qes-tool encrypt [файл...]     (еквівалент qes-encrypt)
   $ qes-tool decrypt [файл.enc]    (еквівалент qes-decrypt)
@@ -285,13 +290,18 @@ ${CLR_BOLD}COMMAND EXAMPLES (CLI):${CLR_RESET}
      $ qes-config --lang uk    ${CLR_GRAY}# Ukrainian menu: 🔐 КЕП та Безпека${CLR_RESET}
      $ qes-config --status     ${CLR_GRAY}# View active language status${CLR_RESET}
 
+  ${CLR_YELLOW}16. Upgrade existing signature to archival LTV (PAdES-LTA / 25+ years):${CLR_RESET}
+     $ qes-sign --upgrade-ltv contract_signed.pdf
+     ${CLR_GRAY}# Embeds /DSS (/Certs, /OCSPs, /VRI) keylessly without password${CLR_RESET}
+
 ${CLR_BOLD}DESKTOP FILE MANAGER (GNOME / NAUTILUS CONTEXT MENU):${CLR_RESET}
-  All 16 tools are available with a single right-click in Nautilus:
+  All 17 tools are available with a single right-click in Nautilus:
   Right-click on any file ➔ ${CLR_BOLD}Scripts${CLR_RESET} ➔ ${CLR_CYAN}🔐 QES & Security${CLR_RESET}.
 
 ${CLR_BOLD}RUNNING SUBCOMMANDS VIA QES-TOOL:${CLR_RESET}
   You can execute any subcommand directly or via 'qes-tool':
   $ qes-tool sign [options...]     (equivalent to qes-sign)
+  $ qes-tool ltv [file...]         (equivalent to qes-sign --upgrade-ltv)
   $ qes-tool verify [file...]      (equivalent to qes-verify)
   $ qes-tool encrypt [file...]     (equivalent to qes-encrypt)
   $ qes-tool decrypt [file.enc]    (equivalent to qes-decrypt)
@@ -411,6 +421,18 @@ case "$ACTION" in
         });
         "
         exit 0
+        ;;
+    ltv|upgrade-ltv)
+        BIN_PATH="$(find_subcommand_binary "qes-sign" || true)"
+        if [[ -z "$BIN_PATH" ]]; then
+            echo -e "${CLR_RED}Помилка: підкоманда 'qes-sign' не знайдена в системі.${CLR_RESET}" >&2
+            exit 1
+        fi
+        if [[ "$BIN_PATH" == *.js ]]; then
+            exec node "$BIN_PATH" --upgrade-ltv "$@"
+        else
+            exec "$BIN_PATH" --upgrade-ltv "$@"
+        fi
         ;;
     sign|verify|encrypt|decrypt|export-cert|cert|agent|config|pdf-court|ocr)
         TARGET_BIN="qes-${ACTION}"

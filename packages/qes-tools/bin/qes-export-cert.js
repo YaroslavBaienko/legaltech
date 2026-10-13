@@ -82,7 +82,8 @@ function askPassword(promptText, forceGui = false) {
       }
 
       // 2. Fallback to Zenity with Papirus Green theme
-      const pangoText = `<span size="larger" weight="bold" color="#2e7d32">${header}</span>\n\n${cleanPrompt}\n<span size="small" color="#666666">${sub}</span>`;
+      const escPango = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const pangoText = `<span size="larger" weight="bold" color="#2e7d32">${escPango(header)}</span>\n\n${escPango(cleanPrompt)}\n<span size="small" color="#666666">${escPango(sub)}</span>`;
       const userCertIcon = path.join(process.env.HOME || '', '.local/share/icons/Papirus/48x48/mimetypes/application-certificate.svg');
       const sysCertIcon = '/usr/share/icons/Papirus/48x48/mimetypes/application-certificate.svg';
       const PAPIRUS_CERT_ICON = fs.existsSync(userCertIcon) ? userCertIcon : (fs.existsSync(sysCertIcon) ? sysCertIcon : null);

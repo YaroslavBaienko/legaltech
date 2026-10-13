@@ -165,9 +165,10 @@ async function chooseSigningMedium(options = {}) {
         ? 'Select Signature Medium — QES Tools'
         : 'Вибір носія особистого ключа — QES Tools';
 
+      const escPango = (s) => String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
       const promptText = lang === 'en'
-        ? `<span size="larger" weight="bold" color="#2e7d32">🔐 Electronic Signature (QES / DSTU 4145)</span>\n\n<b>Object:</b> ${docDesc}\n<span size="small" color="#555555">Select key storage medium to perform digital signing:</span>`
-        : `<span size="larger" weight="bold" color="#2e7d32">🔐 Електронний підпис (КЕП / ДСТУ 4145)</span>\n\n<b>Об'єкт:</b> ${docDesc}\n<span size="small" color="#555555">Оберіть носій особистого ключа для накладання підпису:</span>`;
+        ? `<span size="larger" weight="bold" color="#2e7d32">🔐 Electronic Signature (QES / DSTU 4145)</span>\n\n<b>Object:</b> ${escPango(docDesc)}\n<span size="small" color="#555555">Select key storage medium to perform digital signing:</span>`
+        : `<span size="larger" weight="bold" color="#2e7d32">🔐 Електронний підпис (КЕП / ДСТУ 4145)</span>\n\n<b>Об'єкт:</b> ${escPango(docDesc)}\n<span size="small" color="#555555">Оберіть носій особистого ключа для накладання підпису:</span>`;
 
       const colChoice = lang === 'en' ? 'Select' : 'Вибір';
       const colCode = 'Code';
@@ -487,14 +488,33 @@ async function attachTspToSignature(signatureBuffer, certOrCertPath = null, opti
   }
   msg.addSignatureToken(token);
 
+  let tspDer;
   try {
-    return Buffer.from(msg.as_asn1());
+    tspDer = Buffer.from(msg.as_asn1());
   } catch (err) {
     if (options.verbose) {
       console.warn(`[QES TSP] Не вдалося перекодувати підпис з міткою часу (${err.message})`);
     }
     return signatureBuffer;
   }
+
+  // 6. Attach LTV (Full CA chain + OCSP revocation response) if enabled (CAdES-X-Long / CAdES-LTA)
+  if (options.ltv !== false) {
+    try {
+      const { attachLtvToCms } = require('./ltv');
+      const ltvRes = await attachLtvToCms(tspDer, {
+        ...options,
+        cert,
+      });
+      if (ltvRes && ltvRes.buffer && ltvRes.buffer.length > 0) {
+        return ltvRes.buffer;
+      }
+    } catch (_) {
+      // Graceful fallback to CAdES-T
+    }
+  }
+
+  return tspDer;
 }
 
 /**

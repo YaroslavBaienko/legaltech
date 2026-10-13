@@ -250,6 +250,8 @@ async function signManifestBuffer(box, manifestBuf, options = {}) {
       detached: true,
       tsp: options.tsp !== false ? 'all' : false,
       tspUrl: options.tspUrl,
+      ltv: options.ltv,
+      ocspUrl: options.ocspUrl,
       includeChain: true,
       time: options.time ? Math.floor(new Date(options.time).getTime() / 1000) : undefined,
     };

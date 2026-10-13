@@ -10,6 +10,7 @@ Zero-telemetry / 100% offline-first: preserves legal privilege and attorney-clie
 import argparse
 import base64
 import binascii
+import html
 import json
 import os
 import re
@@ -39,6 +40,11 @@ CLR_YELLOW = "\033[33m"
 CLR_BLUE = "\033[34m"
 CLR_CYAN = "\033[36m"
 CLR_GRAY = "\033[90m"
+
+
+def esc(val: Any) -> str:
+    """Safely escapes any text for Pango/XML markup in Zenity dialogs."""
+    return html.escape(str(val if val is not None else ""), quote=True)
 
 
 def colorize(text: str, color: str, use_color: bool = True) -> str:
@@ -200,16 +206,36 @@ def inspect_p7s(path: str) -> List[Dict[str, Any]]:
     if not certs and all_parsed_certs:
         certs = all_parsed_certs
 
-    # Inspect ASN.1 structure for signingTime and TSP tokens
+    ca_certs = [p for p in all_parsed_certs if p.get("is_ca")]
+
+    # Inspect ASN.1 structure for signingTime, TSP tokens, and LTV attributes (CA chain + OCSP)
     cmd_asn = ["openssl", "asn1parse", "-inform", "DER", "-in", path]
     res_asn = subprocess.run(cmd_asn, capture_output=True, text=True)
 
     signing_time: Optional[str] = None
     has_tsp: bool = False
     tsp_time: Optional[str] = None
+    has_ca_values: bool = False
+    has_ocsp: bool = False
 
     if res_asn.returncode == 0:
-        lines = res_asn.stdout.splitlines()
+        asn_out = res_asn.stdout
+        if (
+            "id-smime-aa-ets-certValues" in asn_out
+            or "1.2.840.113549.1.9.16.2.23" in asn_out
+            or "id-smime-aa-ets-certCRLTimestamp" in asn_out
+            or "1.2.840.113549.1.9.16.2.21" in asn_out
+        ):
+            has_ca_values = True
+        if (
+            "id-smime-aa-ets-revocationValues" in asn_out
+            or "1.2.840.113549.1.9.16.2.24" in asn_out
+            or "id-pkix-ocsp-basic" in asn_out
+            or "1.3.6.1.5.5.7.48.1.1" in asn_out
+        ):
+            has_ocsp = True
+
+        lines = asn_out.splitlines()
         for i, line in enumerate(lines):
             # Signing time
             if "signingTime" in line:
@@ -239,6 +265,15 @@ def inspect_p7s(path: str) -> List[Dict[str, Any]]:
                             except Exception:
                                 tsp_time = raw
 
+    has_ca_chain = bool(len(ca_certs) > 0 or has_ca_values)
+    has_ltv = bool(has_ocsp or (has_tsp and has_ca_chain and has_ca_values))
+    if has_ltv:
+        signature_level = "CAdES-LTA"
+    elif has_tsp:
+        signature_level = "CAdES-T"
+    else:
+        signature_level = "CAdES-BES"
+
     # Check if signature was made within cert validity
     is_valid_at_signing = None
     if signing_time and certs:
@@ -257,6 +292,12 @@ def inspect_p7s(path: str) -> List[Dict[str, Any]]:
         "signing_time": signing_time,
         "has_tsp": has_tsp,
         "tsp_time": tsp_time,
+        "has_ltv": has_ltv,
+        "has_ocsp": has_ocsp,
+        "has_ca_chain": has_ca_chain,
+        "ca_chain_count": len(ca_certs),
+        "has_pdf_dss": False,
+        "signature_level": signature_level,
         "is_valid_at_signing": is_valid_at_signing,
         "signer_certs": certs,
         "signed_files": [],
@@ -356,6 +397,12 @@ def inspect_asice(path: str) -> List[Dict[str, Any]]:
                 "signing_time": signing_time,
                 "has_tsp": has_tsp,
                 "tsp_time": tsp_time,
+                "has_ltv": False,
+                "has_ocsp": False,
+                "has_ca_chain": False,
+                "ca_chain_count": 0,
+                "has_pdf_dss": False,
+                "signature_level": "XAdES-T" if has_tsp else "XAdES-BES",
                 "is_valid_at_signing": is_valid_at_signing,
                 "signer_certs": certs,
                 "signed_files": files,
@@ -387,6 +434,8 @@ def inspect_pades_pdf(path: str) -> List[Dict[str, Any]]:
     if not matches:
         return []
 
+    has_pdf_dss = bool(b"/DSS" in content and (b"/Certs" in content or b"/VRI" in content))
+
     results: List[Dict[str, Any]] = []
     for idx, hex_data in enumerate(matches):
         cleaned_hex = re.sub(rb"\s+", b"", hex_data)
@@ -401,6 +450,14 @@ def inspect_pades_pdf(path: str) -> List[Dict[str, Any]]:
                 for item in sig_res:
                     item["container_format"] = "PAdES (PDF Embedded Signature)"
                     item["file_path"] = path
+                    item["has_pdf_dss"] = has_pdf_dss
+                    if has_pdf_dss or item.get("has_ltv"):
+                        item["has_ltv"] = True
+                        item["signature_level"] = "PAdES-LTA"
+                    elif item.get("has_tsp"):
+                        item["signature_level"] = "PAdES-T"
+                    else:
+                        item["signature_level"] = "PAdES-BES"
                 results.extend(sig_res)
             finally:
                 if os.path.exists(tmp_p7s):
@@ -461,6 +518,26 @@ def print_cli_report(res: Dict[str, Any], use_color: bool = True, sig_index: int
     else:
         no_tsp = "⚠️ No dedicated TSP timestamp (claimed time by client)" if is_en else "⚠️ Відсутня окрема мітка TSP (час заявлено клієнтом)"
         print(f"  {colorize(tsp_label, CLR_BOLD, use_color)} {colorize(no_tsp, CLR_YELLOW, use_color)}")
+
+    # Archival LTV status
+    ltv_label = "Archival LTV status:" if is_en else "Архівна мітка (LTV):"
+    sig_lvl = res.get("signature_level") or ("CAdES-T" if res.get("has_tsp") else "CAdES-BES")
+    if res.get("has_ltv"):
+        dss_tag = " + PDF /DSS" if res.get("has_pdf_dss") else ""
+        ocsp_tag = " + OCSP" if res.get("has_ocsp") else ""
+        ltv_info = (
+            f"🔏 {sig_lvl} (CA Chain{ocsp_tag}{dss_tag} — 25+ years validity)"
+            if is_en
+            else f"🔏 {sig_lvl} (Ланцюжок CA{ocsp_tag}{dss_tag} — чинність 25+ років)"
+        )
+        print(f"  {colorize(ltv_label, CLR_BOLD, use_color)} {colorize(f'✅ {ltv_info}', CLR_GREEN, use_color)}")
+    else:
+        no_ltv = (
+            f"ℹ️ {sig_lvl} (standard signature; upgradeable via qes-sign --upgrade-ltv)"
+            if is_en
+            else f"ℹ️ {sig_lvl} (стандартний підпис; можна модернізувати через qes-sign --upgrade-ltv)"
+        )
+        print(f"  {colorize(ltv_label, CLR_BOLD, use_color)} {colorize(no_ltv, CLR_GRAY, use_color)}")
 
     # Validity at signing
     validity_label = "Validity at signing:" if is_en else "Чинність на момент підпису:"
@@ -549,24 +626,25 @@ def show_help_dialog():
     lang = get_qes_lang()
     if lang == "en":
         help_pango = (
-            "<span size='x-large' weight='bold' color='#1a5fb4'>📖 Help & Instructions: QES / AES Verification</span>\n"
+            "<span size='x-large' weight='bold' color='#1a5fb4'>📖 Help &amp; Instructions: QES / AES Verification</span>\n"
             "<span size='small' color='#666666'>Offline-first signature validator for DSTU 4145, CAdES, PAdES, ASiC-E</span>\n\n"
             "<b>1. SUPPORTED FORMATS:</b>\n"
             "• <b>PAdES (.pdf):</b> embedded signatures in court rulings, contracts, and applications.\n"
             "• <b>ASiC-E (.asice):</b> European container archives bundling signed document packages.\n"
             "• <b>CAdES / PKCS#7 (.p7s):</b> detached signatures (Diia, M.E.Doc, Vchasno).\n"
-            "• <b>Certificates (.cer, .crt, .p7b):</b> automatically inspected via <code>qes-cert</code>.\n\n"
+            "• <b>Certificates (.cer, .crt, .p7b):</b> automatically inspected via <tt>qes-cert</tt>.\n\n"
             "<b>2. VERIFICATION STATUSES:</b>\n"
             "• <span color='#1e7e34'><b>✅ SIGNATURE VALID:</b></span> mathematically valid, integrity confirmed.\n"
             "• <span color='#d9534f'><b>❌ INVALID:</b></span> document altered after signing or corrupted.\n"
-            "• <b>🕒 TSP Stamp:</b> cryptographic timestamp from accredited time-stamping authority.\n\n"
+            "• <b>🕒 TSP Stamp:</b> cryptographic timestamp from accredited time-stamping authority.\n"
+            "• <b>🔏 Archival LTV (PAdES-LTA / CAdES-X-Long):</b> embedded CA chain, OCSP &amp; PDF /DSS for 25+ years validity.\n\n"
             "<b>3. CLI COMMANDS:</b>\n"
-            "• <code>qes-verify document_signed.pdf</code> — verify PDF with stamp\n"
-            "• <code>qes-verify doc.pdf doc.pdf.p7s</code> — verify matching detached signature\n"
-            "• <code>qes-verify package.asice</code> — verify ASiC-E archive integrity\n"
-            "• <code>qes-verify -x /folder package.asice</code> — extract original documents\n"
-            "• <code>qes-verify cert.cer</code> — inspect signer certificate details\n"
-            "• <code>qes-verify --json file.pdf</code> — machine-readable JSON output\n"
+            "• <tt>qes-verify document_signed.pdf</tt> — verify PDF with stamp\n"
+            "• <tt>qes-verify doc.pdf doc.pdf.p7s</tt> — verify matching detached signature\n"
+            "• <tt>qes-verify package.asice</tt> — verify ASiC-E archive integrity\n"
+            "• <tt>qes-verify -x /folder package.asice</tt> — extract original documents\n"
+            "• <tt>qes-verify cert.cer</tt> — inspect signer certificate details\n"
+            "• <tt>qes-verify --json file.pdf</tt> — machine-readable JSON output\n"
         )
         title = "Help — qes-verify"
         btn = "Understood"
@@ -578,18 +656,19 @@ def show_help_dialog():
             "• <b>PAdES (.pdf):</b> вбудовані підписи в судових рішеннях, договорах, заявах.\n"
             "• <b>ASiC-E (.asice):</b> європейські контейнери архівів із пакетами підписаних файлів.\n"
             "• <b>CAdES / PKCS#7 (.p7s):</b> класичні відокремлені підписи (Дія, M.E.Doc, Вчасно).\n"
-            "• <b>Сертифікати (.cer, .crt, .p7b):</b> автоматично відкриваються в інспекторі <code>qes-cert</code>.\n\n"
+            "• <b>Сертифікати (.cer, .crt, .p7b):</b> автоматично відкриваються в інспекторі <tt>qes-cert</tt>.\n\n"
             "<b>2. СТАТУСИ ПЕРЕВІРКИ:</b>\n"
             "• <span color='#1e7e34'><b>✅ КЕП ДІЙСНИЙ:</b></span> підпис математично валідний, цілісність підтверджена.\n"
             "• <span color='#d9534f'><b>❌ НЕВАЛІДНИЙ:</b></span> документ змінено після підписання або пошкоджено.\n"
-            "• <b>🕒 Мітка TSP:</b> підтвердження точного астрономічного часу від акредитованого сервера.\n\n"
+            "• <b>🕒 Мітка TSP:</b> підтвердження точного астрономічного часу від акредитованого сервера.\n"
+            "• <b>🔏 Архівна мітка LTV (PAdES-LTA / CAdES-X-Long):</b> вбудований ланцюжок ЦСК, OCSP та PDF /DSS для чинності 25+ років.\n\n"
             "<b>3. КОМАНДИ ТЕРМІНАЛА:</b>\n"
-            "• <code>qes-verify document_signed.pdf</code> — перевірка PDF зі штампом\n"
-            "• <code>qes-verify doc.pdf doc.pdf.p7s</code> — перевірка відповідності оригіналу та підпису\n"
-            "• <code>qes-verify package.asice</code> — перевірка цілісності архіву ASiC-E\n"
-            "• <code>qes-verify -x /папка package.asice</code> — видобування оригінальних документів\n"
-            "• <code>qes-verify cert.cer</code> — перегляд реквізитів сертифіката підписувача\n"
-            "• <code>qes-verify --json file.pdf</code> — машинний вивід для скриптів\n"
+            "• <tt>qes-verify document_signed.pdf</tt> — перевірка PDF зі штампом\n"
+            "• <tt>qes-verify doc.pdf doc.pdf.p7s</tt> — перевірка відповідності оригіналу та підпису\n"
+            "• <tt>qes-verify package.asice</tt> — перевірка цілісності архіву ASiC-E\n"
+            "• <tt>qes-verify -x /папка package.asice</tt> — видобування оригінальних документів\n"
+            "• <tt>qes-verify cert.cer</tt> — перегляд реквізитів сертифіката підписувача\n"
+            "• <tt>qes-verify --json file.pdf</tt> — машинний вивід для скриптів\n"
         )
         title = "Довідка — qes-verify"
         btn = "Зрозуміло"
@@ -609,7 +688,7 @@ def show_gui_report(results: List[Dict[str, Any]], file_path: str):
 
     if not results:
         w_title = "QES Verification" if is_en else "Перевірка КЕП"
-        w_text = f"⚠️ No electronic signatures found in file <b>{os.path.basename(file_path)}</b>." if is_en else f"⚠️ У файлі <b>{os.path.basename(file_path)}</b> не виявлено електронного підпису."
+        w_text = f"⚠️ No electronic signatures found in file <b>{esc(os.path.basename(file_path))}</b>." if is_en else f"⚠️ У файлі <b>{esc(os.path.basename(file_path))}</b> не виявлено електронного підпису."
         subprocess.run(["zenity", "--warning", f"--title={w_title}", f"--text={w_text}"])
         return
 
@@ -626,8 +705,8 @@ def show_gui_report(results: List[Dict[str, Any]], file_path: str):
     status_color = "#1e7e34" if is_valid else "#d9534f"
 
     lines = []
-    lines.append(f"<span size='x-large' weight='bold' color='{status_color}'>{status_title}</span>\n")
-    lines.append(f"<b>{'File' if is_en else 'Файл'}:</b> {os.path.basename(file_path)}")
+    lines.append(f"<span size='x-large' weight='bold' color='{status_color}'>{esc(status_title)}</span>\n")
+    lines.append(f"<b>{'File' if is_en else 'Файл'}:</b> {esc(os.path.basename(file_path))}")
 
     is_asice = False
     asice_files = []
@@ -635,21 +714,28 @@ def show_gui_report(results: List[Dict[str, Any]], file_path: str):
     for r_idx, res in enumerate(results, 1):
         c_fmt = res.get('container_format', 'QES' if is_en else 'КЕП')
         if len(results) > 1:
-            hdr = f"── Signature #{r_idx}: {c_fmt} ──" if is_en else f"── Підпис #{r_idx}: {c_fmt} ──"
+            hdr = f"── Signature #{r_idx}: {esc(c_fmt)} ──" if is_en else f"── Підпис #{r_idx}: {esc(c_fmt)} ──"
             lines.append(f"\n<b>{hdr}</b>")
         else:
             lbl = "Format" if is_en else "Формат"
-            lines.append(f"<b>{lbl}:</b> {c_fmt}")
+            lines.append(f"<b>{lbl}:</b> {esc(c_fmt)}")
 
         st = format_iso_time(res.get("signing_time"))
-        lines.append(f"<b>{'Signing Time' if is_en else 'Час підписання'}:</b> {st}")
+        lines.append(f"<b>{'Signing Time' if is_en else 'Час підписання'}:</b> {esc(st)}")
 
         if res.get("has_tsp"):
             tsp_str = format_iso_time(res.get("tsp_time"))
             sub = "Certified by TSP" if is_en else "Підтверджено КНЕДП"
-            lines.append(f"<b>{'Timestamp (TSP)' if is_en else 'Позначка часу (TSP)'}:</b> <span color='#1e7e34'>🕒 {tsp_str} ({sub})</span>")
+            lines.append(f"<b>{'Timestamp (TSP)' if is_en else 'Позначка часу (TSP)'}:</b> <span color='#1e7e34'>🕒 {esc(tsp_str)} ({esc(sub)})</span>")
         else:
             lines.append(f"<b>{'Timestamp (TSP)' if is_en else 'Позначка часу (TSP)'}:</b> ⚠️ {'No standalone TSP timestamp' if is_en else 'Відсутня окрема мітка TSP'}")
+
+        sig_lvl = res.get("signature_level") or ("CAdES-T" if res.get("has_tsp") else "CAdES-BES")
+        if res.get("has_ltv"):
+            ltv_desc = f"🔏 {esc(sig_lvl)} (Archival 25+ years)" if is_en else f"🔏 {esc(sig_lvl)} (Архівне зберігання 25+ років)"
+            lines.append(f"<b>{'Archival LTV' if is_en else 'Архівна мітка (LTV)'}:</b> <span color='#1e7e34'>{ltv_desc}</span>")
+        else:
+            lines.append(f"<b>{'Archival LTV' if is_en else 'Архівна мітка (LTV)'}:</b> {esc(sig_lvl)}")
 
         if res.get("manifest_verified") is True:
             m_ok = "✅ All files match checksums" if is_en else "✅ Усі файли відповідають контрольним сумам"
@@ -664,7 +750,7 @@ def show_gui_report(results: List[Dict[str, Any]], file_path: str):
             s_hdr = f"Signed files ({len(asice_files)}):" if is_en else f"Підписані файли ({len(asice_files)}):"
             lines.append(f"\n<b>📦 {s_hdr}</b>")
             for sf in asice_files:
-                lines.append(f"  • {sf}")
+                lines.append(f"  • {esc(sf)}")
 
         certs = res.get("signer_certs", [])
         for c_idx, c in enumerate(certs, 1):
@@ -685,18 +771,18 @@ def show_gui_report(results: List[Dict[str, Any]], file_path: str):
             else:
                 lines.append("")
 
-            lines.append(f"<b>{'Signer' if is_en else 'Підписувач'}:</b> {full_name}")
-            lines.append(f"<b>{'Tax ID (RNOKPP)' if is_en else 'РНОКПП (ІПН)'}:</b> {drfo}")
+            lines.append(f"<b>{'Signer' if is_en else 'Підписувач'}:</b> {esc(full_name)}")
+            lines.append(f"<b>{'Tax ID (RNOKPP)' if is_en else 'РНОКПП (ІПН)'}:</b> {esc(drfo)}")
             if subj.get("organization") and subj.get("organization") != "ФІЗИЧНА ОСОБА":
-                lines.append(f"<b>{'Organization' if is_en else 'Організація'}:</b> {subj.get('organization')}")
+                lines.append(f"<b>{'Organization' if is_en else 'Організація'}:</b> {esc(subj.get('organization'))}")
             if subj.get("edrpou"):
-                lines.append(f"<b>{'USREOU' if is_en else 'ЄДРПОУ'}:</b> {subj.get('edrpou')}")
-            lines.append(f"<b>{'CA (TSP)' if is_en else 'КНЕДП (АЦСК)'}:</b> {ca_name}")
-            lines.append(f"<b>{'Signature type' if is_en else 'Тип підпису'}:</b> {q_type}")
+                lines.append(f"<b>{'USREOU' if is_en else 'ЄДРПОУ'}:</b> {esc(subj.get('edrpou'))}")
+            lines.append(f"<b>{'CA (TSP)' if is_en else 'КНЕДП (АЦСК)'}:</b> {esc(ca_name)}")
+            lines.append(f"<b>{'Signature type' if is_en else 'Тип підпису'}:</b> {esc(q_type)}")
 
             val_from = format_iso_time(c.get("valid_from"))
             val_to = format_iso_time(c.get("valid_to"))
-            lines.append(f"<b>{'Certificate validity' if is_en else 'Дія сертифіката'}:</b> {'from' if is_en else 'з'} {val_from} {'to' if is_en else 'до'} {val_to}")
+            lines.append(f"<b>{'Certificate validity' if is_en else 'Дія сертифіката'}:</b> {'from' if is_en else 'з'} {esc(val_from)} {'to' if is_en else 'до'} {esc(val_to)}")
 
     pango_text = "\n".join(lines)
 
@@ -788,7 +874,7 @@ def delegate_to_qes_cert(file_path: str, args: argparse.Namespace) -> int:
 
 def main():
     is_en = (get_qes_lang() == "en")
-    ver_str = "1.0.22"
+    ver_str = "1.0.23"
     parser = argparse.ArgumentParser(
         description=f"""================================================================================
   qes-verify — {"Ukrainian & EU QES/AES validator (.p7s, .asice, .pdf)" if is_en else "автономний валідатор КЕП/УЕП (.p7s, .asice, .pdf)"}

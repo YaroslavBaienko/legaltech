@@ -1026,7 +1026,7 @@ test('i18n priority engine correctly handles ~/.config/qes/config.json override 
   }
 });
 
-test('Nautilus integration completeness: all 16 scripts exist in both languages and pass syntax checks', () => {
+test('Nautilus integration completeness: all 17 scripts exist in both languages and pass syntax checks', () => {
   const scriptsDir = path.join(__dirname, '..', 'nautilus-scripts');
   assert.strictEqual(fs.existsSync(scriptsDir), true);
 
@@ -1047,6 +1047,7 @@ test('Nautilus integration completeness: all 16 scripts exist in both languages 
     '12_ocr_court.sh',
     '13_view_cert.sh',
     '14_ocr_english.sh',
+    '15_upgrade_ltv.sh',
     '_i18n.sh',
   ];
 
@@ -1125,6 +1126,98 @@ test('qes-export-cert CLI prints help and documentation', () => {
   assert.match(res.stdout, /--key/);
 });
 
+test('Zenity Pango markup validation across qes-cert and qes-verify GUI dialogs (EN & UK)', () => {
+  const pyCode = `
+import glob, importlib.util, importlib.machinery, subprocess
+import xml.etree.ElementTree as ET
 
+try:
+    import gi
+    gi.require_version("Pango", "1.0")
+    from gi.repository import Pango
+    HAS_GI_PANGO = True
+except Exception:
+    HAS_GI_PANGO = False
 
+VALID_PANGO_TAGS = {"root", "b", "i", "u", "s", "sub", "sup", "small", "big", "tt", "span"}
+
+def validate_pango_markup(txt):
+    root = ET.fromstring(f"<root>{txt}</root>")
+    for elem in root.iter():
+        if elem.tag not in VALID_PANGO_TAGS:
+            raise ValueError(f"Unsupported Pango tag <{elem.tag}> in Zenity markup")
+    if HAS_GI_PANGO:
+        Pango.parse_markup(txt, -1, "\\x00")
+
+def load_mod(name, path):
+    loader = importlib.machinery.SourceFileLoader(name, path)
+    spec = importlib.util.spec_from_loader(name, loader)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+cert_mod = load_mod("qes_cert", "bin/qes-cert")
+ver_mod = load_mod("qes_verify", "bin/qes-verify")
+
+checked = 0
+orig_run = subprocess.run
+def mock_run(cmd, *args, **kwargs):
+    global checked
+    if cmd and cmd[0] == "zenity" and "--no-markup" not in cmd:
+        for arg in cmd:
+            if arg.startswith("--text="):
+                txt = arg[len("--text="):]
+                validate_pango_markup(txt)
+                checked += 1
+        class Dummy:
+            returncode = 0
+            stdout = ""
+        return Dummy()
+    return orig_run(cmd, *args, **kwargs)
+
+subprocess.run = mock_run
+
+sample_certs = glob.glob("certs/*.p7b") + glob.glob("node_modules/jkurwa/test/data/*.cer")
+assert len(sample_certs) > 0, "Expected sample certificates for Pango test"
+
+for lang in ["en", "uk"]:
+    cert_mod.get_qes_lang = lambda l=lang: l
+    ver_mod.get_qes_lang = lambda l=lang: l
+    cert_mod.show_cert_help_dialog()
+    ver_mod.show_help_dialog()
+    ver_mod.show_gui_report([], "/tmp/Test & <Doc>.pdf")
+
+    certs = cert_mod.load_certificates_from_file(sample_certs[0])
+    data = [cert_mod.inspect_certificate(certs[0], sample_certs[0])]
+    data[0]["subject"]["organization"] = "AT&T <Legal> & Co."
+    cert_mod.show_gui_dialog(data, "/tmp/Cert & <KEP>.cer")
+
+    ver_mod.show_gui_report([{
+        "container_format": "PAdES & LTV",
+        "signing_time": "2026-10-13T18:00:00Z",
+        "has_tsp": True,
+        "tsp_time": "2026-10-13T18:00:01Z",
+        "has_ltv": True,
+        "signature_level": "PAdES-LTA",
+        "is_valid_at_signing": True,
+        "manifest_verified": True,
+        "signed_files": ["contract & appendix <1>.pdf"],
+        "signer_certs": [{
+            "is_qes": True,
+            "valid_from": "2025-01-01T00:00:00Z",
+            "valid_to": "2027-01-01T00:00:00Z",
+            "subject": {"cn": "Баєнко Ярослав & Партнери", "drfo": "3255419579", "organization": "GOLAW & Co <Litigation>", "edrpou": "12345678"},
+            "issuer": {"cn": "КНЕДП ТОВ \\"ДЕПОЗИТ САЙН\\" & Co"}
+        }]
+    }], "/tmp/Signed & <Verified>.pdf")
+
+print(f"PANGO_OK:{checked}")
+`;
+  const res = spawnSync('python3', ['-c', pyCode], {
+    cwd: path.join(__dirname, '..'),
+    encoding: 'utf-8',
+  });
+  assert.strictEqual(res.status, 0, `Pango markup check failed: ${res.stderr}`);
+  assert.match(res.stdout, /PANGO_OK:10/);
+});
 

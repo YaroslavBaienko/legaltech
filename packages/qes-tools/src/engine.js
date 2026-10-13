@@ -30,6 +30,17 @@ class QESEngine {
   }
 
   /**
+   * Creates a jkurwa Box initialized with the national CA bundle and HTTP adapter.
+   */
+  createBox() {
+    return new jk.Box({
+      algo: this.algo,
+      query: queryAdapter,
+      casBuffer: this.casBuffer,
+    });
+  }
+
+  /**
    * Decrypts PKCS#12 container and initializes jkurwa Box.
    */
   async initBox(pfxPath, password, certPath = null) {
@@ -38,11 +49,7 @@ class QESEngine {
     }
 
     const pfxBuffer = fs.readFileSync(pfxPath);
-    const box = new jk.Box({
-      algo: this.algo,
-      query: queryAdapter,
-      casBuffer: this.casBuffer,
-    });
+    const box = this.createBox();
 
     // Attempt decryption
     let store;
@@ -234,6 +241,8 @@ class QESEngine {
       detached: !existingParsed.content.contentInfo?.content,
       tsp: options.tsp !== false ? 'all' : false,
       tspUrl: options.tspUrl,
+      ltv: options.ltv,
+      ocspUrl: options.ocspUrl,
       includeChain: true,
       time: options.time ? Math.floor(new Date(options.time).getTime() / 1000) : undefined,
     };
@@ -306,6 +315,8 @@ class QESEngine {
       detached: options.detached !== false,
       tsp: options.tsp !== false ? 'all' : false,
       tspUrl: options.tspUrl,
+      ltv: options.ltv,
+      ocspUrl: options.ocspUrl,
       includeChain: true,
       time: options.time ? Math.floor(new Date(options.time).getTime() / 1000) : undefined,
     };

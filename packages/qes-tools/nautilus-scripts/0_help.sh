@@ -88,6 +88,14 @@ Right-click on file(s) ➔ Scripts ➔ 🔐 QES & Security.
     European ETSI TS 102 918 ZIP archive with signatures for all items.
   - CLI: qes-sign --asice file1.pdf file2.xlsx -o bundle.asice
 
+• Archival LTV Upgrade (PAdES-LTA / CAdES-LTA — 25+ Years Validity):
+  - Nautilus: «🔏 Upgrade to Archival LTV (PAdES-LTA / 25 Years)»
+  - Description: Automatically embeds the full CA certificate chain and OCSP
+    revocation status (plus PDF /DSS dictionary) into any signed document
+    without needing a private key or password. Note: new signatures embed LTV
+    automatically during signing!
+  - CLI: qes-sign --upgrade-ltv document_signed.pdf
+
 ================================================================================
 2. VERIFYING SIGNATURES & INSPECTING CERTIFICATES
 ================================================================================
@@ -233,6 +241,13 @@ QES Tools — це автономний комплекс для роботи з 
   - Опис: Об'єднує виділені файли або папку у стандартизований європейський
     архів ETSI TS 102 918 з підписами всіх файлів.
   - Термінал: qes-sign --asice file1.pdf file2.xlsx -o bundle.asice
+
+• Архівна мітка LTV (PAdES-LTA / CAdES-LTA — чинність 25+ років):
+  - Меню Nautilus: «🔏 Додати архівну мітку LTV (PAdES-LTA / 25 років)»
+  - Опис: Автоматично вшиває у підписаний документ повний ланцюжок сертифікатів
+    КНЕДП/ЦЗО та статус OCSP (і словник PDF /DSS) без потреби у ключі чи паролі.
+    При новому підписанні LTV вбудовується автоматично!
+  - Термінал: qes-sign --upgrade-ltv document_signed.pdf
 
 ================================================================================
 2. ПЕРЕВІРКА ПІДПИСІВ ТА СЕРТИФІКАТІВ
