@@ -102,10 +102,18 @@ Right-click on file(s) ➔ Scripts ➔ 🔐 QES & Security.
 • Verify QES Signature:
   - Nautilus: «🔍 Verify QES Signature»
   - Description: Validates signature validity, mathematical integrity, signer
-    identity (Name, Tax ID / USREOU), and TSP timestamp. For ASiC-E containers,
-    provides a 1-click «Extract Documents» button.
+    identity (Name, Tax ID / USREOU), TSP timestamp, and full CA Trust Chain
+    (Signer ➔ QTSP / CA ➔ Root CA / CZO). Includes a 1-click «📄 Save PDF Protocol»
+    button and «Extract Documents» for ASiC-E containers.
   - CLI: qes-verify document_signed.pdf
          qes-verify bundle.asice
+
+• Generate PDF Verification & Certificate Chain Protocol:
+  - Nautilus: «📄 Generate PDF Verification Protocol»
+  - Description: Generates a standalone, print-ready official PDF verification
+    protocol (<file>_protocol.pdf) containing the SHA-256 document hash, signer
+    details, TSP/LTV status, and the full cryptographic certificate trust chain.
+  - CLI: qes-verify --protocol document_signed.pdf
 
 • View CA Certificate Details:
   - Nautilus: «📜 View CA Certificate Details»
@@ -255,10 +263,18 @@ QES Tools — це автономний комплекс для роботи з 
 • Перевірка підпису КЕП:
   - Меню Nautilus: «🔍 Перевірити підпис КЕП»
   - Опис: Перевіряє чинність підпису, математичну цілісність, ПІБ підписувачів,
-    РНОКПП, мітку точного часу TSP. Кнопка «Видобути документи» дозволяє
-    дістати файли з архіву ASiC-E в 1 клік.
+    РНОКПП, мітку точного часу TSP та повний ланцюг довіри сертифікатів
+    (Підписувач ➔ КНЕДП ➔ ЦЗО). Містить кнопки «📄 Зберегти PDF-протокол» та
+    «Видобути документи» (для архівів ASiC-E).
   - Термінал: qes-verify document_signed.pdf
               qes-verify bundle.asice
+
+• Офіційний PDF-протокол перевірки КЕП та ланцюга сертифікатів:
+  - Меню Nautilus: «📄 Сформувати PDF-протокол перевірки КЕП»
+  - Опис: Формує окремий векторний PDF-протокол (<файл>_protocol.pdf) для суду
+    або аудиту з SHA-256 гешем документа, реквізитами підписувача, міткою TSP/LTV
+    та таблицею повного ланцюга сертифікатів (Підписувач ➔ КНЕДП ➔ ЦЗО).
+  - Термінал: qes-verify --protocol document_signed.pdf
 
 • Перегляд сертифіката КНЕДП:
   - Меню Nautilus: «📜 Переглянути сертифікат КНЕДП»

@@ -864,11 +864,35 @@ fi
 NAUTILUS_SCRIPT_SELECTED_FILE_PATHS="$LTV_PDF"$'\n'"$SAMPLE_TXT.p7s" bash "$PACKAGE_DIR/nautilus-scripts/15_upgrade_ltv.sh"
 assert_ok "Nautilus скрипт '15_upgrade_ltv.sh' успішно оновив вибрані документи до LTV"
 
+# ------------------------------------------------------------------------------
+# 52. ТЕСТ: Офіційний PDF-протокол перевірки КЕП та ланцюга сертифікатів (16_pdf_protocol.sh)
+# ------------------------------------------------------------------------------
+log_test "PDF Protocol & Trust Chain: генерація офіційного PDF-протоколу (<file>_protocol.pdf)"
+
+# 52a. Перевірка генерації через qes-tool protocol
+PROTOCOL_OUT="$TEST_DIR/custom_verification_protocol.pdf"
+qes-tool protocol -o "$PROTOCOL_OUT" "$LTV_PDF"
+assert_file_exists "$PROTOCOL_OUT" "Офіційний PDF-протокол перевірки КЕП (qes-tool protocol)"
+
+# 52b. Перевірка наявності ланцюга сертифікатів (cert_chain) та SHA-256 у JSON-виводі qes-verify
+chain_len=$(qes-verify -j "$LTV_PDF" | jq '.[0].cert_chain | length')
+doc_sha=$(qes-verify -j "$LTV_PDF" | jq -r '.[0].file_sha256')
+if [ "$chain_len" -ge 1 ] && [ "${#doc_sha}" -eq 64 ]; then
+    assert_ok "qes-verify побудував ланцюг сертифікатів (рівнів: $chain_len) та обчислив SHA-256 документа"
+else
+    echo "Помилка побудови cert_chain або file_sha256: chain_len=$chain_len, sha=$doc_sha" >&2; exit 1
+fi
+
+# 52c. Перевірка Nautilus скрипта 16_pdf_protocol.sh
+DISPLAY="" WAYLAND_DISPLAY="" NAUTILUS_SCRIPT_SELECTED_FILE_PATHS="$LTV_PDF" bash "$PACKAGE_DIR/nautilus-scripts/16_pdf_protocol.sh"
+assert_file_exists "${LTV_PDF%.*}_protocol.pdf" "Nautilus PDF-протокол (${LTV_PDF%.*}_protocol.pdf)"
+assert_ok "Nautilus скрипт '16_pdf_protocol.sh' успішно створив офіційний PDF-протокол"
+
 # Очищення тимчасового тестового ключа з ~/.secure_keys
 rm -f "$TEST_LINK" "$TEST_LINK_CER"
 
 echo -e "\n${CLR_BOLD}${CLR_GREEN}==============================================================================${CLR_RESET}"
 echo -e "${CLR_BOLD}${CLR_GREEN} 🎉 ВСІ $PASSED_COUNT ТЕСТІВ ТА СЦЕНАРІЇВ УСПІШНО ПРОЙДЕНО БЕЗ ЖОДНОЇ ПОМИЛКИ!${CLR_RESET}"
 echo -e "${CLR_BOLD}${CLR_GREEN}==============================================================================${CLR_RESET}"
-echo -e "Покриття: 100% CLI утиліт, 100% Nautilus скриптів (17/17), LTV (PAdES-LTA/CAdES-LTA), EUSW/PKCS#11, Hardware PAdES/CAdES/ASiC-E/OCR/Vault."
+echo -e "Покриття: 100% CLI утиліт, 100% Nautilus скриптів (18/18), LTV (PAdES-LTA/CAdES-LTA), PDF Protocol, EUSW/PKCS#11, Hardware PAdES/CAdES/ASiC-E/OCR/Vault."
 

@@ -1026,7 +1026,7 @@ test('i18n priority engine correctly handles ~/.config/qes/config.json override 
   }
 });
 
-test('Nautilus integration completeness: all 17 scripts exist in both languages and pass syntax checks', () => {
+test('Nautilus integration completeness: all 18 scripts exist in both languages and pass syntax checks', () => {
   const scriptsDir = path.join(__dirname, '..', 'nautilus-scripts');
   assert.strictEqual(fs.existsSync(scriptsDir), true);
 
@@ -1048,6 +1048,7 @@ test('Nautilus integration completeness: all 17 scripts exist in both languages 
     '13_view_cert.sh',
     '14_ocr_english.sh',
     '15_upgrade_ltv.sh',
+    '16_pdf_protocol.sh',
     '_i18n.sh',
   ];
 
@@ -1066,7 +1067,7 @@ test('Nautilus integration completeness: all 17 scripts exist in both languages 
   }
 });
 
-test('qes-config status and help output format properly', () => {
+test('qes-config status, help, and categorized GNOME HIG menu layout without duplicates', () => {
   const configBin = path.join(__dirname, '..', 'bin', 'qes-config');
   const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'qes-status-test-'));
 
@@ -1092,6 +1093,22 @@ test('qes-config status and help output format properly', () => {
     assert.match(helpRes.stdout, /qes-config — Керування конфігурацією/);
     assert.match(helpRes.stdout, /--lang/);
     assert.match(helpRes.stdout, /--all-users/);
+
+    // Deploy categorized EN menu and verify zero loose scripts in root & zero duplicates
+    const deployEn = spawnSync('bash', [configBin, '--lang', 'en', '--layout', 'categorized'], { encoding: 'utf-8', env });
+    assert.strictEqual(deployEn.status, 0);
+    const enMenuRoot = path.join(fakeHome, '.local', 'share', 'nautilus', 'scripts', '🔐 QES & Security');
+    const rootEntries = fs.readdirSync(enMenuRoot).filter((e) => !e.startsWith('.'));
+    for (const entry of rootEntries) {
+      const st = fs.statSync(path.join(enMenuRoot, entry));
+      assert.strictEqual(st.isDirectory(), true, `Root of categorized menu must only contain category folders, found file: ${entry}`);
+    }
+    assert.strictEqual(rootEntries.length, 5, 'Must have exactly 5 GNOME HIG category folders');
+    const signingItems = fs.readdirSync(path.join(enMenuRoot, '✍️ Signing')).filter((e) => !e.startsWith('.'));
+    const verifyItems = fs.readdirSync(path.join(enMenuRoot, '🔍 Verification & Certificates')).filter((e) => !e.startsWith('.'));
+    assert.strictEqual(signingItems.some((i) => i.includes('LTV')), false, 'LTV upgrade must NOT be duplicated in Signing category');
+    assert.strictEqual(verifyItems.some((i) => i.includes('LTV')), true, 'LTV upgrade must be in Verification & Certificates');
+    assert.strictEqual(verifyItems.some((i) => i.includes('PDF Verification Protocol')), true, 'PDF Protocol must be in Verification & Certificates');
   } finally {
     try { fs.rmSync(tmpRoot, { recursive: true, force: true }); } catch (_) {}
   }
@@ -1202,6 +1219,11 @@ for lang in ["en", "uk"]:
         "is_valid_at_signing": True,
         "manifest_verified": True,
         "signed_files": ["contract & appendix <1>.pdf"],
+        "cert_chain": [
+            {"level": 1, "role_uk": "Сертифікат підписувача", "role_en": "Signer Certificate", "cn": "Баєнко Ярослав & Партнери", "serial": "6FA97849", "valid_to": "2027-01-01T00:00:00Z"},
+            {"level": 2, "role_uk": "Акредитований КНЕДП (ЦСК)", "role_en": "Accredited QTSP / CA", "cn": "КНЕДП ТОВ \\"ДЕПОЗИТ САЙН\\" & Co", "serial": "3997E39F", "valid_to": "2028-01-01T00:00:00Z"},
+            {"level": 3, "role_uk": "Кореневий ЦСК / ЦЗО", "role_en": "Root CA / Central Certifying Authority (CZO)", "cn": "Засвідчувальний центр", "serial": "5ACBAE0E", "valid_to": "2033-01-01T00:00:00Z"}
+        ],
         "signer_certs": [{
             "is_qes": True,
             "valid_from": "2025-01-01T00:00:00Z",

@@ -10,6 +10,7 @@ Zero-telemetry / 100% offline-first: preserves legal privilege and attorney-clie
 import argparse
 import base64
 import binascii
+import hashlib
 import html
 import json
 import os
@@ -17,11 +18,16 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
+import warnings
 import zipfile
+import zlib
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+
+warnings.filterwarnings("ignore", category=UserWarning)
 
 try:
     from cryptography import x509
@@ -182,6 +188,154 @@ def parse_x509_cert(cert_obj: x509.Certificate) -> Dict[str, Any]:
     }
 
 
+_RAW_CA_CERTS_CACHE: Optional[List[bytes]] = None
+
+
+def _get_national_ca_der_slices() -> List[bytes]:
+    global _RAW_CA_CERTS_CACHE
+    if _RAW_CA_CERTS_CACHE is not None:
+        return _RAW_CA_CERTS_CACHE
+    candidates = [
+        Path(__file__).resolve().parent.parent / "certs" / "ua-all-cas.p7b",
+        Path("/usr/lib/qes-tools/certs/ua-all-cas.p7b"),
+    ]
+    raw = b""
+    for c_path in candidates:
+        if c_path.is_file():
+            try:
+                raw = c_path.read_bytes()
+                break
+            except Exception:
+                pass
+    slices: List[bytes] = []
+    i = 0
+    n = len(raw)
+    while i < n - 6:
+        if raw[i] == 0x30 and raw[i + 1] == 0x82 and raw[i + 4] == 0x30 and raw[i + 5] == 0x82:
+            length = (raw[i + 2] << 8) | raw[i + 3]
+            total = length + 4
+            if 200 <= total <= 4096 and i + total <= n:
+                slices.append(raw[i : i + total])
+                i += total
+                continue
+        i += 1
+    _RAW_CA_CERTS_CACHE = slices
+    return slices
+
+
+def scan_der_certs_in_bytes(buf: bytes) -> List[Dict[str, Any]]:
+    found: List[Dict[str, Any]] = []
+    seen_fp = set()
+    i = 0
+    n = len(buf)
+    while i < n - 6:
+        if buf[i] == 0x30 and buf[i + 1] == 0x82 and buf[i + 4] == 0x30 and buf[i + 5] == 0x82:
+            length = (buf[i + 2] << 8) | raw_len_low if False else ((buf[i + 2] << 8) | buf[i + 3])
+            total = length + 4
+            if 200 <= total <= 4096 and i + total <= n:
+                try:
+                    c_obj = x509.load_der_x509_certificate(buf[i : i + total], default_backend())
+                    parsed = parse_x509_cert(c_obj)
+                    fp = parsed.get("fingerprint_sha256")
+                    if fp and fp not in seen_fp:
+                        seen_fp.add(fp)
+                        found.append(parsed)
+                    i += total
+                    continue
+                except Exception:
+                    pass
+        i += 1
+    return found
+
+
+def compute_file_digest(path: str) -> Tuple[str, int]:
+    try:
+        data = Path(path).read_bytes()
+        return hashlib.sha256(data).hexdigest().upper(), len(data)
+    except Exception:
+        return "", 0
+
+
+def resolve_trust_chain(
+    signer_certs: List[Dict[str, Any]],
+    embedded_ca_certs: List[Dict[str, Any]],
+    has_ltv: bool = False,
+) -> List[Dict[str, Any]]:
+    chain: List[Dict[str, Any]] = []
+    seen_fp = set()
+
+    if not signer_certs:
+        return chain
+
+    primary_signer = dict(signer_certs[0])
+    primary_signer["chain_role"] = "SIGNER"
+    primary_signer["source"] = "embedded_ltv"
+    chain.append(primary_signer)
+    if primary_signer.get("fingerprint_sha256"):
+        seen_fp.add(primary_signer["fingerprint_sha256"])
+
+    cur = primary_signer
+    ca_slices = _get_national_ca_der_slices()
+
+    for _ in range(4):
+        iss_cn = (cur.get("issuer") or {}).get("cn") or (cur.get("issuer") or {}).get("organization") or ""
+        subj_cn = (cur.get("subject") or {}).get("cn") or (cur.get("subject") or {}).get("organization") or ""
+        if not iss_cn:
+            break
+        if iss_cn == subj_cn and cur.get("chain_role") != "SIGNER":
+            break
+
+        # 1. Check embedded CA certs first
+        matched_embedded = None
+        for ec in embedded_ca_certs:
+            ec_cn = (ec.get("subject") or {}).get("cn") or (ec.get("subject") or {}).get("organization") or ""
+            if ec_cn == iss_cn and ec.get("fingerprint_sha256") not in seen_fp:
+                matched_embedded = dict(ec)
+                matched_embedded["source"] = "embedded_ltv"
+                break
+
+        if matched_embedded:
+            next_c = matched_embedded
+        else:
+            # 2. Fast lookup in national trust list (ua-all-cas.p7b)
+            needle = iss_cn.encode("utf-8")
+            candidates: List[Dict[str, Any]] = []
+            for s_der in ca_slices:
+                if needle in s_der:
+                    try:
+                        c_obj = x509.load_der_x509_certificate(s_der, default_backend())
+                        parsed = parse_x509_cert(c_obj)
+                        p_cn = (parsed.get("subject") or {}).get("cn") or (parsed.get("subject") or {}).get("organization") or ""
+                        if p_cn == iss_cn and parsed.get("fingerprint_sha256") not in seen_fp:
+                            candidates.append(parsed)
+                    except Exception:
+                        pass
+            if not candidates:
+                break
+            # Prefer non-self-signed intermediate first if available, and newest validity
+            candidates.sort(
+                key=lambda x: (
+                    1 if (x.get("issuer") or {}).get("cn") != (x.get("subject") or {}).get("cn") else 0,
+                    x.get("valid_to") or "",
+                ),
+                reverse=True,
+            )
+            next_c = dict(candidates[0])
+            next_c["source"] = "embedded_ltv" if has_ltv else "national_trust_list"
+
+        n_subj = (next_c.get("subject") or {}).get("cn") or ""
+        n_iss = (next_c.get("issuer") or {}).get("cn") or ""
+        next_c["chain_role"] = "ROOT_CA" if (n_subj and n_subj == n_iss) else "INTERMEDIATE_CA"
+        if next_c.get("fingerprint_sha256"):
+            seen_fp.add(next_c["fingerprint_sha256"])
+        chain.append(next_c)
+        cur = next_c
+        if next_c["chain_role"] == "ROOT_CA":
+            break
+
+    return chain
+
+
 def inspect_p7s(path: str) -> List[Dict[str, Any]]:
     """Parse PKCS#7 / CAdES (.p7s) using openssl & cryptography."""
     cmd = ["openssl", "pkcs7", "-inform", "DER", "-in", path, "-print_certs"]
@@ -193,15 +347,31 @@ def inspect_p7s(path: str) -> List[Dict[str, Any]]:
 
     certs: List[Dict[str, Any]] = []
     all_parsed_certs: List[Dict[str, Any]] = []
+    seen_fps = set()
     if res.returncode == 0:
         pems = [c for c in res.stdout.split("-----END CERTIFICATE-----") if "-----BEGIN CERTIFICATE-----" in c]
         for pem in pems:
             pem_str = pem.strip() + "\n-----END CERTIFICATE-----\n"
             cert = x509.load_pem_x509_certificate(pem_str.encode("utf-8"), default_backend())
             parsed = parse_x509_cert(cert)
+            if parsed.get("fingerprint_sha256"):
+                seen_fps.add(parsed["fingerprint_sha256"])
             all_parsed_certs.append(parsed)
             if not parsed["is_ca"]:
                 certs.append(parsed)
+
+    # Also scan raw DER bytes for any certificates inside LTV unauthenticatedAttributes (id-smime-aa-ets-certValues)
+    try:
+        raw_p7s = Path(path).read_bytes()
+        for extra_c in scan_der_certs_in_bytes(raw_p7s):
+            fp = extra_c.get("fingerprint_sha256")
+            if fp and fp not in seen_fps:
+                seen_fps.add(fp)
+                all_parsed_certs.append(extra_c)
+                if not extra_c.get("is_ca") and not certs:
+                    certs.append(extra_c)
+    except Exception:
+        pass
 
     if not certs and all_parsed_certs:
         certs = all_parsed_certs
@@ -286,27 +456,33 @@ def inspect_p7s(path: str) -> List[Dict[str, Any]]:
         except Exception:
             pass
 
+    file_sha256, file_size = compute_file_digest(path)
+    cert_chain = resolve_trust_chain(certs, ca_certs, has_ltv=has_ltv)
+
     return [{
         "container_format": "PKCS#7 / CAdES (.p7s)",
         "file_path": path,
+        "file_sha256": file_sha256,
+        "file_size": file_size,
         "signing_time": signing_time,
         "has_tsp": has_tsp,
         "tsp_time": tsp_time,
         "has_ltv": has_ltv,
         "has_ocsp": has_ocsp,
         "has_ca_chain": has_ca_chain,
-        "ca_chain_count": len(ca_certs),
+        "ca_chain_count": max(len(ca_certs), max(0, len(cert_chain) - 1)),
         "has_pdf_dss": False,
         "signature_level": signature_level,
         "is_valid_at_signing": is_valid_at_signing,
         "signer_certs": certs,
+        "cert_chain": cert_chain,
         "signed_files": [],
     }]
 
 
 def inspect_asice(path: str) -> List[Dict[str, Any]]:
     """Parse ETSI ASiC-E container (.asice / .asics) supporting both XAdES and CAdES signatures."""
-    import hashlib
+    file_sha256, file_size = compute_file_digest(path)
     with zipfile.ZipFile(path, "r") as z:
         files = [n for n in z.namelist() if not n.startswith("META-INF/") and n != "mimetype"]
         sig_files_xml = [n for n in z.namelist() if n.startswith("META-INF/signatures") and n.endswith(".xml")]
@@ -345,6 +521,8 @@ def inspect_asice(path: str) -> List[Dict[str, Any]]:
                 for item in sig_res:
                     item["container_format"] = "ETSI ASiC-E (CAdES / ДСТУ 4145)"
                     item["file_path"] = path
+                    item["file_sha256"] = file_sha256
+                    item["file_size"] = file_size
                     item["signed_files"] = files
                     item["manifest_verified"] = manifest_verified if manifest_checks else None
                 results.extend(sig_res)
@@ -373,12 +551,15 @@ def inspect_asice(path: str) -> List[Dict[str, Any]]:
                 has_tsp = True
 
             certs: List[Dict[str, Any]] = []
+            ca_certs: List[Dict[str, Any]] = []
             for xc in root.findall(".//ds:X509Certificate", ns):
                 c_bytes = base64.b64decode(xc.text.strip())
                 cert = x509.load_der_x509_certificate(c_bytes, default_backend())
                 parsed = parse_x509_cert(cert)
                 if not parsed["is_ca"]:
                     certs.append(parsed)
+                else:
+                    ca_certs.append(parsed)
 
             is_valid_at_signing = None
             if signing_time and certs:
@@ -391,20 +572,25 @@ def inspect_asice(path: str) -> List[Dict[str, Any]]:
                 except Exception:
                     pass
 
+            cert_chain = resolve_trust_chain(certs, ca_certs, has_ltv=False)
+
             results.append({
                 "container_format": "ETSI ASiC-E (XAdES)",
                 "file_path": path,
+                "file_sha256": file_sha256,
+                "file_size": file_size,
                 "signing_time": signing_time,
                 "has_tsp": has_tsp,
                 "tsp_time": tsp_time,
                 "has_ltv": False,
                 "has_ocsp": False,
-                "has_ca_chain": False,
-                "ca_chain_count": 0,
+                "has_ca_chain": len(ca_certs) > 0,
+                "ca_chain_count": max(len(ca_certs), max(0, len(cert_chain) - 1)),
                 "has_pdf_dss": False,
                 "signature_level": "XAdES-T" if has_tsp else "XAdES-BES",
                 "is_valid_at_signing": is_valid_at_signing,
                 "signer_certs": certs,
+                "cert_chain": cert_chain,
                 "signed_files": files,
                 "manifest_verified": manifest_verified if manifest_checks else None,
             })
@@ -425,9 +611,12 @@ def extract_asice_files(asice_path: str, dest_dir: str) -> List[str]:
 
 
 def inspect_pades_pdf(path: str) -> List[Dict[str, Any]]:
-    """Extract embedded PKCS#7 signatures from PDF (PAdES)."""
+    """Extract embedded PKCS#7 signatures and PDF /DSS certificates from PDF (PAdES)."""
     with open(path, "rb") as f:
         content = f.read()
+
+    file_sha256 = hashlib.sha256(content).hexdigest().upper()
+    file_size = len(content)
 
     # Search for /Contents <hex> inside PDF signature dictionary
     matches = re.findall(rb"/Contents\s*<([0-9a-fA-F\s]+)>", content)
@@ -435,6 +624,17 @@ def inspect_pades_pdf(path: str) -> List[Dict[str, Any]]:
         return []
 
     has_pdf_dss = bool(b"/DSS" in content and (b"/Certs" in content or b"/VRI" in content))
+    dss_ca_certs: List[Dict[str, Any]] = []
+    if has_pdf_dss:
+        for m_stream in re.finditer(rb"stream\r?\n(.*?)\r?\nendstream", content, re.DOTALL):
+            raw_stream = m_stream.group(1)
+            try:
+                dec = zlib.decompress(raw_stream)
+                for dc in scan_der_certs_in_bytes(dec):
+                    if dc.get("is_ca"):
+                        dss_ca_certs.append(dc)
+            except Exception:
+                pass
 
     results: List[Dict[str, Any]] = []
     for idx, hex_data in enumerate(matches):
@@ -450,6 +650,8 @@ def inspect_pades_pdf(path: str) -> List[Dict[str, Any]]:
                 for item in sig_res:
                     item["container_format"] = "PAdES (PDF Embedded Signature)"
                     item["file_path"] = path
+                    item["file_sha256"] = file_sha256
+                    item["file_size"] = file_size
                     item["has_pdf_dss"] = has_pdf_dss
                     if has_pdf_dss or item.get("has_ltv"):
                         item["has_ltv"] = True
@@ -458,6 +660,14 @@ def inspect_pades_pdf(path: str) -> List[Dict[str, Any]]:
                         item["signature_level"] = "PAdES-T"
                     else:
                         item["signature_level"] = "PAdES-BES"
+                    if dss_ca_certs or item.get("has_ltv"):
+                        item["cert_chain"] = resolve_trust_chain(
+                            item.get("signer_certs", []),
+                            dss_ca_certs,
+                            has_ltv=item["has_ltv"],
+                        )
+                        item["has_ca_chain"] = len(item["cert_chain"]) > 1
+                        item["ca_chain_count"] = max(0, len(item["cert_chain"]) - 1)
                 results.extend(sig_res)
             finally:
                 if os.path.exists(tmp_p7s):
@@ -617,8 +827,360 @@ def print_cli_report(res: Dict[str, Any], use_color: bool = True, sig_index: int
         serial_label = "Serial number:" if is_en else "Серійний номер:"
         print(f"  {colorize(serial_label, CLR_BOLD, use_color)}     {c.get('serial_hex')}")
 
+    chain = res.get("cert_chain") or []
+    if len(chain) > 1:
+        chain_hdr = "  ── Certificate Trust Chain (LTV / CZO) ────────────────────────────────────" if is_en else "  ── Ланцюжок сертифікатів довіри (LTV / ЦЗО) ──────────────────────────────"
+        print(colorize(chain_hdr, CLR_GRAY, use_color))
+        for ch_idx, ch_cert in enumerate(chain, 1):
+            role = ch_cert.get("chain_role", "")
+            ch_cn = (ch_cert.get("subject") or {}).get("cn") or (ch_cert.get("subject") or {}).get("organization") or "—"
+            if role == "SIGNER":
+                role_lbl = "👤 Signer" if is_en else "👤 Підписувач"
+            elif role == "ROOT_CA":
+                role_lbl = "🇺🇦 Root CA (CZO)" if is_en else "🇺🇦 Кореневий ЦЗО"
+            else:
+                role_lbl = "🏛️ Accredited CA (QTSP)" if is_en else "🏛️ Акредитований КНЕДП"
+            indent = "  " + ("   " * (ch_idx - 1)) + ("↳ " if ch_idx > 1 else "")
+            ch_sn_short = (ch_cert.get("serial_hex") or "—")[:16]
+            print(f"{indent}{colorize(f'[{ch_idx}] {role_lbl}:', CLR_BOLD, use_color)} {ch_cn} {colorize(f'(SN: {ch_sn_short}...)', CLR_GRAY, use_color)}")
+
     print(colorize(f"─────────────────────────────────────────────────────────────────────────────────", CLR_GRAY, use_color))
     return all_ok
+
+
+def get_typst_bin() -> str:
+    candidates = [
+        os.environ.get("TYPST_BIN") or "",
+        str(Path(__file__).resolve().parent / "typst"),
+        str(Path(__file__).resolve().parent.parent / "bin" / "typst"),
+        "/usr/lib/qes-tools/bin/typst",
+        str(Path.home() / ".local" / "bin" / "typst"),
+        shutil.which("typst") or "",
+    ]
+    for c in candidates:
+        if c and os.path.isfile(c) and os.access(c, os.X_OK):
+            return c
+    return "typst"
+
+
+def esc_typst(val: Any) -> str:
+    s = str(val if val is not None else "")
+    for ch in ("\\", "#", "[", "]", "*", "_", "$", "@", "<", ">", "`", "~"):
+        s = s.replace(ch, "\\" + ch)
+    return s
+
+
+def generate_pdf_protocol(
+    results: List[Dict[str, Any]],
+    file_path: str,
+    output_pdf_path: Optional[str] = None,
+) -> str:
+    """Generates an official vector PDF Verification & Certificate Chain Protocol using Typst."""
+    is_en = (get_qes_lang() == "en")
+    src_path = Path(file_path).resolve()
+    if not output_pdf_path:
+        out_path = src_path.parent / f"{src_path.stem}_protocol.pdf"
+    else:
+        out_path = Path(output_pdf_path).resolve()
+        if out_path.is_dir():
+            out_path = out_path / f"{src_path.stem}_protocol.pdf"
+
+    is_valid = bool(results)
+    for r in results:
+        if r.get("is_valid_at_signing") is False or r.get("manifest_verified") is False:
+            is_valid = False
+            break
+
+    now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    first_res = results[0] if results else {}
+    file_sha256 = first_res.get("file_sha256") or compute_file_digest(str(src_path))[0] or "—"
+    file_size = first_res.get("file_size") or compute_file_digest(str(src_path))[1]
+    c_format = first_res.get("container_format") or ("Unknown" if is_en else "Невідомо")
+    sig_lvl = first_res.get("signature_level") or "CAdES"
+
+    title_main = (
+        "ELECTRONIC SIGNATURE & LTV TRUST CHAIN VERIFICATION PROTOCOL"
+        if is_en
+        else "ПРОТОКОЛ СТВОРЕННЯ ТА ПЕРЕВІРКИ КВАЛІФІКОВАНОГО ЕЛЕКТРОННОГО ПІДПИСУ"
+    )
+    subtitle_main = (
+        "Compliant with the Law of Ukraine on Electronic Trust Services & Regulation (EU) No 910/2014 (eIDAS)"
+        if is_en
+        else "Сформовано відповідно до Закону України «Про електронну ідентифікацію та електронні довірчі послуги» і Регламенту eIDAS"
+    )
+
+    if is_valid:
+        verdict_bg = "#ecfdf5"
+        verdict_border = "#16a34a"
+        verdict_fg = "#15803d"
+        verdict_text = (
+            "SIGNATURE VALID • CRYPTOGRAPHIC INTEGRITY & CA TRUST CHAIN VERIFIED"
+            if is_en
+            else "ПІДПИС ДІЙСНИЙ • ЦІЛІСНІСТЬ ДОКУМЕНТА ТА ЛАНЦЮЖОК ДОВІРИ КНЕДП/ЦЗО ПІДТВЕРДЖЕНО"
+        )
+    else:
+        verdict_bg = "#fef2f2"
+        verdict_border = "#dc2626"
+        verdict_fg = "#b91c1c"
+        verdict_text = (
+            "SIGNATURE INVALID OR VERIFICATION FAILED"
+            if is_en
+            else "ПІДПИС НЕДІЙСНИЙ АБО ПЕРЕВІРКУ НЕ ПРОЙДЕНО"
+        )
+
+    sec1_title = "1. Verified Electronic Document & Container Metadata" if is_en else "1. Відомості про перевірений електронний документ та контейнер"
+    sec2_title = "2. Electronic Signature(s), Timestamp (TSP) & Archival LTV Status" if is_en else "2. Відомості про електронний підпис, позначку часу (TSP) та архівну мітку LTV"
+    sec3_title = "3. Cryptographic Certificate Trust Chain (Signer -> QTSP -> Root CA CZO)" if is_en else "3. Повний ланцюжок сертифікатів довіри (Підписувач -> КНЕДП -> ЦЗО)"
+
+    ltv_summary = (
+        f"{sig_lvl} (Archival LTV 25+ years: CA Chain + OCSP/DSS embedded)"
+        if first_res.get("has_ltv") and is_en
+        else (
+            f"{sig_lvl} (Архівне зберігання 25+ років: ланцюжок CA + OCSP/DSS вшито)"
+            if first_res.get("has_ltv")
+            else f"{sig_lvl}"
+        )
+    )
+    typ_lang = "en" if is_en else "uk"
+    file_size_str = f"{file_size:,} bytes"
+
+    typ_blocks: List[str] = []
+    typ_blocks.append(f"""
+#set page(
+  paper: "a4",
+  margin: (x: 1.5cm, top: 1.4cm, bottom: 1.6cm),
+  footer: context [
+    #line(length: 100%, stroke: 0.5pt + rgb("#cbd5e1"))
+    #v(3pt)
+    #grid(
+      columns: (1fr, auto),
+      text(size: 7.5pt, fill: rgb("#64748b"))[
+        {"Generated offline by QES Tools v1.0.24 • DSTU 4145-2002 / ETSI EN 319 142 (PAdES-LTA / CAdES-LTA)" if is_en else "Сформовано автономно комплексом QES Tools v1.0.24 • ДСТУ 4145-2002 / ETSI EN 319 142 (PAdES-LTA / CAdES-LTA)"}
+      ],
+      text(size: 7.5pt, weight: "bold", fill: rgb("#475569"))[
+        {"Page " if is_en else "Стор. "} #counter(page).display("1 / 1", both: true)
+      ]
+    )
+  ]
+)
+#set text(font: ("Liberation Sans", "DejaVu Sans"), lang: "{typ_lang}", size: 9pt, fill: rgb("#0f172a"))
+
+#rect(
+  width: 100%,
+  fill: rgb("#0a3d62"),
+  radius: 5pt,
+  inset: (x: 14pt, y: 11pt),
+)[
+  #text(weight: "bold", size: 11.5pt, fill: white)[{esc_typst(title_main)}]
+  #v(3pt)
+  #text(size: 8pt, fill: rgb("#e2e8f0"))[{esc_typst(subtitle_main)}]
+]
+
+#v(6pt)
+
+#rect(
+  width: 100%,
+  fill: rgb("{verdict_bg}"),
+  stroke: 1.2pt + rgb("{verdict_border}"),
+  radius: 4pt,
+  inset: (x: 12pt, y: 8pt),
+)[
+  #text(weight: "bold", size: 10pt, fill: rgb("{verdict_fg}"))[{esc_typst(verdict_text)}]
+]
+
+#v(8pt)
+#text(weight: "bold", size: 10.5pt, fill: rgb("#0a3d62"))[{esc_typst(sec1_title)}]
+#v(3pt)
+#table(
+  columns: (4.8cm, 1fr),
+  inset: (x: 8pt, y: 5.5pt),
+  stroke: 0.5pt + rgb("#cbd5e1"),
+  fill: (x, y) => if x == 0 {{ rgb("#f8fafc") }} else {{ white }},
+  [*{"File Name" if is_en else "Назва файлу"}*], [{esc_typst(src_path.name)}],
+  [*{"Container Format" if is_en else "Формат контейнера"}*], [{esc_typst(c_format)}],
+  [*{"Archival LTV Profile" if is_en else "Профіль архівного LTV"}*], [{esc_typst(ltv_summary)}],
+  [*{"File Size" if is_en else "Розмір файлу"}*], [{esc_typst(file_size_str)}],
+  [*{"SHA-256 File Digest" if is_en else "Геш-сума файла (SHA-256)"}*], [#text(font: "Liberation Mono", size: 7.8pt)[{esc_typst(file_sha256)}]],
+  [*{"Total Signatures" if is_en else "Кількість підписів"}*], [{esc_typst(str(len(results)))}],
+  [*{"Protocol Generated At" if is_en else "Час формування протоколу"}*], [{esc_typst(now_utc)}],
+)
+""")
+
+    if first_res.get("signed_files"):
+        sf_list = ", ".join(first_res["signed_files"])
+        m_status = (
+            "Verified (all files match META-INF/manifest.xml SHA-256 digests)"
+            if first_res.get("manifest_verified") is True and is_en
+            else (
+                "Підтверджено (усі файли відповідають гешам META-INF/manifest.xml)"
+                if first_res.get("manifest_verified") is True
+                else "—"
+            )
+        )
+        typ_blocks.append(f"""
+#v(4pt)
+#table(
+  columns: (4.8cm, 1fr),
+  inset: (x: 8pt, y: 5pt),
+  stroke: 0.5pt + rgb("#cbd5e1"),
+  fill: (x, y) => if x == 0 {{ rgb("#f8fafc") }} else {{ white }},
+  [*{"Signed Files in ASiC-E" if is_en else "Підписані файли в ASiC-E"}*], [{esc_typst(sf_list)}],
+  [*{"Manifest Integrity" if is_en else "Цілісність маніфесту"}*], [{esc_typst(m_status)}],
+)
+""")
+
+    typ_blocks.append(f"""
+#v(8pt)
+#text(weight: "bold", size: 10.5pt, fill: rgb("#0a3d62"))[{esc_typst(sec2_title)}]
+#v(3pt)
+""")
+
+    for r_idx, res in enumerate(results, 1):
+        st_str = format_iso_time(res.get("signing_time"))
+        tsp_str = (
+            f"Verified TSP ({format_iso_time(res.get('tsp_time'))})"
+            if res.get("has_tsp") and is_en
+            else (
+                f"Підтверджено TSP КНЕДП ({format_iso_time(res.get('tsp_time'))})"
+                if res.get("has_tsp")
+                else ("No standalone TSP token" if is_en else "Окрема мітка TSP відсутня")
+            )
+        )
+        r_lvl = res.get("signature_level") or "CAdES"
+        r_ltv = (
+            f"{r_lvl} (CA Chain: {'Yes' if res.get('has_ca_chain') else 'No'}, OCSP: {'Yes' if res.get('has_ocsp') else 'No'}, PDF /DSS: {'Yes' if res.get('has_pdf_dss') else 'No'})"
+            if is_en
+            else f"{r_lvl} (Ланцюжок ЦСК: {'Так' if res.get('has_ca_chain') else 'Ні'}, OCSP: {'Так' if res.get('has_ocsp') else 'Ні'}, PDF /DSS: {'Так' if res.get('has_pdf_dss') else 'Ні'})"
+        )
+
+        certs = res.get("signer_certs") or [{}]
+        for c_idx, c in enumerate(certs, 1):
+            subj = c.get("subject") or {}
+            iss = c.get("issuer") or {}
+            full_name = subj.get("cn") or f"{subj.get('surname', '')} {subj.get('given_name', '')}".strip() or "—"
+            drfo = subj.get("drfo") or subj.get("serial_number") or "—"
+            org = subj.get("organization") or "—"
+            edrpou = subj.get("edrpou") or "—"
+            org_edrpou_str = f"{org} (ЄДРПОУ: {edrpou})" if edrpou != "—" else org
+            title = subj.get("title") or "—"
+            ca_name = iss.get("cn") or iss.get("organization") or "—"
+            q_label = (
+                "Qualified Electronic Signature (QES / DSTU 4145-2002)"
+                if c.get("is_qes") and is_en
+                else (
+                    "Кваліфікований електронний підпис (КЕП / ДСТУ 4145-2002)"
+                    if c.get("is_qes")
+                    else (
+                        "Advanced Electronic Signature (AES / DSTU 4145-2002)"
+                        if is_en
+                        else "Удосконалений електронний підпис (УЕП / ДСТУ 4145-2002)"
+                    )
+                )
+            )
+            val_period = f"{format_iso_time(c.get('valid_from'))} — {format_iso_time(c.get('valid_to'))}"
+            serial_hex = c.get("serial_hex") or "—"
+            fp_hex = c.get("fingerprint_sha256") or "—"
+
+            sig_header = (
+                f"Signature #{r_idx}" if is_en else f"Підпис #{r_idx}"
+            ) + (f" (Signer #{c_idx})" if len(certs) > 1 and is_en else (f" (Підписувач #{c_idx})" if len(certs) > 1 else ""))
+
+            typ_blocks.append(f"""
+#rect(
+  width: 100%,
+  fill: rgb("#f1f5f9"),
+  stroke: 0.5pt + rgb("#94a3b8"),
+  inset: (x: 8pt, y: 4pt),
+)[
+  #text(weight: "bold", size: 9pt, fill: rgb("#1e3a8a"))[{esc_typst(sig_header)} — {esc_typst(full_name)}]
+]
+#v(-4pt)
+#table(
+  columns: (4.8cm, 1fr),
+  inset: (x: 8pt, y: 5pt),
+  stroke: 0.5pt + rgb("#cbd5e1"),
+  fill: (x, y) => if x == 0 {{ rgb("#f8fafc") }} else {{ white }},
+  [*{"Signer Full Name" if is_en else "П.І.Б. підписувача"}*], [*{esc_typst(full_name)}*],
+  [*{"Tax ID (RNOKPP / DRFO)" if is_en else "РНОКПП (ДРФО / ІПН)"}*], [{esc_typst(drfo)}],
+  [*{"Organization & USREOU" if is_en else "Організація та ЄДРПОУ"}*], [{esc_typst(org_edrpou_str)}],
+  [*{"Position / Title" if is_en else "Посада"}*], [{esc_typst(title)}],
+  [*{"Signature Type" if is_en else "Вид підпису"}*], [{esc_typst(q_label)}],
+  [*{"Accredited CA (QTSP)" if is_en else "КНЕДП (АЦСК видавця)"}*], [{esc_typst(ca_name)}],
+  [*{"Signing Time (UTC)" if is_en else "Час підписання (UTC)"}*], [{esc_typst(st_str)}],
+  [*{"Qualified Timestamp (TSP)" if is_en else "Позначка точного часу (TSP)"}*], [{esc_typst(tsp_str)}],
+  [*{"LTV Archival Evidence" if is_en else "Архівні докази LTV"}*], [{esc_typst(r_ltv)}],
+  [*{"Certificate Validity" if is_en else "Строк дії сертифіката"}*], [{esc_typst(val_period)}],
+  [*{"Certificate Serial №" if is_en else "Серійний № сертифіката"}*], [#text(font: "Liberation Mono", size: 7.8pt)[{esc_typst(serial_hex)}]],
+  [*{"Certificate SHA-256" if is_en else "SHA-256 сертифіката"}*], [#text(font: "Liberation Mono", size: 7.5pt)[{esc_typst(fp_hex)}]],
+)
+#v(4pt)
+""")
+
+    # Section 3: Full Certificate Trust Chain
+    typ_blocks.append(f"""
+#v(6pt)
+#text(weight: "bold", size: 10.5pt, fill: rgb("#0a3d62"))[{esc_typst(sec3_title)}]
+#v(3pt)
+""")
+
+    chain_rows: List[str] = []
+    for r_idx, res in enumerate(results, 1):
+        chain = res.get("cert_chain") or []
+        for ch_idx, ch_cert in enumerate(chain, 1):
+            role = ch_cert.get("chain_role", "")
+            if role == "SIGNER":
+                role_txt = f"[{ch_idx}] Signer Certificate" if is_en else f"[{ch_idx}] Особистий сертифікат"
+            elif role == "ROOT_CA":
+                role_txt = f"[{ch_idx}] Root CA (CZO)" if is_en else f"[{ch_idx}] Кореневий ЦЗО"
+            else:
+                role_txt = f"[{ch_idx}] Accredited QTSP (CA)" if is_en else f"[{ch_idx}] Акредитований КНЕДП"
+
+            ch_subj = (ch_cert.get("subject") or {}).get("cn") or (ch_cert.get("subject") or {}).get("organization") or "—"
+            ch_iss = (ch_cert.get("issuer") or {}).get("cn") or (ch_cert.get("issuer") or {}).get("organization") or "—"
+            ch_sn = ch_cert.get("serial_hex") or "—"
+            ch_from = (ch_cert.get("valid_from") or "")[:10]
+            ch_to = (ch_cert.get("valid_to") or "")[:10]
+            ch_src = (
+                ("Embedded in LTV (/DSS / CMS)" if is_en else "Вшито в контейнер LTV")
+                if ch_cert.get("source") == "embedded_ltv"
+                else ("National Trust List (CZO)" if is_en else "Національний реєстр ЦЗО")
+            )
+            chain_rows.append(
+                f"  [{esc_typst(role_txt)}], [*{esc_typst(ch_subj)}*\n#text(size: 7.5pt, fill: rgb(\"#475569\"))[Issuer: {esc_typst(ch_iss)}]], "
+                f"[#text(font: \"Liberation Mono\", size: 7.2pt)[{esc_typst(ch_sn)}]], [{esc_typst(f'{ch_from} .. {ch_to}')}], [{esc_typst(ch_src)}],"
+            )
+
+    if chain_rows:
+        rows_joined = "\n".join(chain_rows)
+        typ_blocks.append(f"""
+#table(
+  columns: (3.6cm, 1fr, 3.8cm, 2.9cm, 3.2cm),
+  inset: (x: 6pt, y: 5pt),
+  stroke: 0.5pt + rgb("#cbd5e1"),
+  fill: (x, y) => if y == 0 {{ rgb("#0a3d62") }} else if calc.odd(y) {{ rgb("#f8fafc") }} else {{ white }},
+  text(weight: "bold", fill: white, size: 8pt)[{"Chain Level" if is_en else "Рівень у ланцюжку"}],
+  text(weight: "bold", fill: white, size: 8pt)[{"Subject & Issuer (CN)" if is_en else "Суб'єкт та Видавець (CN)"}],
+  text(weight: "bold", fill: white, size: 8pt)[{"Serial Number" if is_en else "Серійний номер"}],
+  text(weight: "bold", fill: white, size: 8pt)[{"Validity" if is_en else "Строк дії"}],
+  text(weight: "bold", fill: white, size: 8pt)[{"Verification Source" if is_en else "Джерело перевірки"}],
+{rows_joined}
+)
+""")
+
+    typst_source = "\n".join(typ_blocks)
+    with tempfile.TemporaryDirectory(prefix="qes-protocol-") as tmp_dir:
+        typ_file = Path(tmp_dir) / "protocol.typ"
+        typ_file.write_text(typst_source, encoding="utf-8")
+        typst_bin = get_typst_bin()
+        proc = subprocess.run(
+            [typst_bin, "compile", str(typ_file), str(out_path)],
+            capture_output=True,
+            text=True,
+        )
+        if proc.returncode != 0:
+            raise RuntimeError(f"Typst compilation failed: {proc.stderr.strip()}")
+
+    return str(out_path)
 
 
 def show_help_dialog():
@@ -637,9 +1199,11 @@ def show_help_dialog():
             "• <span color='#1e7e34'><b>✅ SIGNATURE VALID:</b></span> mathematically valid, integrity confirmed.\n"
             "• <span color='#d9534f'><b>❌ INVALID:</b></span> document altered after signing or corrupted.\n"
             "• <b>🕒 TSP Stamp:</b> cryptographic timestamp from accredited time-stamping authority.\n"
-            "• <b>🔏 Archival LTV (PAdES-LTA / CAdES-X-Long):</b> embedded CA chain, OCSP &amp; PDF /DSS for 25+ years validity.\n\n"
+            "• <b>🔏 Archival LTV (PAdES-LTA / CAdES-X-Long):</b> embedded CA chain, OCSP &amp; PDF /DSS for 25+ years validity.\n"
+            "• <b>📄 PDF Verification Protocol:</b> generates a standalone printable PDF report with full CA trust chain.\n\n"
             "<b>3. CLI COMMANDS:</b>\n"
             "• <tt>qes-verify document_signed.pdf</tt> — verify PDF with stamp\n"
+            "• <tt>qes-verify --protocol document_signed.pdf</tt> — generate PDF Verification Protocol\n"
             "• <tt>qes-verify doc.pdf doc.pdf.p7s</tt> — verify matching detached signature\n"
             "• <tt>qes-verify package.asice</tt> — verify ASiC-E archive integrity\n"
             "• <tt>qes-verify -x /folder package.asice</tt> — extract original documents\n"
@@ -661,9 +1225,11 @@ def show_help_dialog():
             "• <span color='#1e7e34'><b>✅ КЕП ДІЙСНИЙ:</b></span> підпис математично валідний, цілісність підтверджена.\n"
             "• <span color='#d9534f'><b>❌ НЕВАЛІДНИЙ:</b></span> документ змінено після підписання або пошкоджено.\n"
             "• <b>🕒 Мітка TSP:</b> підтвердження точного астрономічного часу від акредитованого сервера.\n"
-            "• <b>🔏 Архівна мітка LTV (PAdES-LTA / CAdES-X-Long):</b> вбудований ланцюжок ЦСК, OCSP та PDF /DSS для чинності 25+ років.\n\n"
+            "• <b>🔏 Архівна мітка LTV (PAdES-LTA / CAdES-X-Long):</b> вбудований ланцюжок ЦСК, OCSP та PDF /DSS для чинності 25+ років.\n"
+            "• <b>📄 PDF-протокол перевірки КЕП:</b> формує окремий друкований PDF-протокол із повним ланцюжком сертифікатів довіри.\n\n"
             "<b>3. КОМАНДИ ТЕРМІНАЛА:</b>\n"
             "• <tt>qes-verify document_signed.pdf</tt> — перевірка PDF зі штампом\n"
+            "• <tt>qes-verify --protocol document_signed.pdf</tt> — сформувати PDF-протокол перевірки КЕП\n"
             "• <tt>qes-verify doc.pdf doc.pdf.p7s</tt> — перевірка відповідності оригіналу та підпису\n"
             "• <tt>qes-verify package.asice</tt> — перевірка цілісності архіву ASiC-E\n"
             "• <tt>qes-verify -x /папка package.asice</tt> — видобування оригінальних документів\n"
@@ -784,10 +1350,21 @@ def show_gui_report(results: List[Dict[str, Any]], file_path: str):
             val_to = format_iso_time(c.get("valid_to"))
             lines.append(f"<b>{'Certificate validity' if is_en else 'Дія сертифіката'}:</b> {'from' if is_en else 'з'} {esc(val_from)} {'to' if is_en else 'до'} {esc(val_to)}")
 
+        chain = res.get("cert_chain") or []
+        if len(chain) > 1:
+            chain_title = "🔗 Certificate Trust Chain:" if is_en else "🔗 Ланцюжок сертифікатів довіри:"
+            lines.append(f"\n<b>{chain_title}</b>")
+            for ch_idx, ch_cert in enumerate(chain, 1):
+                ch_cn = (ch_cert.get("subject") or {}).get("cn") or (ch_cert.get("subject") or {}).get("organization") or "—"
+                role = ch_cert.get("chain_role", "")
+                icon = "👤" if role == "SIGNER" else ("🇺🇦" if role == "ROOT_CA" else "🏛️")
+                lines.append(f"  <tt>[{ch_idx}]</tt> {icon} {esc(ch_cn)}")
+
     pango_text = "\n".join(lines)
 
     report_title = f"QES Verification Report — {os.path.basename(file_path)}" if is_en else f"Протокол перевірки КЕП — {os.path.basename(file_path)}"
     close_btn = "Close" if is_en else "Закрити"
+    pdf_btn = "📄 Save PDF Protocol" if is_en else "📄 Зберегти PDF-протокол"
     extract_btn = "Extract Documents" if is_en else "Видобути документи"
 
     while True:
@@ -797,8 +1374,8 @@ def show_gui_report(results: List[Dict[str, Any]], file_path: str):
             f"--text={pango_text}",
             f"--ok-label={close_btn}",
             "--icon-name=application-certificate",
-            "--width=650",
-            "--height=460",
+            "--width=660",
+            "--height=480",
         ]
         user_icon = os.path.expanduser("~/.local/share/icons/Papirus/48x48/mimetypes/application-certificate.svg")
         sys_icon = "/usr/share/icons/Papirus/48x48/mimetypes/application-certificate.svg"
@@ -806,6 +1383,7 @@ def show_gui_report(results: List[Dict[str, Any]], file_path: str):
             cmd.append(f"--window-icon={user_icon}")
         elif os.path.isfile(sys_icon):
             cmd.append(f"--window-icon={sys_icon}")
+        cmd.extend([f"--extra-button={pdf_btn}"])
         if is_asice:
             cmd.extend([f"--extra-button={extract_btn}"])
         cmd.extend(["--extra-button=📖 Help / Довідка"])
@@ -813,7 +1391,20 @@ def show_gui_report(results: List[Dict[str, Any]], file_path: str):
         proc = subprocess.run(cmd, stdout=subprocess.PIPE, text=True)
         clicked = proc.stdout.strip()
 
-        if clicked == extract_btn:
+        if clicked == pdf_btn:
+            try:
+                saved_pdf = generate_pdf_protocol(results, file_path)
+                notif_title = "📄 PDF Protocol Created" if is_en else "📄 PDF-протокол сформовано"
+                notif_msg = f"Saved to:\n{os.path.basename(saved_pdf)}" if is_en else f"Збережено у файл:\n{os.path.basename(saved_pdf)}"
+                if shutil.which("notify-send"):
+                    subprocess.run(["notify-send", "-a", "QES Tools", "-i", "application-pdf", notif_title, notif_msg])
+                if shutil.which("xdg-open"):
+                    subprocess.Popen(["xdg-open", saved_pdf])
+            except Exception as err:
+                err_title = "Protocol Error" if is_en else "Помилка формування протоколу"
+                subprocess.run(["zenity", "--error", "--no-markup", f"--title={err_title}", f"--text={str(err)}"])
+            continue
+        elif clicked == extract_btn:
             dlg_title = "Select folder to extract files" if is_en else "Оберіть папку для видобування файлів"
             dest_dir = subprocess.run(
                 ["zenity", "--file-selection", "--directory", f"--title={dlg_title}"],
@@ -874,7 +1465,7 @@ def delegate_to_qes_cert(file_path: str, args: argparse.Namespace) -> int:
 
 def main():
     is_en = (get_qes_lang() == "en")
-    ver_str = "1.0.23"
+    ver_str = "1.0.24"
     parser = argparse.ArgumentParser(
         description=f"""================================================================================
   qes-verify — {"Ukrainian & EU QES/AES validator (.p7s, .asice, .pdf)" if is_en else "автономний валідатор КЕП/УЕП (.p7s, .asice, .pdf)"}
@@ -885,15 +1476,15 @@ def main():
   {"Validates qualified and advanced electronic signatures (QES/AES)," if is_en else "Перевіряє справжність кваліфікованих та удосконалених електронних підписів (КЕП/УЕП),"}
   {"recognizes certificates of all Ukrainian accredited QTSPs (CA), verifies" if is_en else "розпізнає сертифікати всіх акредитованих центрів України (КНЕДП/АЦСК), перевіряє"}
   {"trusted TSP timestamps, extracts signed files, with zero telemetry." if is_en else "мітку точного часу TSP, витягує підписані файли та не відправляє жодних даних у мережу."}
-  {"Also automatically delegates certificates (.cer, .p7b) to qes-cert inspector." if is_en else "Також автоматично перенаправляє відкриті сертифікати (.cer, .p7b) до інспектора qes-cert."}""",
+  {"Also generates official printable PDF Verification & Trust Chain Protocols." if is_en else "Також формує офіційний друкований PDF-протокол перевірки КЕП із ланцюжком сертифікатів."}""",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""ПРИКЛАДИ КОМАНД / EXAMPLES:
 
   1. PDF with embedded PAdES signature (visual stamp + QR code):
      $ qes-verify statement_signed.pdf
 
-  2. Document with multiple signatures (multi-signature):
-     $ qes-verify statement_multi_signed.pdf
+  2. Generate official PDF Verification Protocol (with CA Trust Chain):
+     $ qes-verify --protocol statement_signed.pdf
 
   3. Detached signature (.p7s):
      $ qes-verify contract.pdf.p7s
@@ -920,6 +1511,8 @@ def main():
     )
     parser.add_argument("files", nargs="*", default=[], help="File path(s) to signature (.p7s, .asice, .pdf), certificate (.cer, .p7b) or [document signature] pair" if is_en else "Шлях до файлу(-ів) підпису (.p7s, .asice, .pdf), сертифікатів (.cer, .p7b) або пари [документ підпис]")
     parser.add_argument("-j", "--json", action="store_true", help="Output results in structured JSON format" if is_en else "Вивести результат у структурованому форматі JSON")
+    parser.add_argument("-p", "--protocol", "--pdf-report", dest="protocol", action="store_true", help="Generate official PDF Verification & Trust Chain Protocol" if is_en else "Сформувати офіційний PDF-протокол перевірки КЕП та ланцюжка сертифікатів")
+    parser.add_argument("-o", "--output", default=None, help="Output path for generated PDF protocol" if is_en else "Шлях збереження сформованого PDF-протоколу")
     parser.add_argument("-x", "--extract", nargs="?", const=".", default=None, help="Extract signed documents to target directory" if is_en else "Видобути підписаний документ у вказану папку (за замовчуванням: поточна)")
     parser.add_argument("--gui", action="store_true", help="Display visual verification report dialog (Zenity)" if is_en else "Показати результат у графічному діалоговому вікні GNOME (Zenity)")
     parser.add_argument("--no-color", action="store_true", help="Disable colored output in terminal" if is_en else "Вимкнути кольоровий вивід у терміналі")
@@ -1007,8 +1600,15 @@ def main():
                     overall_ok = False
 
     if all_results:
-        if args.gui:
-            show_gui_report(all_results, sig_files[0] if sig_files else target_files[0])
+        primary_file = sig_files[0] if sig_files else target_files[0]
+        if args.protocol:
+            out_proto = generate_pdf_protocol(all_results, primary_file, args.output)
+            overall_ok = True
+            if not args.json:
+                msg = f"📄 PDF Verification Protocol saved to: {out_proto}" if is_en else f"📄 PDF-протокол перевірки КЕП збережено у: {out_proto}"
+                print(colorize(msg, CLR_GREEN + CLR_BOLD, use_color))
+        if args.gui and not args.protocol:
+            show_gui_report(all_results, primary_file)
         elif args.json:
             print(json.dumps(all_results, indent=2, ensure_ascii=False))
 

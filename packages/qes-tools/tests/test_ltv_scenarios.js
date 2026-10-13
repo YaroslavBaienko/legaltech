@@ -445,3 +445,57 @@ test('Scenario 8: Nautilus script 15_upgrade_ltv.sh upgrades selected files seam
   assert.strictEqual(verified[0].has_ltv, true);
   assert.strictEqual(verified[0].signature_level, 'PAdES-LTA');
 });
+
+test('Scenario 9: Official PDF Verification & Certificate Chain Protocol (--protocol & 16_pdf_protocol.sh)', () => {
+  const signedPdf = path.join(WORK_DIR, 'scen9_protocol_doc.pdf');
+  const rSign = runSign([
+    '--pades',
+    '--key', KEY1_PATH,
+    '--cert', CERT1_PATH,
+    '--tsp-url', DEPOSITSIGN_TSP,
+    '--ltv',
+    '-o', signedPdf,
+    SAMPLE_PDF,
+  ]);
+  assert.strictEqual(rSign.status, 0, `Signing for Scenario 9 failed: ${rSign.stderr}`);
+
+  // 9a. Verify JSON output contains cert_chain and file_sha256
+  const verified = runVerifyJson(signedPdf);
+  assert.strictEqual(verified.length, 1);
+  assert.ok(Array.isArray(verified[0].cert_chain), 'Expected cert_chain array in verification result');
+  assert.ok(verified[0].cert_chain.length >= 1, 'Expected at least 1 certificate in trust chain');
+  assert.ok(verified[0].file_sha256 && verified[0].file_sha256.length === 64, 'Expected 64-char SHA-256 hex digest');
+
+  // 9b. Generate PDF protocol via `qes-verify --protocol`
+  const customProtocolPdf = path.join(WORK_DIR, 'scen9_custom_protocol.pdf');
+  const protoRes = spawnSync('python3', [CLI_VERIFY, '--protocol', '-o', customProtocolPdf, signedPdf], {
+    cwd: WORK_DIR,
+    encoding: 'utf-8',
+    timeout: 60000,
+  });
+  assert.strictEqual(protoRes.status, 0, `qes-verify --protocol failed: ${protoRes.stderr}`);
+  assert.ok(fs.existsSync(customProtocolPdf), 'Expected custom protocol PDF to exist');
+  const protoStat = fs.statSync(customProtocolPdf);
+  assert.ok(protoStat.size > 5000, `Expected protocol PDF > 5 KB, got ${protoStat.size} bytes`);
+  const protoHeader = fs.readFileSync(customProtocolPdf).subarray(0, 5).toString('ascii');
+  assert.strictEqual(protoHeader, '%PDF-', 'Protocol file must be a valid PDF');
+
+  // 9c. Generate PDF protocol via Nautilus script `16_pdf_protocol.sh`
+  const script16 = path.join(PACKAGE_DIR, 'nautilus-scripts', '16_pdf_protocol.sh');
+  const env = Object.assign({}, process.env, {
+    PATH: `${MOCK_BIN_DIR}:${process.env.PATH}`,
+    NAUTILUS_SCRIPT_SELECTED_FILE_PATHS: signedPdf,
+    DISPLAY: '',
+    WAYLAND_DISPLAY: '',
+  });
+  const nautilusProtoRes = spawnSync('bash', [script16], {
+    cwd: WORK_DIR,
+    env,
+    encoding: 'utf-8',
+    timeout: 60000,
+  });
+  assert.strictEqual(nautilusProtoRes.status, 0, `16_pdf_protocol.sh failed: ${nautilusProtoRes.stderr}`);
+  const autoProtocolPdf = path.join(WORK_DIR, 'scen9_protocol_doc_protocol.pdf');
+  assert.ok(fs.existsSync(autoProtocolPdf), 'Expected <file>_protocol.pdf created by 16_pdf_protocol.sh');
+  assert.ok(fs.statSync(autoProtocolPdf).size > 5000);
+});
