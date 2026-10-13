@@ -870,13 +870,95 @@ def esc_typst(val: Any) -> str:
     return s
 
 
+def format_typst_hex_wrapped(val: Any, chunk_size: int = 20) -> str:
+    """Splits long unbroken hexadecimal strings into explicit Typst lines so table columns never overflow."""
+    raw = str(val if val is not None else "—").strip()
+    if not raw or raw == "—" or len(raw) <= chunk_size:
+        return esc_typst(raw or "—")
+    chunks = [esc_typst(raw[i : i + chunk_size]) for i in range(0, len(raw), chunk_size)]
+    return " \\\n".join(chunks)
+
+
+def ask_protocol_lang_gui(default_lang: Optional[str] = None) -> Optional[str]:
+    """Displays a Zenity radiolist dialog to choose UA or EN language for PDF protocol generation."""
+    cur_lang = (default_lang or get_qes_lang() or "uk").lower()
+    is_en = (cur_lang == "en")
+
+    title = "PDF Protocol Language — QES Tools" if is_en else "Мова PDF-протоколу — QES Tools"
+    if is_en:
+        text_pango = (
+            "<span size='larger' weight='bold' color='#1a5fb4'>📄 Generate Official QES Verification PDF Protocol</span>\n\n"
+            "Select the language for the generated PDF protocol (with full QTSP ➔ Root CA CZO trust chain):\n"
+            "<span size='small' color='#666666'>Оберіть мову формування офіційного PDF-протоколу перевірки КЕП та ланцюжка сертифікатів:</span>"
+        )
+        col_pick = "Select"
+        col_lang = "Protocol Language / Мова протоколу"
+        ok_lbl = "📄 Generate PDF"
+        cancel_lbl = "Cancel"
+    else:
+        text_pango = (
+            "<span size='larger' weight='bold' color='#1a5fb4'>📄 Формування офіційного PDF-протоколу перевірки КЕП</span>\n\n"
+            "Оберіть мову документа (протокол із повним ланцюжком сертифікатів КНЕДП ➔ ЦЗО):\n"
+            "<span size='small' color='#666666'>Select the language for the official QES &amp; LTV Trust Chain Verification Protocol:</span>"
+        )
+        col_pick = "Вибір"
+        col_lang = "Мова протоколу / Protocol Language"
+        ok_lbl = "📄 Сформувати PDF"
+        cancel_lbl = "Скасувати"
+
+    uk_default = "FALSE" if is_en else "TRUE"
+    en_default = "TRUE" if is_en else "FALSE"
+
+    cmd = [
+        "zenity",
+        "--list",
+        "--radiolist",
+        f"--title={title}",
+        f"--text={text_pango}",
+        f"--column={col_pick}",
+        "--column=Code",
+        f"--column={col_lang}",
+        uk_default,
+        "uk",
+        "🇺🇦 Українська (UA) — Протокол перевірки КЕП (ДСТУ 4145-2002 / Закон України)",
+        en_default,
+        "en",
+        "🇬🇧 English (EN) — QES & LTV Verification Protocol (eIDAS / International)",
+        "--hide-column=2",
+        "--print-column=2",
+        f"--ok-label={ok_lbl}",
+        f"--cancel-label={cancel_lbl}",
+        "--icon-name=application-pdf",
+        "--width=680",
+        "--height=310",
+    ]
+    user_icon = os.path.expanduser("~/.local/share/icons/Papirus/48x48/mimetypes/application-certificate.svg")
+    sys_icon = "/usr/share/icons/Papirus/48x48/mimetypes/application-certificate.svg"
+    if os.path.isfile(user_icon):
+        cmd.append(f"--window-icon={user_icon}")
+    elif os.path.isfile(sys_icon):
+        cmd.append(f"--window-icon={sys_icon}")
+
+    proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+    if proc.returncode != 0:
+        return None
+    choice = proc.stdout.strip().lower()
+    if choice in ("uk", "ua"):
+        return "uk"
+    if choice == "en":
+        return "en"
+    return None
+
+
 def generate_pdf_protocol(
     results: List[Dict[str, Any]],
     file_path: str,
     output_pdf_path: Optional[str] = None,
+    protocol_lang: Optional[str] = None,
 ) -> str:
     """Generates an official vector PDF Verification & Certificate Chain Protocol using Typst."""
-    is_en = (get_qes_lang() == "en")
+    eff_lang = (protocol_lang or get_qes_lang() or "uk").lower()
+    is_en = (eff_lang == "en")
     src_path = Path(file_path).resolve()
     if not output_pdf_path:
         out_path = src_path.parent / f"{src_path.stem}_protocol.pdf"
@@ -942,7 +1024,7 @@ def generate_pdf_protocol(
         )
     )
     typ_lang = "en" if is_en else "uk"
-    file_size_str = f"{file_size:,} bytes"
+    file_size_str = f"{file_size:,} bytes" if is_en else f"{file_size:,} байтів"
 
     typ_blocks: List[str] = []
     typ_blocks.append(f"""
@@ -955,7 +1037,7 @@ def generate_pdf_protocol(
     #grid(
       columns: (1fr, auto),
       text(size: 7.5pt, fill: rgb("#64748b"))[
-        {"Generated offline by QES Tools v1.0.24 • DSTU 4145-2002 / ETSI EN 319 142 (PAdES-LTA / CAdES-LTA)" if is_en else "Сформовано автономно комплексом QES Tools v1.0.24 • ДСТУ 4145-2002 / ETSI EN 319 142 (PAdES-LTA / CAdES-LTA)"}
+        {"Generated offline by QES Tools v1.0.25 • DSTU 4145-2002 / ETSI EN 319 142 (PAdES-LTA / CAdES-LTA)" if is_en else "Сформовано автономно комплексом QES Tools v1.0.25 • ДСТУ 4145-2002 / ETSI EN 319 142 (PAdES-LTA / CAdES-LTA)"}
       ],
       text(size: 7.5pt, weight: "bold", fill: rgb("#475569"))[
         {"Page " if is_en else "Стор. "} #counter(page).display("1 / 1", both: true)
@@ -1048,9 +1130,9 @@ def generate_pdf_protocol(
         )
         r_lvl = res.get("signature_level") or "CAdES"
         r_ltv = (
-            f"{r_lvl} (CA Chain: {'Yes' if res.get('has_ca_chain') else 'No'}, OCSP: {'Yes' if res.get('has_ocsp') else 'No'}, PDF /DSS: {'Yes' if res.get('has_pdf_dss') else 'No'})"
+            f"{r_lvl} (CA Chain: {'Yes' if res.get('has_ca_chain') else 'No'}, OCSP: {'Yes' if res.get('has_ocsp') else 'No'}, PDF DSS: {'Yes' if res.get('has_pdf_dss') else 'No'})"
             if is_en
-            else f"{r_lvl} (Ланцюжок ЦСК: {'Так' if res.get('has_ca_chain') else 'Ні'}, OCSP: {'Так' if res.get('has_ocsp') else 'Ні'}, PDF /DSS: {'Так' if res.get('has_pdf_dss') else 'Ні'})"
+            else f"{r_lvl} (Ланцюжок ЦСК: {'Так' if res.get('has_ca_chain') else 'Ні'}, OCSP: {'Так' if res.get('has_ocsp') else 'Ні'}, PDF DSS: {'Так' if res.get('has_pdf_dss') else 'Ні'})"
         )
 
         certs = res.get("signer_certs") or [{}]
@@ -1061,7 +1143,7 @@ def generate_pdf_protocol(
             drfo = subj.get("drfo") or subj.get("serial_number") or "—"
             org = subj.get("organization") or "—"
             edrpou = subj.get("edrpou") or "—"
-            org_edrpou_str = f"{org} (ЄДРПОУ: {edrpou})" if edrpou != "—" else org
+            org_edrpou_str = f"{org} (USREOU: {edrpou})" if (edrpou != "—" and is_en) else (f"{org} (ЄДРПОУ: {edrpou})" if edrpou != "—" else org)
             title = subj.get("title") or "—"
             ca_name = iss.get("cn") or iss.get("organization") or "—"
             q_label = (
@@ -1137,25 +1219,30 @@ def generate_pdf_protocol(
 
             ch_subj = (ch_cert.get("subject") or {}).get("cn") or (ch_cert.get("subject") or {}).get("organization") or "—"
             ch_iss = (ch_cert.get("issuer") or {}).get("cn") or (ch_cert.get("issuer") or {}).get("organization") or "—"
-            ch_sn = ch_cert.get("serial_hex") or "—"
+            ch_sn_wrapped = format_typst_hex_wrapped(ch_cert.get("serial_hex") or "—", 20)
             ch_from = (ch_cert.get("valid_from") or "")[:10]
             ch_to = (ch_cert.get("valid_to") or "")[:10]
+            iss_label = "Issuer" if is_en else "Видавець"
             ch_src = (
-                ("Embedded in LTV (/DSS / CMS)" if is_en else "Вшито в контейнер LTV")
+                ("Embedded in LTV (PDF DSS / CMS)" if is_en else "Вшито в LTV (PDF DSS / CMS)")
                 if ch_cert.get("source") == "embedded_ltv"
                 else ("National Trust List (CZO)" if is_en else "Національний реєстр ЦЗО")
             )
+            val_cell = f"{esc_typst(ch_from)} — \\\n{esc_typst(ch_to)}" if (ch_from or ch_to) else "—"
             chain_rows.append(
-                f"  [{esc_typst(role_txt)}], [*{esc_typst(ch_subj)}*\n#text(size: 7.5pt, fill: rgb(\"#475569\"))[Issuer: {esc_typst(ch_iss)}]], "
-                f"[#text(font: \"Liberation Mono\", size: 7.2pt)[{esc_typst(ch_sn)}]], [{esc_typst(f'{ch_from} .. {ch_to}')}], [{esc_typst(ch_src)}],"
+                f"  [{esc_typst(role_txt)}], "
+                f"[*{esc_typst(ch_subj)}* \\\n#text(size: 7.5pt, fill: rgb(\"#475569\"))[{iss_label}: {esc_typst(ch_iss)}]], "
+                f"[#text(font: \"Liberation Mono\", size: 7pt)[{ch_sn_wrapped}]], "
+                f"[{val_cell}], "
+                f"[{esc_typst(ch_src)}],"
             )
 
     if chain_rows:
         rows_joined = "\n".join(chain_rows)
         typ_blocks.append(f"""
 #table(
-  columns: (3.6cm, 1fr, 3.8cm, 2.9cm, 3.2cm),
-  inset: (x: 6pt, y: 5pt),
+  columns: (3.4cm, 1fr, 3.6cm, 2.5cm, 3.3cm),
+  inset: (x: 6pt, y: 5.5pt),
   stroke: 0.5pt + rgb("#cbd5e1"),
   fill: (x, y) => if y == 0 {{ rgb("#0a3d62") }} else if calc.odd(y) {{ rgb("#f8fafc") }} else {{ white }},
   text(weight: "bold", fill: white, size: 8pt)[{"Chain Level" if is_en else "Рівень у ланцюжку"}],
@@ -1392,10 +1479,14 @@ def show_gui_report(results: List[Dict[str, Any]], file_path: str):
         clicked = proc.stdout.strip()
 
         if clicked == pdf_btn:
+            chosen_lang = ask_protocol_lang_gui(lang)
+            if not chosen_lang:
+                continue
             try:
-                saved_pdf = generate_pdf_protocol(results, file_path)
-                notif_title = "📄 PDF Protocol Created" if is_en else "📄 PDF-протокол сформовано"
-                notif_msg = f"Saved to:\n{os.path.basename(saved_pdf)}" if is_en else f"Збережено у файл:\n{os.path.basename(saved_pdf)}"
+                saved_pdf = generate_pdf_protocol(results, file_path, protocol_lang=chosen_lang)
+                is_proto_en = (chosen_lang == "en")
+                notif_title = "📄 PDF Protocol Created" if is_proto_en else "📄 PDF-протокол сформовано"
+                notif_msg = f"Saved to:\n{os.path.basename(saved_pdf)}" if is_proto_en else f"Збережено у файл:\n{os.path.basename(saved_pdf)}"
                 if shutil.which("notify-send"):
                     subprocess.run(["notify-send", "-a", "QES Tools", "-i", "application-pdf", notif_title, notif_msg])
                 if shutil.which("xdg-open"):
@@ -1465,7 +1556,7 @@ def delegate_to_qes_cert(file_path: str, args: argparse.Namespace) -> int:
 
 def main():
     is_en = (get_qes_lang() == "en")
-    ver_str = "1.0.24"
+    ver_str = "1.0.25"
     parser = argparse.ArgumentParser(
         description=f"""================================================================================
   qes-verify — {"Ukrainian & EU QES/AES validator (.p7s, .asice, .pdf)" if is_en else "автономний валідатор КЕП/УЕП (.p7s, .asice, .pdf)"}
@@ -1483,8 +1574,9 @@ def main():
   1. PDF with embedded PAdES signature (visual stamp + QR code):
      $ qes-verify statement_signed.pdf
 
-  2. Generate official PDF Verification Protocol (with CA Trust Chain):
-     $ qes-verify --protocol statement_signed.pdf
+  2. Generate official PDF Verification Protocol (with CA Trust Chain, UA or EN):
+     $ qes-verify --protocol --lang ua statement_signed.pdf
+     $ qes-verify --protocol --lang en statement_signed.pdf
 
   3. Detached signature (.p7s):
      $ qes-verify contract.pdf.p7s
@@ -1512,6 +1604,7 @@ def main():
     parser.add_argument("files", nargs="*", default=[], help="File path(s) to signature (.p7s, .asice, .pdf), certificate (.cer, .p7b) or [document signature] pair" if is_en else "Шлях до файлу(-ів) підпису (.p7s, .asice, .pdf), сертифікатів (.cer, .p7b) або пари [документ підпис]")
     parser.add_argument("-j", "--json", action="store_true", help="Output results in structured JSON format" if is_en else "Вивести результат у структурованому форматі JSON")
     parser.add_argument("-p", "--protocol", "--pdf-report", dest="protocol", action="store_true", help="Generate official PDF Verification & Trust Chain Protocol" if is_en else "Сформувати офіційний PDF-протокол перевірки КЕП та ланцюжка сертифікатів")
+    parser.add_argument("-l", "--lang", default=None, help="Language for generated PDF protocol (ua/uk or en)" if is_en else "Мова формування PDF-протоколу (ua/uk або en)")
     parser.add_argument("-o", "--output", default=None, help="Output path for generated PDF protocol" if is_en else "Шлях збереження сформованого PDF-протоколу")
     parser.add_argument("-x", "--extract", nargs="?", const=".", default=None, help="Extract signed documents to target directory" if is_en else "Видобути підписаний документ у вказану папку (за замовчуванням: поточна)")
     parser.add_argument("--gui", action="store_true", help="Display visual verification report dialog (Zenity)" if is_en else "Показати результат у графічному діалоговому вікні GNOME (Zenity)")
@@ -1602,7 +1695,16 @@ def main():
     if all_results:
         primary_file = sig_files[0] if sig_files else target_files[0]
         if args.protocol:
-            out_proto = generate_pdf_protocol(all_results, primary_file, args.output)
+            proto_lang = args.lang
+            if proto_lang:
+                proto_lang = proto_lang.strip().lower()
+                if proto_lang == "ua":
+                    proto_lang = "uk"
+            elif args.gui:
+                proto_lang = ask_protocol_lang_gui()
+                if not proto_lang:
+                    sys.exit(0)
+            out_proto = generate_pdf_protocol(all_results, primary_file, args.output, protocol_lang=proto_lang)
             overall_ok = True
             if not args.json:
                 msg = f"📄 PDF Verification Protocol saved to: {out_proto}" if is_en else f"📄 PDF-протокол перевірки КЕП збережено у: {out_proto}"

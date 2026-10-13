@@ -206,7 +206,7 @@ function findDefaultKey() {
 async function main() {
   const lang = getQESLang();
   const args = process.argv.slice(2);
-  let pkgVersion = '1.0.24';
+  let pkgVersion = '1.0.25';
   try { pkgVersion = require('../package.json').version; } catch (_) {}
   if (args.length === 0 || args.includes('-h') || args.includes('--help')) {
     console.log(`

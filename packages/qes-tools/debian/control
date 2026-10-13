@@ -1,5 +1,5 @@
 Package: qes-tools
-Version: 1.0.24
+Version: 1.0.25
 Section: utils
 Priority: optional
 Architecture: amd64

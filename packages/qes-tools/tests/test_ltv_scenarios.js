@@ -466,19 +466,29 @@ test('Scenario 9: Official PDF Verification & Certificate Chain Protocol (--prot
   assert.ok(verified[0].cert_chain.length >= 1, 'Expected at least 1 certificate in trust chain');
   assert.ok(verified[0].file_sha256 && verified[0].file_sha256.length === 64, 'Expected 64-char SHA-256 hex digest');
 
-  // 9b. Generate PDF protocol via `qes-verify --protocol`
-  const customProtocolPdf = path.join(WORK_DIR, 'scen9_custom_protocol.pdf');
-  const protoRes = spawnSync('python3', [CLI_VERIFY, '--protocol', '-o', customProtocolPdf, signedPdf], {
+  // 9b. Generate PDF protocol via `qes-verify --protocol --lang ua` and `--lang en`
+  const customProtocolUaPdf = path.join(WORK_DIR, 'scen9_custom_protocol_ua.pdf');
+  const protoUaRes = spawnSync('python3', [CLI_VERIFY, '--protocol', '--lang', 'ua', '-o', customProtocolUaPdf, signedPdf], {
     cwd: WORK_DIR,
     encoding: 'utf-8',
     timeout: 60000,
   });
-  assert.strictEqual(protoRes.status, 0, `qes-verify --protocol failed: ${protoRes.stderr}`);
-  assert.ok(fs.existsSync(customProtocolPdf), 'Expected custom protocol PDF to exist');
-  const protoStat = fs.statSync(customProtocolPdf);
-  assert.ok(protoStat.size > 5000, `Expected protocol PDF > 5 KB, got ${protoStat.size} bytes`);
-  const protoHeader = fs.readFileSync(customProtocolPdf).subarray(0, 5).toString('ascii');
-  assert.strictEqual(protoHeader, '%PDF-', 'Protocol file must be a valid PDF');
+  assert.strictEqual(protoUaRes.status, 0, `qes-verify --protocol --lang ua failed: ${protoUaRes.stderr}`);
+  assert.ok(fs.existsSync(customProtocolUaPdf), 'Expected UA protocol PDF to exist');
+  const protoUaStat = fs.statSync(customProtocolUaPdf);
+  assert.ok(protoUaStat.size > 5000, `Expected UA protocol PDF > 5 KB, got ${protoUaStat.size} bytes`);
+  assert.strictEqual(fs.readFileSync(customProtocolUaPdf).subarray(0, 5).toString('ascii'), '%PDF-');
+
+  const customProtocolEnPdf = path.join(WORK_DIR, 'scen9_custom_protocol_en.pdf');
+  const protoEnRes = spawnSync('python3', [CLI_VERIFY, '--protocol', '--lang', 'en', '-o', customProtocolEnPdf, signedPdf], {
+    cwd: WORK_DIR,
+    encoding: 'utf-8',
+    timeout: 60000,
+  });
+  assert.strictEqual(protoEnRes.status, 0, `qes-verify --protocol --lang en failed: ${protoEnRes.stderr}`);
+  assert.ok(fs.existsSync(customProtocolEnPdf), 'Expected EN protocol PDF to exist');
+  assert.ok(fs.statSync(customProtocolEnPdf).size > 5000);
+  assert.strictEqual(fs.readFileSync(customProtocolEnPdf).subarray(0, 5).toString('ascii'), '%PDF-');
 
   // 9c. Generate PDF protocol via Nautilus script `16_pdf_protocol.sh`
   const script16 = path.join(PACKAGE_DIR, 'nautilus-scripts', '16_pdf_protocol.sh');

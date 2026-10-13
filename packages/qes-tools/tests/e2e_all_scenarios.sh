@@ -96,14 +96,20 @@ for arg in "$@"; do
             ;;
         --radiolist|--list)
             is_ocr=false
+            is_proto=false
             for a in "$@"; do
                 if [[ "$a" == *"OCR"* || "$a" == *"розпізнавання"* ]]; then
                     is_ocr=true
+                    break
+                elif [[ "$a" == *"Protocol"* || "$a" == *"протокол"* ]]; then
+                    is_proto=true
                     break
                 fi
             done
             if [[ "$is_ocr" = true ]]; then
                 echo "eng"
+            elif [[ "$is_proto" = true ]]; then
+                echo "${MOCK_PROTO_LANG:-uk}"
             else
                 echo "file"
             fi
@@ -865,14 +871,17 @@ NAUTILUS_SCRIPT_SELECTED_FILE_PATHS="$LTV_PDF"$'\n'"$SAMPLE_TXT.p7s" bash "$PACK
 assert_ok "Nautilus скрипт '15_upgrade_ltv.sh' успішно оновив вибрані документи до LTV"
 
 # ------------------------------------------------------------------------------
-# 52. ТЕСТ: Офіційний PDF-протокол перевірки КЕП та ланцюга сертифікатів (16_pdf_protocol.sh)
+# 52. ТЕСТ: Офіційний PDF-протокол перевірки КЕП та ланцюга сертифікатів (UA/EN + 16_pdf_protocol.sh)
 # ------------------------------------------------------------------------------
-log_test "PDF Protocol & Trust Chain: генерація офіційного PDF-протоколу (<file>_protocol.pdf)"
+log_test "PDF Protocol & Trust Chain: генерація офіційного PDF-протоколу двома мовами (UA / EN)"
 
-# 52a. Перевірка генерації через qes-tool protocol
-PROTOCOL_OUT="$TEST_DIR/custom_verification_protocol.pdf"
-qes-tool protocol -o "$PROTOCOL_OUT" "$LTV_PDF"
-assert_file_exists "$PROTOCOL_OUT" "Офіційний PDF-протокол перевірки КЕП (qes-tool protocol)"
+# 52a. Перевірка генерації через qes-tool protocol (--lang ua та --lang en)
+PROTOCOL_OUT_UA="$TEST_DIR/custom_verification_protocol_ua.pdf"
+PROTOCOL_OUT_EN="$TEST_DIR/custom_verification_protocol_en.pdf"
+qes-tool protocol --lang ua -o "$PROTOCOL_OUT_UA" "$LTV_PDF"
+qes-tool protocol --lang en -o "$PROTOCOL_OUT_EN" "$LTV_PDF"
+assert_file_exists "$PROTOCOL_OUT_UA" "Офіційний PDF-протокол перевірки КЕП (UA)"
+assert_file_exists "$PROTOCOL_OUT_EN" "Офіційний PDF-протокол перевірки КЕП (EN)"
 
 # 52b. Перевірка наявності ланцюга сертифікатів (cert_chain) та SHA-256 у JSON-виводі qes-verify
 chain_len=$(qes-verify -j "$LTV_PDF" | jq '.[0].cert_chain | length')
@@ -883,10 +892,10 @@ else
     echo "Помилка побудови cert_chain або file_sha256: chain_len=$chain_len, sha=$doc_sha" >&2; exit 1
 fi
 
-# 52c. Перевірка Nautilus скрипта 16_pdf_protocol.sh
-DISPLAY="" WAYLAND_DISPLAY="" NAUTILUS_SCRIPT_SELECTED_FILE_PATHS="$LTV_PDF" bash "$PACKAGE_DIR/nautilus-scripts/16_pdf_protocol.sh"
+# 52c. Перевірка Nautilus скрипта 16_pdf_protocol.sh (з інтерактивним вибором мови через Zenity)
+DISPLAY=":0" MOCK_PROTO_LANG="uk" NAUTILUS_SCRIPT_SELECTED_FILE_PATHS="$LTV_PDF" bash "$PACKAGE_DIR/nautilus-scripts/16_pdf_protocol.sh"
 assert_file_exists "${LTV_PDF%.*}_protocol.pdf" "Nautilus PDF-протокол (${LTV_PDF%.*}_protocol.pdf)"
-assert_ok "Nautilus скрипт '16_pdf_protocol.sh' успішно створив офіційний PDF-протокол"
+assert_ok "Nautilus скрипт '16_pdf_protocol.sh' успішно створив офіційний PDF-протокол з вибором мови"
 
 # Очищення тимчасового тестового ключа з ~/.secure_keys
 rm -f "$TEST_LINK" "$TEST_LINK_CER"
