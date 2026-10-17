@@ -26,18 +26,26 @@ import sys
 import tempfile
 import time
 
-import cairo
-import docx
-from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.shared import Inches, Pt, RGBColor
-import pymupdf
+try:
+    import cairo
+except ImportError:
+    cairo = None  # type: ignore[assignment]
 
 try:
+    import docx
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    from docx.shared import Inches, Pt, RGBColor
+except ImportError:
+    docx = None  # type: ignore[assignment]
+    WD_ALIGN_PARAGRAPH = Inches = Pt = RGBColor = None  # type: ignore[assignment]
+
+try:
+    import pymupdf
     pymupdf.TOOLS.mupdf_display_errors(False)
 except Exception:
-    pass
+    pymupdf = None  # type: ignore[assignment]
 
-VERSION = "1.2.0"
+VERSION = "1.2.1"
 
 # Canonical 9-Triangle Coordinates (lx, by, ay, rx, is_upward) in 300x300 space (R=100)
 CANONICAL_TRIANGLES: list[tuple[str, float, float, float, float, bool]] = [
