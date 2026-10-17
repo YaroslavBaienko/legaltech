@@ -19,6 +19,7 @@ import argparse
 from datetime import datetime, timezone
 import hashlib
 import hmac
+import html
 import json
 import math
 import os
@@ -586,11 +587,13 @@ def sign_sri_yantra_svg(
             f' data-canary-hmac="{canary_info["hmac_commitment"]}"'
         )
 
+    safe_payload_attr = html.escape(payload, quote=True)
+    safe_signer_attr = html.escape(signer_key_name, quote=True)
     svg_content = (
         '<?xml version="1.0" encoding="UTF-8"?>\n'
         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300" width="1200" height="1200">\n'
-        f'  <metadata data-protocol="MARMA-DSTU4145-V1.3" data-payload="{payload}" data-content-sha256="{content_sha256}" '
-        f'data-hmac-sha256="{hex_sig}" data-signer="{signer_key_name}" '
+        f'  <metadata data-protocol="MARMA-DSTU4145-V1.3" data-payload="{safe_payload_attr}" data-content-sha256="{content_sha256}" '
+        f'data-hmac-sha256="{hex_sig}" data-signer="{safe_signer_attr}" '
         f'data-key-fp="{key_fingerprint}" data-public-seal="{pub_seal}" '
         f'data-dstu4145-b64="{dstu_json_b64}"{canary_attrs} />\n'
         '  <rect width="300" height="300" fill="#060913" />\n'
@@ -771,10 +774,10 @@ def verify_sri_yantra_svg(
 ) -> dict:
     """Verify the DSTU 4145-2002 elliptic curve signature and 9-triangle geometric watermark."""
     if payload is None:
-        m_pay = re.search(r'data-payload="([^"]+)"', svg_text)
-        if not m_pay:
+        m_pay = re.search(r'data-payload="([^"]*)"', svg_text)
+        if not m_pay or not m_pay.group(1):
             return {"verified": False, "format": "svg", "reason": "Missing data-payload in SVG metadata"}
-        payload = m_pay.group(1)
+        payload = html.unescape(m_pay.group(1))
 
     m_proto = re.search(r'data-protocol="([^"]+)"', svg_text)
     proto_ver = m_proto.group(1) if m_proto else "MARMA-DSTU4145-V1.2"
@@ -785,7 +788,7 @@ def verify_sri_yantra_svg(
     m_pseal = re.search(r'data-public-seal="([0-9a-fA-F]+)"', svg_text)
     embedded_pseal = m_pseal.group(1) if m_pseal else ""
     m_signer = re.search(r'data-signer="([^"]+)"', svg_text)
-    signer_name = m_signer.group(1) if m_signer else "Sovereign-Vedic-Key-108"
+    signer_name = html.unescape(m_signer.group(1)) if m_signer else "Sovereign-Vedic-Key-108"
     m_kfp = re.search(r'data-key-fp="([0-9a-fA-F]+)"', svg_text)
     key_fp = m_kfp.group(1) if m_kfp else ""
     m_cword = re.search(r'data-canary-word="([0-9]+)"', svg_text)
@@ -1102,7 +1105,10 @@ def verify_pdf_document(
     meta = doc.metadata or {}
     kw = meta.get("keywords", "")
     raw_bytes = pdf_path.read_bytes()
-    if "MARMA_SEAL::" in kw:
+    if b"%MARMA-INCREMENTAL-START:" in raw_bytes and b"%MARMA_SEAL::" in raw_bytes:
+        tail_part = raw_bytes.rsplit(b"%MARMA_SEAL::", 1)[1]
+        raw_json = tail_part.split(b"\n", 1)[0].decode("utf-8", errors="replace").strip()
+    elif "MARMA_SEAL::" in kw:
         raw_json = kw.split("MARMA_SEAL::", 1)[1]
     elif b"%MARMA_SEAL::" in raw_bytes:
         tail_part = raw_bytes.rsplit(b"%MARMA_SEAL::", 1)[1]
@@ -1568,15 +1574,19 @@ def trace_canary_suspects(
     embedded_pub_canary = ""
     ext = target_file.suffix.lower()
     if ext == ".pdf":
-        d = pymupdf.open(str(target_file))
-        kw = (d.metadata or {}).get("keywords", "")
-        d.close()
-        if "MARMA_SEAL::" in kw:
-            pkt = json.loads(kw.split("MARMA_SEAL::", 1)[1])
+        raw_b = target_file.read_bytes()
+        if b"%MARMA-INCREMENTAL-START:" in raw_b and b"%MARMA_SEAL::" in raw_b:
+            tail_p = raw_b.rsplit(b"%MARMA_SEAL::", 1)[1].split(b"\n", 1)[0].decode("utf-8", errors="replace").strip()
+            pkt = json.loads(tail_p)
             embedded_pub_canary = str((pkt.get("canary") or {}).get("public_canary_hash", ""))
         else:
-            raw_b = target_file.read_bytes()
-            if b"%MARMA_SEAL::" in raw_b:
+            d = pymupdf.open(str(target_file))
+            kw = (d.metadata or {}).get("keywords", "")
+            d.close()
+            if "MARMA_SEAL::" in kw:
+                pkt = json.loads(kw.split("MARMA_SEAL::", 1)[1])
+                embedded_pub_canary = str((pkt.get("canary") or {}).get("public_canary_hash", ""))
+            elif b"%MARMA_SEAL::" in raw_b:
                 tail_p = raw_b.rsplit(b"%MARMA_SEAL::", 1)[1].split(b"\n", 1)[0].decode("utf-8", errors="replace").strip()
                 pkt = json.loads(tail_p)
                 embedded_pub_canary = str((pkt.get("canary") or {}).get("public_canary_hash", ""))
