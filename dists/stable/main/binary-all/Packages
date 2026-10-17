@@ -1,0 +1,57 @@
+Package: marma-crypto-watermark
+Architecture: all
+Version: 1.3.0-1
+Priority: optional
+Section: utils
+Maintainer: Yaroslav Baienko <yaroslav@advocacy.uno>
+Installed-Size: 296
+Depends: python3 (>= 3.10), python3-pymupdf, python3-docx, python3-cairo, python3-gi, gir1.2-gtk-4.0, gir1.2-adw-1, zenity, libnotify-bin, xdg-utils
+Filename: pool/main/marma-crypto-watermark_1.3.0-1_all.deb
+Size: 44260
+MD5sum: 340d5635b14569437516cb64aaccaa55
+SHA1: d9256a474035feb32d5b8f9472ce863241235027
+SHA256: e1de6f1872662c97c9db3d059b1c99a36d9117646f76c57983dff709df99f622
+SHA512: ecd9799eab30aa0ae32a620c9784cbe3d04014fadb7fb24b3a9d967b215d0c6abc4b91c94b00939766aeb9c6353219dd13f019bb1fd160a336486ccb8c21575b
+Description: Sri Yantra Cryptographic Geometric Watermark & Nautilus Suite
+ Zero-tolerance cryptographic geometric watermarking suite (Module 5 of EDU-VEDI)
+ modeled after the LegalTech QES-Tools Nautilus architecture.
+ .
+ Integrates directly with ~/.secure_keys/ (.pfx, .p12, .key, .cer), hardware USB
+ tokens, and GNOME Files (Nautilus) right-click Scripts menu ("🔱 Шрі Янтра · Marma-Crypto").
+ .
+ Provides /usr/bin/marma-watermark, /usr/bin/marma-dialog (GTK4/Libadwaita),
+ and /usr/bin/marma-config for stamping 256-bit bijective vector watermarks,
+ golden Bindu seals, Canary leak-tracing (--recipient-id / trace), verifying
+ 9-triangle concurrency invariants, and generating official PDF protocols.
+
+Package: qes-tools
+Architecture: amd64
+Version: 1.0.26
+Priority: optional
+Section: utils
+Maintainer: Yaroslav Baienko <zerhug@gmail.com>
+Provides: eusw (= 1.3.1.109)
+Depends: nodejs (>= 18), python3 (>= 3.10), python3-cryptography, openssl, zenity, libnotify-bin, qpdf, fonts-liberation, ocrmypdf, tesseract-ocr, tesseract-ocr-ukr, tesseract-ocr-eng, unpaper, xdg-utils, libc6 (>= 2.14), libpcsclite1
+Recommends: wl-clipboard | xclip, pcscd, libccid, opensc, python3-gi, gir1.2-adw-1, gir1.2-gtk-4.0
+Conflicts: eusw (<< 1.3.1.109)
+Replaces: eusw
+Filename: pool/main/qes-tools_1.0.26_amd64.deb
+Size: 22014024
+MD5sum: 1732037374199fc3acce9610baf8a5fb
+SHA1: 39210ad6897a76c15ad3d74ccd6909f10e3b1feb
+SHA256: da6c6e84748cb32bca430ca6383d8cb5975c2a60433d1730a39d64400df89e7a
+SHA512: e5bda18e73eb89d54017c2ba39166fb2ce979afe2fb8c664f6beaabb62a10306bf7ce12f43b3c5145f45c04e26c8ae4effb28fb2b7f2bdc6a6a7047c801311c9
+Homepage: https://github.com/YaroslavBaienko/legaltech
+Description: Ukrainian Qualified Electronic Signature & Encryption LegalTech Suite
+ Offline-first CLI & GUI toolkit for signing, verifying, and encrypting documents
+ conforming to Ukrainian DSTU 4145-2002, GOST 28147:89, PKCS#7/CAdES, CAdES-LTA,
+ ETSI ASiC-E containers, PAdES / PAdES-LTA (embedded PDF signatures with official
+ visual stamps and archival LTV validation for 25+ years), and asymmetric
+ cryptographic envelopes (qes-encrypt, qes-decrypt).
+ Fully integrates IIT End-User CA-1 drivers (eusw, pkcs11.eka1c.so, pkcs11.ekc1.so,
+ libav337p11d.so) for native hardware USB tokens (DepositSign Almaz-1K, Crystal-1K,
+ SecureToken-337) and browser signing extension (Native Messaging Host).
+ Supports auto-discovery across all Ukrainian QTSPs (DepositSign, monobank, Diia,
+ Tax Service, PrivatBank, Vchasno, NAIS).
+ Preserves attorney-client privilege with 100% offline cryptographic operations.
+
