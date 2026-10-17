@@ -14,7 +14,7 @@
 [![Whitepaper: CC BY 4.0](https://img.shields.io/badge/Whitepaper-CC_BY_4.0-DCA900.svg)](whitepaper/Marma_Crypto_Whitepaper_EN.pdf)
 [![Standard: DSTU 4145-2002 | PAdES-B-LTA](https://img.shields.io/badge/Crypto-DSTU_4145--2002_%7C_256--Bit_Bijective_%7C_PAdES--LTA-1b2a4a.svg)](src/dstu4145_bridge.js)
 
-> **🌐 [Open the Interactive Browser Verifier & Sri Yantra 9-Triangle Inspector → `https://yaroslavbaienko.github.io/marma-crypto-protocol/`](https://yaroslavbaienko.github.io/marma-crypto-protocol/)**
+> **🌐 [Open the Interactive Browser Sealer, Deal-Room Canary Studio & 9-Triangle Verifier → `https://yaroslavbaienko.github.io/marma-crypto-protocol/`](https://yaroslavbaienko.github.io/marma-crypto-protocol/)**
 
 ---
 
@@ -32,10 +32,13 @@
    - **24-Pair Symmetric Marma Mantissa Encoding (`encode_256bit_marma_pairs` / `decode_256bit_marma_pairs`):** Encodes 11 bits per symmetric Marma pair ($24 \times 11 = 264\text{ bits} \ge 256\text{ bits}$ + 8-bit Canary CRC) while preserving exact bilateral symmetry $\Delta_{\text{sym}} = 0.000000000000$.
 3. **Forensic Canary Leak-Tracing (`--recipient-id` & `marma-watermark trace --suspects`):**
    Uses the **27th independent symmetric degree of freedom** — the vertical apex $ay_9$ (`D5.ay`) of the innermost Bindu triangle $\nabla_{\text{D5}}$ — as a dedicated 10-bit forensic Canary beacon $w_{\text{canary}} \in [1, 1023]$ coupled with zero-plaintext SHA-256/HMAC commitments. No plaintext recipient name is ever stored in the file, yet leaked copies can be deterministically attributed against a suspect pool via CLI or in the Browser Verifier.
-4. **Dual-Mode QES / Direct PB-257 Vault Fallback & GNOME Files (Nautilus) Companion Resolution:**
+4. **Client-Side Document Sealer & Deal-Room Canary Studio (`100% Client-Side · Bidirectional CLI Parity`):**
+   - **Zero-Upload Browser Sealing (`.pdf` & `.svg`):** Visitors on desktop or mobile can seal any local `.pdf` or `.svg` (or run the **1-Click Deal-Room Leak Simulation** on the built-in Confidential M&A Term Sheet) directly in the browser across multiple Deal-Room recipients (`Investor-Alpha, M&A-Party-07, Legal-Counsel-B`).
+   - **100% Bidirectional CLI Compatibility:** Any `.pdf` or `.svg` sealed in the browser passes `marma-watermark verify` and `marma-watermark trace --suspects` in the Python CLI with zero coordinate drift ($\Delta_{\text{coord}} = 0.000000000000$), and any `.pdf`, `.docx`, or `.svg` sealed in the Python CLI passes verification and Canary leak-tracing in the browser.
+5. **Dual-Mode QES / Direct PB-257 Vault Fallback & GNOME Files (Nautilus) Companion Resolution:**
    - **Resilient Vault Signing (`DSTU4145_PB257_DIRECT` Fallback):** When signing with a `.pfx`/`.p12`/`.zs2` container from `~/.secure_keys/`, `dstu4145_bridge.js` automatically attempts full PKCS#12 unlock (including automatic `UA ↔ EN` keyboard-layout swap recovery) and seamlessly falls back to deterministic `DSTU4145_PB257_DIRECT` signing over $\mathbb{F}_{2^{257}}$ with certificate metadata attachment if an empty password (file-digest mode) or custom vault passphrase is provided.
    - **Companion `.pdf` Auto-Resolution:** Selecting a companion `.txt`, `.typ`, or `.p7s` file in GNOME Files (Nautilus) or CLI (`marma-watermark sign` / `verify`) automatically resolves and processes the corresponding `.pdf` document in the same directory.
-5. **100% Backward Compatibility:**
+6. **100% Backward Compatibility (`12/12` Cross-Runtime Test Suite):**
    All `MARMA-DSTU4145-V1.2` hardware-signed PAdES-LTA / CAdES-X-Long / OpenTimestamps artifacts remain 100% verifiable with zero drift.
 
 ---
@@ -92,7 +95,7 @@ python3 src/marma_watermark.py sign contract.pdf -o contract_party07.pdf --recip
 python3 src/marma_watermark.py trace contract_party07.pdf --suspects "Investor-A,M&A-Party-07,Counsel-C"
 ```
 
-### 3. Run the Full Cryptographic Self-Test & 11-Suite Cross-Runtime Verification
+### 3. Run the Full Cryptographic Self-Test & 12-Suite Cross-Runtime Verification
 ```bash
 python3 src/marma_watermark.py selftest
 python3 -m unittest discover -s tests -v
