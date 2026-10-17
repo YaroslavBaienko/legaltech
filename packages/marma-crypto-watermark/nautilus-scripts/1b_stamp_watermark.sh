@@ -20,7 +20,11 @@ fi
 
 VALID_FILES=()
 for f in "${FILES[@]}"; do
-    [[ -f "$f" && "${f,,}" == *.pdf ]] && VALID_FILES+=("$f")
+    if [[ -f "$f" && "${f,,}" == *.pdf ]]; then
+        VALID_FILES+=("$f")
+    elif [[ -f "${f%.*}.pdf" ]]; then
+        VALID_FILES+=("${f%.*}.pdf")
+    fi
 done
 
 if [[ ${#VALID_FILES[@]} -eq 0 ]]; then

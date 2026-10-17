@@ -1785,6 +1785,12 @@ def sign_any_file(
     recipient_id: str = "",
 ) -> dict:
     ext = in_path.suffix.lower()
+    if ext == ".p7s" and in_path.with_suffix("").is_file():
+        in_path = in_path.with_suffix("")
+        ext = in_path.suffix.lower()
+    elif ext not in (".pdf", ".docx", ".svg") and in_path.with_suffix(".pdf").is_file():
+        in_path = in_path.with_suffix(".pdf")
+        ext = ".pdf"
     if out_path is None:
         out_path = in_path.with_name(f"{in_path.stem}_marma_signed{ext}")
     if ext == ".pdf":

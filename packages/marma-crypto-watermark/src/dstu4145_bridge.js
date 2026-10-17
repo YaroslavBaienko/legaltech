@@ -119,6 +119,15 @@ function findOwnerCertificateMetadata(preferredKeyPath) {
   return null;
 }
 
+function swapKeyboardLayout(str, fromChars, toChars) {
+  let out = '';
+  for (let i = 0; i < str.length; i++) {
+    const idx = fromChars.indexOf(str[i]);
+    out += idx >= 0 ? toChars[idx] : str[i];
+  }
+  return out;
+}
+
 async function unlockQesBox(keyPath, password) {
   if (!QESEngine) {
     throw new Error('Модуль QESEngine (/usr/lib/qes-tools) не знайдено.');
@@ -140,7 +149,30 @@ async function unlockQesBox(keyPath, password) {
     throw new Error('Для розблокування особистого ключа КЕП (ДСТУ 4145-2002) потрібен пароль.');
   }
 
-  const boxInfo = await engine.initBox(keyPath, effectivePassword, null);
+  const uaLayout = 'йцукенгшщзхїфівапролджєячсмитьбюґЙЦУКЕНГШЩЗХЇФІВАПРОЛДЖЄЯЧСМИТЬБЮҐ';
+  const enLayout = 'qwertyuiop[]asdfghjkl;\'zxcvbnm,./QWERTYUIOP{}ASDFGHJKL:"ZXCVBNM<>?';
+  const candidates = [
+    effectivePassword,
+    effectivePassword.trim(),
+    swapKeyboardLayout(effectivePassword, uaLayout, enLayout),
+    swapKeyboardLayout(effectivePassword, enLayout, uaLayout),
+  ];
+
+  let boxInfo = null;
+  let unlockedPwd = effectivePassword;
+  let lastErr = null;
+  for (const cand of [...new Set(candidates.filter(Boolean))]) {
+    try {
+      boxInfo = await engine.initBox(keyPath, cand, null);
+      unlockedPwd = cand;
+      break;
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  if (!boxInfo) {
+    throw lastErr || new Error('Невірний пароль до ключа або пошкоджений файл контейнера.');
+  }
 
   if (sessionMod) {
     try {
@@ -150,7 +182,7 @@ async function unlockQesBox(keyPath, password) {
         await sessionMod.sendAgentMessage({
           action: 'set',
           keyId,
-          password: effectivePassword,
+          password: unlockedPwd,
           label: path.basename(keyPath),
           ttl: 900,
         }, { timeoutMs: 600 });
@@ -158,7 +190,7 @@ async function unlockQesBox(keyPath, password) {
     } catch (_) {}
   }
 
-  return { engine, box: boxInfo.box, hasCert: boxInfo.hasCert, password: effectivePassword };
+  return { engine, box: boxInfo.box, hasCert: boxInfo.hasCert, password: unlockedPwd };
 }
 
 async function handleSign(req) {
@@ -178,66 +210,69 @@ async function handleSign(req) {
   const password = req.password || '';
   const secretSeed = req.secretSeed || '';
 
-  // Варіант А: Підписання справжнім контейнером КЕП (.pfx / .p12 / .dat / .jks)
+  // Варіант А: Підписання справжнім контейнером КЕП (.pfx / .p12 / .dat / .jks),
+  // а якщо пароль порожній або є парофразою Криптосейфа — плавний перехід до Варіанта Б (DSTU_PB_257)
   if (isQesContainerPath(keyPath) && fs.existsSync(keyPath)) {
-    const { box } = await unlockQesBox(keyPath, password);
-    const keyEntry = box.keys && box.keys.length > 0 ? box.keys[0] : null;
-    if (!keyEntry || !keyEntry.priv) {
-      throw new Error('У контейнері КЕП не знайдено приватного ключа ДСТУ 4145-2002.');
-    }
+    try {
+      const { box } = await unlockQesBox(keyPath, password);
+      const keyEntry = box.keys && box.keys.length > 0 ? box.keys[0] : null;
+      if (keyEntry && keyEntry.priv) {
+        const privKey = keyEntry.priv;
+        const pubKey = privKey.pub();
+        const sig = deterministicDstu4145Sign(privKey, gost34311Buf);
+        const rHex = Buffer.from(sig.r.buf8()).toString('hex');
+        const sHex = Buffer.from(sig.s.buf8()).toString('hex');
+        const pubXHex = Buffer.from(pubKey.point.x.buf8()).toString('hex');
+        const pubYHex = Buffer.from(pubKey.point.y.buf8()).toString('hex');
+        const rsDigestHex = crypto.createHash('sha256').update(`${rHex}::${sHex}`).digest('hex');
 
-    const privKey = keyEntry.priv;
-    const pubKey = privKey.pub();
-    const sig = deterministicDstu4145Sign(privKey, gost34311Buf);
-    const rHex = Buffer.from(sig.r.buf8()).toString('hex');
-    const sHex = Buffer.from(sig.s.buf8()).toString('hex');
-    const pubXHex = Buffer.from(pubKey.point.x.buf8()).toString('hex');
-    const pubYHex = Buffer.from(pubKey.point.y.buf8()).toString('hex');
-    const rsDigestHex = crypto.createHash('sha256').update(`${rHex}::${sHex}`).digest('hex');
+        let certInfo = null;
+        let certDerHex = null;
+        if (keyEntry.cert) {
+          try {
+            certInfo = padesMod.extractCertInfoFromCert(keyEntry.cert);
+            certInfo.serialHex = formatSerialHex(keyEntry.cert) || certInfo.serialHex;
+            certDerHex = Buffer.from(keyEntry.cert.as_asn1()).toString('hex');
+          } catch (_) {}
+        }
+        if (!certInfo) {
+          const fallbackCert = findOwnerCertificateMetadata(keyPath);
+          if (fallbackCert) {
+            certInfo = fallbackCert;
+            certDerHex = fallbackCert.certDerHex;
+          }
+        }
 
-    let certInfo = null;
-    let certDerHex = null;
-    if (keyEntry.cert) {
-      try {
-        certInfo = padesMod.extractCertInfoFromCert(keyEntry.cert);
-        certInfo.serialHex = formatSerialHex(keyEntry.cert) || certInfo.serialHex;
-        certDerHex = Buffer.from(keyEntry.cert.as_asn1()).toString('hex');
-      } catch (_) {}
-    }
-    if (!certInfo) {
-      const fallbackCert = findOwnerCertificateMetadata(keyPath);
-      if (fallbackCert) {
-        certInfo = fallbackCert;
-        certDerHex = fallbackCert.certDerHex;
+        return {
+          status: 'ok',
+          mode: 'QES_DSTU4145_CONTAINER',
+          standard: 'ДСТУ 4145-2002 (КЕП КНЕДП) / ДСТУ ГОСТ 34.311-95 / ДСТУ 7564:2014',
+          curve_type: 'QES_KEY_CURVE',
+          gost34311_hex: gost34311Hex,
+          dstu7564_hex: dstu7564Hex,
+          sha256_hex: sha256Hex,
+          combiner_hex: combinerHex,
+          combiner_alg: 'SHA256(GOST34311||Kupyna256||SHA256)',
+          r_hex: rHex,
+          s_hex: sHex,
+          rs_digest_hex: rsDigestHex,
+          pub_x_hex: pubXHex,
+          pub_y_hex: pubYHex,
+          cert_der_hex: certDerHex,
+          signer_info: certInfo ? {
+            common_name: certInfo.commonName,
+            rnokpp: certInfo.rnokpp || '',
+            issuer_name: certInfo.issuerName || 'КНЕДП',
+            serial_hex: certInfo.serialHex || '',
+            valid_from: certInfo.validFrom ? certInfo.validFrom.toISOString() : null,
+            valid_to: certInfo.validTo ? certInfo.validTo.toISOString() : null,
+            locality: certInfo.locality || 'Україна',
+          } : null,
+        };
       }
+    } catch (_) {
+      // Перехід до Варіанта Б (Детермінований підпис за дайджестом файлу на кривій DSTU_PB_257)
     }
-
-    return {
-      status: 'ok',
-      mode: 'QES_DSTU4145_CONTAINER',
-      standard: 'ДСТУ 4145-2002 (КЕП КНЕДП) / ДСТУ ГОСТ 34.311-95 / ДСТУ 7564:2014',
-      curve_type: 'QES_KEY_CURVE',
-      gost34311_hex: gost34311Hex,
-      dstu7564_hex: dstu7564Hex,
-      sha256_hex: sha256Hex,
-      combiner_hex: combinerHex,
-      combiner_alg: 'SHA256(GOST34311||Kupyna256||SHA256)',
-      r_hex: rHex,
-      s_hex: sHex,
-      rs_digest_hex: rsDigestHex,
-      pub_x_hex: pubXHex,
-      pub_y_hex: pubYHex,
-      cert_der_hex: certDerHex,
-      signer_info: certInfo ? {
-        common_name: certInfo.commonName,
-        rnokpp: certInfo.rnokpp || '',
-        issuer_name: certInfo.issuerName || 'КНЕДП',
-        serial_hex: certInfo.serialHex || '',
-        valid_from: certInfo.validFrom ? certInfo.validFrom.toISOString() : null,
-        valid_to: certInfo.validTo ? certInfo.validTo.toISOString() : null,
-        locality: certInfo.locality || 'Україна',
-      } : null,
-    };
   }
 
   // Варіант Б: Детермінований підпис ДСТУ 4145-2002 на стандартній кривій DSTU_PB_257 (GF(2^257))
@@ -338,7 +373,12 @@ async function handleSealPades(req) {
     return { status: 'skipped', reason: 'Not a PKCS#12/QES container key' };
   }
 
-  const { box } = await unlockQesBox(keyPath, password);
+  let box;
+  try {
+    ({ box } = await unlockQesBox(keyPath, password));
+  } catch (err) {
+    return { status: 'skipped', reason: err.message || 'Direct PB-257 mode (no PKCS#12 unlock)' };
+  }
   const rawCertInfo = padesMod.extractCertInfo(box);
   const safeCertInfo = {
     ...rawCertInfo,
@@ -375,7 +415,13 @@ async function handleSealCades(req) {
     return { status: 'skipped', reason: 'Not a PKCS#12/QES container key' };
   }
 
-  const { engine, box } = await unlockQesBox(keyPath, password);
+  let engine;
+  let box;
+  try {
+    ({ engine, box } = await unlockQesBox(keyPath, password));
+  } catch (err) {
+    return { status: 'skipped', reason: err.message || 'Direct PB-257 mode (no PKCS#12 unlock)' };
+  }
   const res = await engine.signDocument(box, inputFilePath, {
     outputPath: outputP7sPath,
     detached: true,
