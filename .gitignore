@@ -28,3 +28,15 @@ __pycache__/
 
 # Large binaries (downloaded during build if needed)
 **/bin/typst
+
+# Local Knowledge OS tenant state & workstation symlinks (never push to public repo)
+ltech_spec.py
+sri-yantra-crypto
+packages/sri-yantra-crypto
+packages/marma-crypto-watermark/subproject_link.json
+inbox/
+manifests/
+metadata/
+reports/
+.qdrant_key
+.litellm_key

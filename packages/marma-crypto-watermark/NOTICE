@@ -1,0 +1,11 @@
+Marma-Crypto Protocol & Watermark Suite (v1.2.0)
+Copyright 2026 Yaroslav V. Baienko (Баєнко Ярослав Володимирович)
+
+This product includes the original cryptographic-geometric protocol specification
+and reference implementation developed by Yaroslav V. Baienko (Ukraine):
+"Marma-Crypto: A Cryptographic Geometric Watermarking and Sovereign Document
+Sealing Protocol via Sri Yantra Nonlinear Concurrency and Elliptic Curves
+over GF(2^257) (DSTU 4145-2002)".
+
+Author GPG Fingerprint (RSA-4096): 3D5A ACFD E32C 98FE 8819 9D47 D2A2 C1C4 9164 673B
+Qualified Certificate Serial (КНЕДП): 10FF6F932221FA00CB4407000000000130616768

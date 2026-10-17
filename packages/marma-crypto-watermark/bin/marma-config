@@ -1,0 +1,179 @@
+#!/usr/bin/env bash
+# ==============================================================================
+# marma-config — Керування конфігурацією та меню Nautilus для Marma-Crypto (UA/EN)
+# Modeled after qes-config ($HOME/legaltech/packages/qes-tools/bin/qes-config)
+# ==============================================================================
+set -euo pipefail
+
+ORDERED_CATEGORIES_UK=(
+    "✍️ Підписання та Водяний знак"
+    "🔍 Перевірка та Протоколи"
+    "⚙️ Ключі, Сесія та Довідка"
+)
+
+declare -A CATEGORIES_UK=(
+    ["✍️ Підписання та Водяний знак"]="1_stamp_both.sh:🔱 Підписати (Водяний знак + Золота печатка)|1b_stamp_watermark.sh:🌊 Підписати PDF (Лише фоновий водяний знак)|1c_stamp_seal.sh:🪙 Підписати (Лише кутова Золота печатка Бінду)|2_sign_svg.sh:📐 Згенерувати еталонну підписану Шрі Янтру (.svg)"
+    ["🔍 Перевірка та Протоколи"]="3_verify.sh:🔍 Перевірити підпис та геометрію Шрі Янтри|4_pdf_protocol.sh:📄 Сформувати PDF-протокол перевірки Marma-Crypto|5_verify_strict_key.sh:🔐 Глибока звірка з особистим ключем КЕП та Сейфа"
+    ["⚙️ Ключі, Сесія та Довідка"]="6_keygen.sh:🗝️ Створити та керувати ключем у сейфі (.secure_keys)|7_lock_session.sh:🔒 Скинути кеш пароля в RAM (Заблокувати сесію)|0_help.sh:📖 Довідка та Математичний Стандарт Шрі Янтри"
+)
+
+ORDERED_CATEGORIES_EN=(
+    "✍️ Watermark & Signing"
+    "🔍 Verification & Protocols"
+    "⚙️ Keys, Session & Help"
+)
+
+declare -A CATEGORIES_EN=(
+    ["✍️ Watermark & Signing"]="1_stamp_both.sh:🔱 Sign (Background Watermark + Golden Seal)|1b_stamp_watermark.sh:🌊 Sign PDF (Background Watermark Only)|1c_stamp_seal.sh:🪙 Sign (Corner Golden Bindu Seal Only)|2_sign_svg.sh:📐 Generate Canonical Signed Sri Yantra (.svg)"
+    ["🔍 Verification & Protocols"]="3_verify.sh:🔍 Verify Sri Yantra Geometric Signature|4_pdf_protocol.sh:📄 Generate PDF Verification Protocol|5_verify_strict_key.sh:🔐 Strict Cryptographic Key Verification"
+    ["⚙️ Keys, Session & Help"]="6_keygen.sh:🗝️ Manage Vault Key (.secure_keys)|7_lock_session.sh:🔒 Lock RAM Session (Wipe Cached Key)|0_help.sh:📖 Help & Sri Yantra Mathematical Standard"
+)
+
+FOLDER_UK="🔱 Шрі Янтра · Marma-Crypto"
+FOLDER_EN="🔱 Sri Yantra · Marma-Crypto"
+
+find_source_scripts_dir() {
+    local real_bin
+    real_bin="$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")"
+    local bin_parent
+    bin_parent="$(cd "$(dirname "$real_bin")/.." 2>/dev/null && pwd || true)"
+
+    local candidate_dirs=(
+        "${MARMA_SOURCE_SCRIPTS_DIR:-}"
+        "$bin_parent/nautilus-scripts"
+        "/usr/share/marma-crypto-watermark/nautilus-scripts"
+    )
+    for d in "${candidate_dirs[@]}"; do
+        if [[ -n "$d" && -d "$d" && -f "$d/1_stamp_both.sh" ]]; then
+            echo "$d"
+            return 0
+        fi
+    done
+    return 1
+}
+
+get_effective_lang() {
+    local mode="${1:-auto}"
+    if [[ "$mode" == "en" ]]; then echo "en"; return 0; fi
+    if [[ "$mode" == "uk" || "$mode" == "ua" ]]; then echo "uk"; return 0; fi
+
+    local l="${LANGUAGE:-${LC_ALL:-${LC_MESSAGES:-${LANG:-}}}}"
+    if [[ -z "$l" && -f /etc/default/locale ]]; then
+        l=$(grep -E '^(LANGUAGE|LANG|LC_MESSAGES)=' /etc/default/locale | head -n1 | cut -d= -f2 | tr -d '"' || true)
+    fi
+    if [[ "${l,,}" =~ ^uk ]]; then
+        echo "uk"
+    else
+        echo "uk"  # Default Ukrainian per owner rule
+    fi
+}
+
+deploy_nautilus_scripts_for_dir() {
+    local target_home="$1"
+    local effective_lang="$2"
+    local src_dir="$3"
+    local target_base="$target_home/.local/share/nautilus/scripts"
+
+    mkdir -p "$target_base"
+    local target_folder other_folder
+    if [[ "$effective_lang" == "en" ]]; then
+        target_folder="$target_base/$FOLDER_EN"
+        other_folder="$target_base/$FOLDER_UK"
+    else
+        target_folder="$target_base/$FOLDER_UK"
+        other_folder="$target_base/$FOLDER_EN"
+    fi
+
+    rm -rf "$other_folder" "$target_folder"
+    mkdir -p "$target_folder"
+
+    if [[ -f "$src_dir/_i18n.sh" ]]; then
+        cp "$src_dir/_i18n.sh" "$target_folder/.i18n.sh"
+        chmod 0755 "$target_folder/.i18n.sh"
+    fi
+
+    if [[ "$effective_lang" == "en" ]]; then
+        for cat_name in "${ORDERED_CATEGORIES_EN[@]}"; do
+            local cat_dir="$target_folder/$cat_name"
+            mkdir -p "$cat_dir"
+            cp "$src_dir/_i18n.sh" "$cat_dir/.i18n.sh"
+            chmod 0755 "$cat_dir/.i18n.sh"
+            IFS="|" read -ra items <<< "${CATEGORIES_EN[$cat_name]}"
+            for item in "${items[@]}"; do
+                local s_file="${item%%:*}"
+                local s_disp="${item##*:}"
+                cp "$src_dir/$s_file" "$cat_dir/$s_disp"
+                chmod 0755 "$cat_dir/$s_disp"
+            done
+        done
+    else
+        for cat_name in "${ORDERED_CATEGORIES_UK[@]}"; do
+            local cat_dir="$target_folder/$cat_name"
+            mkdir -p "$cat_dir"
+            cp "$src_dir/_i18n.sh" "$cat_dir/.i18n.sh"
+            chmod 0755 "$cat_dir/.i18n.sh"
+            IFS="|" read -ra items <<< "${CATEGORIES_UK[$cat_name]}"
+            for item in "${items[@]}"; do
+                local s_file="${item%%:*}"
+                local s_disp="${item##*:}"
+                cp "$src_dir/$s_file" "$cat_dir/$s_disp"
+                chmod 0755 "$cat_dir/$s_disp"
+            done
+        done
+    fi
+
+    mkdir -p "$target_home/.config/marma-crypto"
+    echo "{\"lang\": \"$effective_lang\"}" > "$target_home/.config/marma-crypto/config.json"
+
+    mkdir -p "$target_home/.config/autostart"
+    cat << 'EOF' > "$target_home/.config/autostart/marma-locale-sync.desktop"
+[Desktop Entry]
+Type=Application
+Name=Marma-Crypto Locale Sync
+Comment=Synchronize Marma-Crypto Nautilus menu with active desktop session
+Exec=/usr/bin/marma-config --refresh
+Terminal=false
+Hidden=false
+NoDisplay=true
+X-GNOME-Autostart-enabled=true
+EOF
+    chmod 0644 "$target_home/.config/autostart/marma-locale-sync.desktop" 2>/dev/null || true
+}
+
+LANG_MODE="auto"
+ALL_USERS=0
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --lang) LANG_MODE="${2:-auto}"; shift 2 ;;
+        --all-users) ALL_USERS=1; shift ;;
+        --refresh|--status) shift ;;
+        *) shift ;;
+    esac
+done
+
+SRC_DIR="$(find_source_scripts_dir)"
+EFF_LANG="$(get_effective_lang "$LANG_MODE")"
+
+if [[ "$ALL_USERS" -eq 1 && "$(id -u)" -eq 0 ]]; then
+    deploy_nautilus_scripts_for_dir "/etc/skel" "$EFF_LANG" "$SRC_DIR"
+    for user_home in /home/*; do
+        if [[ -d "$user_home" ]]; then
+            u="$(basename "$user_home")"
+            if id "$u" >/dev/null 2>&1; then
+                deploy_nautilus_scripts_for_dir "$user_home" "$EFF_LANG" "$SRC_DIR"
+                chown -R "$u:" "$user_home/.local/share/nautilus/scripts" "$user_home/.config/marma-crypto" "$user_home/.config/autostart/marma-locale-sync.desktop" 2>/dev/null || true
+            fi
+        fi
+    done
+else
+    deploy_nautilus_scripts_for_dir "$HOME" "$EFF_LANG" "$SRC_DIR"
+fi
+
+# Перезапуск фонового сервісу Nautilus, щоб меню Scripts оновилося миттєво (як у qes-config)
+pkill -x nautilus 2>/dev/null || true
+if command -v nautilus >/dev/null 2>&1; then
+    nautilus -q 2>/dev/null || true
+fi
+
+echo "  ✓ Меню Nautilus розгорнуто та перезавантажено: 🔱 Шрі Янтра · Marma-Crypto (мова: ${EFF_LANG})"
+

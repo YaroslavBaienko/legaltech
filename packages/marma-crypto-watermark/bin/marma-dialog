@@ -1,0 +1,711 @@
+#!/usr/bin/env python3
+"""marma-dialog — GNOME HIG Adwaita / Libadwaita Dialog Engine for Marma-Crypto Watermark.
+
+Modeled after qes-dialog (/home/attor/legaltech/packages/qes-tools/bin/qes-dialog).
+Provides native GTK4 + Libadwaita dialogs for:
+1. select-medium: Selecting a key from ~/.secure_keys/ (.pfx, .p12, .key, .cer),
+   hardware USB token (DepositSign / Almaz-1K / SecureToken-337), browsing disk,
+   or entering a custom passphrase.
+2. password: Entering password/PIN with 15-minute RAM session cache notice.
+3. verify-report: Rich interactive verification window showing cryptographic and
+   geometric invariants (9 triangles, bilateral symmetry, SHA-256 / HMAC-SHA256)
+   with a one-click button to generate & open the official PDF Verification Protocol.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+
+
+def find_icon_path(name: str) -> str | None:
+    """Find an icon in the system or Papirus theme."""
+    candidates = [
+        "/usr/share/icons/hicolor/scalable/apps/marma-crypto-watermark.svg",
+        os.path.expanduser(f"~/.local/share/icons/Papirus/48x48/mimetypes/{name}.svg"),
+        os.path.expanduser(f"~/.local/share/icons/Papirus/48x48/status/{name}.svg"),
+        os.path.expanduser(f"~/.local/share/icons/Papirus/48x48/apps/{name}.svg"),
+        f"/usr/share/icons/Papirus/48x48/mimetypes/{name}.svg",
+        f"/usr/share/icons/Papirus/48x48/status/{name}.svg",
+        f"/usr/share/icons/Papirus/48x48/apps/{name}.svg",
+    ]
+    for c in candidates:
+        if os.path.isfile(c):
+            return c
+    return None
+
+
+MARMA_GOLD_CSS = """
+@define-color accent_color #b8860b;
+@define-color accent_bg_color #b8860b;
+@define-color accent_fg_color #ffffff;
+
+window.marma-dialog-window {
+    border-radius: 16px;
+}
+
+.marma-main-box {
+    padding: 24px;
+}
+
+.marma-header-title {
+    font-size: 15pt;
+    font-weight: 800;
+    color: #9a6f0a;
+    margin-bottom: 4px;
+}
+
+.marma-doc-badge {
+    background-color: alpha(#b8860b, 0.16);
+    color: #8a6206;
+    border-radius: 8px;
+    padding: 4px 12px;
+    font-size: 0.9em;
+    font-weight: 600;
+}
+
+.marma-badge-ok {
+    background-color: alpha(#2e7d32, 0.16);
+    color: #2e7d32;
+    border-radius: 8px;
+    padding: 6px 14px;
+    font-size: 1.0em;
+    font-weight: 800;
+}
+
+.marma-badge-err {
+    background-color: alpha(#c62828, 0.16);
+    color: #c62828;
+    border-radius: 8px;
+    padding: 6px 14px;
+    font-size: 1.0em;
+    font-weight: 800;
+}
+
+.marma-card-subtitle {
+    font-size: 0.88em;
+    color: #555555;
+}
+
+button.suggested-action {
+    background-color: #b8860b;
+    color: #ffffff;
+    font-weight: 700;
+    border-radius: 8px;
+    padding: 8px 24px;
+}
+
+button.suggested-action:hover {
+    background-color: #9a6f0a;
+}
+
+button.suggested-action:active {
+    background-color: #7d5906;
+}
+
+button.cancel-btn {
+    border-radius: 8px;
+    padding: 8px 20px;
+}
+"""
+
+
+def discover_vault_keys() -> list[str]:
+    """Scan ~/.secure_keys for available key files (.pfx, .p12, .dat, .jks, .zs2, .key, .cer)."""
+    vault = Path.home() / ".secure_keys"
+    if not vault.is_dir():
+        return []
+    priority_exts = (".pfx", ".p12", ".dat", ".jks", ".zs2", ".key", ".pem", ".cer")
+    found: list[Path] = []
+    for ext in priority_exts:
+        for p in sorted(vault.rglob(f"*{ext}")):
+            if p.is_file() and p not in found:
+                found.append(p)
+    return [str(p) for p in found]
+
+
+def detect_usb_token() -> tuple[bool, str]:
+    """Check lsusb for Ukrainian hardware QES tokens (Almaz-1K, Crystal-1K, SecureToken-337)."""
+    try:
+        out = subprocess.check_output(["lsusb"], text=True, stderr=subprocess.DEVNULL)
+        low = out.lower()
+        if "1a86:" in low or "almaz" in low or "avtor" in low or "securetoken" in low or "0a89:" in low:
+            return True, "e.ключ Алмаз-1К / SecureToken"
+    except Exception:
+        pass
+    return False, ""
+
+
+def run_select_medium(args: argparse.Namespace) -> int:
+    import gi
+    gi.require_version("Gtk", "4.0")
+    gi.require_version("Adw", "1")
+    from gi.repository import Adw, Gdk, Gio, GLib, Gtk
+
+    result: dict = {"status": "cancelled"}
+    vault_keys = discover_vault_keys()
+    if args.key_path and os.path.isfile(args.key_path) and args.key_path not in vault_keys:
+        vault_keys.insert(0, args.key_path)
+    tok_found, tok_name = detect_usb_token()
+    if args.token_detected:
+        tok_found = True
+        tok_name = args.token_name or tok_name or "e.ключ Алмаз-1К"
+
+    app = Adw.Application(application_id="org.marmacrypto.dialog.selectmedium")
+
+    def on_activate(app_inst):
+        nonlocal result
+
+        provider = Gtk.CssProvider()
+        provider.load_from_data(MARMA_GOLD_CSS.encode())
+        display = Gdk.Display.get_default()
+        if display:
+            Gtk.StyleContext.add_provider_for_display(
+                display, provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+            )
+
+        win = Adw.Window(application=app_inst)
+        win.add_css_class("marma-dialog-window")
+        win.set_default_size(620, 500)
+        win.set_resizable(False)
+
+        title = args.title or (
+            "Select Cryptographic Key — Marma-Crypto"
+            if args.lang == "en"
+            else "Вибір ключа підпису Шрі Янтри — Marma-Crypto"
+        )
+        win.set_title(title)
+
+        header_bar = Adw.HeaderBar()
+        header_bar.set_show_end_title_buttons(True)
+        header_bar.set_show_start_title_buttons(False)
+
+        main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
+        main_box.add_css_class("marma-main-box")
+
+        # Header section
+        top_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16)
+        sri_icon = find_icon_path("application-certificate")
+        if sri_icon and os.path.exists(sri_icon):
+            icon_img = Gtk.Image.new_from_file(sri_icon)
+            icon_img.set_pixel_size(52)
+        else:
+            icon_img = Gtk.Image.new_from_icon_name("security-high")
+            icon_img.set_pixel_size(52)
+        top_box.append(icon_img)
+
+        header_info = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        top_title = Gtk.Label()
+        top_title.set_markup(
+            "<b>🔱 Sri Yantra Geometric Signature (Marma-Crypto)</b>"
+            if args.lang == "en"
+            else "<b>🔱 Геометричний підпис Шрі Янтри (Marma-Crypto)</b>"
+        )
+        top_title.set_halign(Gtk.Align.START)
+        top_title.add_css_class("marma-header-title")
+        header_info.append(top_title)
+
+        if args.doc_desc:
+            doc_pill = Gtk.Label()
+            prefix = "Document: " if args.lang == "en" else "Документ: "
+            doc_pill.set_markup(f"<b>{prefix}</b> {GLib.markup_escape_text(args.doc_desc)}")
+            doc_pill.set_halign(Gtk.Align.START)
+            doc_pill.add_css_class("marma-doc-badge")
+            header_info.append(doc_pill)
+
+        prompt_lbl = Gtk.Label()
+        prompt_lbl.set_text(
+            "Select key source to derive the 9-triangle HMAC-SHA256 micro-perturbation vector:"
+            if args.lang == "en"
+            else "Оберіть носій ключа для генерації 9-трикутникового вектора мікро-збурень HMAC-SHA256:"
+        )
+        prompt_lbl.set_halign(Gtk.Align.START)
+        prompt_lbl.add_css_class("marma-card-subtitle")
+        header_info.append(prompt_lbl)
+
+        top_box.append(header_info)
+        main_box.append(top_box)
+
+        group = Adw.PreferencesGroup()
+
+        # Row 1: Key from ~/.secure_keys/
+        row_file = Adw.ActionRow()
+        row_file.set_title(
+            "Personal Key in Vault (~/.secure_keys/)"
+            if args.lang == "en"
+            else "Особистий ключ із сейфа (~/.secure_keys/)"
+        )
+        has_file_key = len(vault_keys) > 0
+        primary_key = vault_keys[0] if has_file_key else ""
+        if has_file_key:
+            row_file.set_subtitle(
+                f"{os.path.basename(primary_key)}  ({len(vault_keys)} у сейфі ~/.secure_keys/)"
+                if args.lang != "en"
+                else f"{os.path.basename(primary_key)}  ({len(vault_keys)} in ~/.secure_keys/)"
+            )
+        else:
+            row_file.set_subtitle(
+                "No key found in ~/.secure_keys/ (will auto-create marma_master.key)"
+                if args.lang == "en"
+                else "Ключ у ~/.secure_keys/ відсутній (буде створено marma_master.key)"
+            )
+
+        radio_file = Gtk.CheckButton()
+        row_file.add_suffix(radio_file)
+        row_file.set_activatable_widget(radio_file)
+        group.add(row_file)
+
+        # Row 2: Hardware USB token
+        row_token = Adw.ActionRow()
+        row_token.set_title(
+            "Hardware Token (Secure Token / Smart Chip)"
+            if args.lang == "en"
+            else "Апаратний ключ (ЗНОК / смарт-чіп КЕП)"
+        )
+        if tok_found:
+            row_token.set_subtitle(f"🟢 Підключено: {tok_name}")
+        else:
+            row_token.set_subtitle(
+                "⚠️ USB token not connected (Almaz-1K, DepositSign, SecureToken-337)"
+                if args.lang == "en"
+                else "⚠️ USB-токен не підключено (Алмаз-1К, DepositSign, SecureToken-337)"
+            )
+            row_token.set_sensitive(False)
+
+        radio_token = Gtk.CheckButton()
+        radio_token.set_group(radio_file)
+        row_token.add_suffix(radio_token)
+        row_token.set_activatable_widget(radio_token)
+        group.add(row_token)
+
+        # Row 3: Browse another key file (.pfx, .p12, .key, .pem, .cer)
+        row_browse = Adw.ActionRow()
+        row_browse.set_title(
+            "Choose Another Key File from Disk..."
+            if args.lang == "en"
+            else "Обрати інший файл ключа з диска чи USB-носія..."
+        )
+        row_browse.set_subtitle(
+            "Browse .pfx, .p12, .key, .pem, .cer container"
+            if args.lang == "en"
+            else "Вибрати контейнер .pfx, .p12, .key, .pem або .cer з будь-якої теки"
+        )
+        radio_browse = Gtk.CheckButton()
+        radio_browse.set_group(radio_file)
+        row_browse.add_suffix(radio_browse)
+        row_browse.set_activatable_widget(radio_browse)
+        group.add(row_browse)
+
+        # Row 4: Custom Passphrase only
+        row_pass = Adw.ActionRow()
+        row_pass.set_title(
+            "Secret Passphrase Only (HMAC-SHA256)"
+            if args.lang == "en"
+            else "Секретна парофраза автора (HMAC-SHA256 без файлу)"
+        )
+        row_pass.set_subtitle(
+            "Derive 9-triangle perturbation vector directly from secret passphrase"
+            if args.lang == "en"
+            else "Генерувати геометричний підпис напряму з парольної фрази"
+        )
+        radio_pass = Gtk.CheckButton()
+        radio_pass.set_group(radio_file)
+        row_pass.add_suffix(radio_pass)
+        row_pass.set_activatable_widget(radio_pass)
+        group.add(row_pass)
+
+        main_box.append(group)
+
+        radio_file.set_active(True)
+
+        # Bottom buttons
+        btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        btn_box.set_halign(Gtk.Align.END)
+        btn_box.set_margin_top(8)
+
+        btn_cancel = Gtk.Button(label="Cancel" if args.lang == "en" else "Скасувати")
+        btn_cancel.add_css_class("cancel-btn")
+        btn_cancel.connect("clicked", lambda b: win.close())
+        btn_box.append(btn_cancel)
+
+        btn_continue = Gtk.Button(label="Continue" if args.lang == "en" else "Продовжити")
+        btn_continue.add_css_class("suggested-action")
+
+        def proceed():
+            nonlocal result
+            if radio_file.get_active():
+                chosen_path = primary_key
+                if not chosen_path:
+                    vault_dir = Path.home() / ".secure_keys"
+                    vault_dir.mkdir(parents=True, exist_ok=True)
+                    gen_key = vault_dir / "marma_master.key"
+                    if not gen_key.exists():
+                        gen_key.write_bytes(os.urandom(32))
+                        os.chmod(gen_key, 0o600)
+                    chosen_path = str(gen_key)
+                result = {"status": "ok", "choice": "file", "path": chosen_path}
+                win.close()
+            elif radio_token.get_active() and tok_found:
+                result = {"status": "ok", "choice": "token", "token_name": tok_name}
+                win.close()
+            elif radio_pass.get_active():
+                result = {"status": "ok", "choice": "passphrase"}
+                win.close()
+            elif radio_browse.get_active():
+                if hasattr(Gtk, "FileDialog"):
+                    fd = Gtk.FileDialog.new()
+                    fd.set_title(
+                        "Choose Key File (.pfx, .p12, .key, .pem, .cer)"
+                        if args.lang == "en"
+                        else "Оберіть файл ключа (.pfx, .p12, .key, .pem, .cer)"
+                    )
+                    ff = Gtk.FileFilter()
+                    ff.set_name("Cryptographic Keys (*.pfx, *.p12, *.key, *.pem, *.cer, *.jks)")
+                    for pat in ("*.pfx", "*.p12", "*.key", "*.pem", "*.cer", "*.jks", "*.dat"):
+                        ff.add_pattern(pat)
+                    store = Gio.ListStore.new(Gtk.FileFilter)
+                    store.append(ff)
+                    fd.set_filters(store)
+                    fd.set_default_filter(ff)
+
+                    def on_open(dlg, task):
+                        nonlocal result
+                        try:
+                            gf = dlg.open_finish(task)
+                            if gf:
+                                result = {"status": "ok", "choice": "browse", "path": gf.get_path()}
+                                win.close()
+                        except Exception:
+                            pass
+
+                    fd.open(win, None, on_open)
+                else:
+                    result = {"status": "ok", "choice": "file", "path": primary_key}
+                    win.close()
+
+        btn_continue.connect("clicked", lambda b: proceed())
+        btn_box.append(btn_continue)
+        main_box.append(btn_box)
+
+        key_ctrl = Gtk.EventControllerKey.new()
+        def on_key(ctrl, keyval, keycode, state):
+            if keyval == Gdk.KEY_Escape:
+                win.close()
+                return True
+            if keyval in (Gdk.KEY_Return, Gdk.KEY_KP_Enter):
+                proceed()
+                return True
+            return False
+        key_ctrl.connect("key-pressed", on_key)
+        win.add_controller(key_ctrl)
+
+        content_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        content_box.append(header_bar)
+        content_box.append(main_box)
+        win.set_content(content_box)
+        win.present()
+
+    app.connect("activate", on_activate)
+    app.run(None)
+    print(json.dumps(result, ensure_ascii=False))
+    return 0 if result.get("status") == "ok" else 1
+
+
+def run_password_prompt(args: argparse.Namespace) -> int:
+    import gi
+    gi.require_version("Gtk", "4.0")
+    gi.require_version("Adw", "1")
+    from gi.repository import Adw, Gdk, GLib, Gtk
+
+    result: dict = {"status": "cancelled"}
+    app = Adw.Application(application_id="org.marmacrypto.dialog.password")
+
+    def on_activate(app_inst):
+        nonlocal result
+
+        provider = Gtk.CssProvider()
+        provider.load_from_data(MARMA_GOLD_CSS.encode())
+        display = Gdk.Display.get_default()
+        if display:
+            Gtk.StyleContext.add_provider_for_display(
+                display, provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+            )
+
+        win = Adw.Window(application=app_inst)
+        win.add_css_class("marma-dialog-window")
+        win.set_default_size(500, 310)
+        win.set_resizable(False)
+
+        title = args.title or (
+            "Authorize Marma-Crypto Key" if args.lang == "en" else "Авторизація ключа Шрі Янтри — Marma-Crypto"
+        )
+        win.set_title(title)
+
+        header_bar = Adw.HeaderBar()
+        header_bar.set_show_end_title_buttons(True)
+        header_bar.set_show_start_title_buttons(False)
+
+        main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
+        main_box.add_css_class("marma-main-box")
+
+        top_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=14)
+        sri_icon = find_icon_path("stock_lock")
+        if sri_icon and os.path.exists(sri_icon):
+            img_lock = Gtk.Image.new_from_file(sri_icon)
+            img_lock.set_pixel_size(44)
+        else:
+            img_lock = Gtk.Image.new_from_icon_name("dialog-password")
+            img_lock.set_pixel_size(44)
+        top_box.append(img_lock)
+
+        info_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        lbl_head = Gtk.Label()
+        hdr_text = args.header or (
+            "Cryptographic Key Authorization" if args.lang == "en" else "Авторизація особистого ключа Marma-Crypto"
+        )
+        lbl_head.set_markup(f"<b>{GLib.markup_escape_text(hdr_text)}</b>")
+        lbl_head.set_halign(Gtk.Align.START)
+        lbl_head.add_css_class("marma-header-title")
+        info_box.append(lbl_head)
+
+        lbl_prompt = Gtk.Label()
+        prompt_txt = args.prompt or (
+            "Enter password / passphrase (leave empty to use file hardware digest):"
+            if args.lang == "en"
+            else "Введіть пароль до ключа / парофразу (або натисніть Enter для дайджесту файлу):"
+        )
+        lbl_prompt.set_text(prompt_txt)
+        lbl_prompt.set_halign(Gtk.Align.START)
+        info_box.append(lbl_prompt)
+
+        top_box.append(info_box)
+        main_box.append(top_box)
+
+        entry = Gtk.PasswordEntry()
+        entry.set_show_peek_icon(True)
+        entry.set_margin_top(6)
+        main_box.append(entry)
+
+        sub_text = args.subtext or (
+            "Derived 256-bit HMAC key is cached in RAM session (TTL 15 min)."
+            if args.lang == "en"
+            else "Похідний 256-бітний ключ зберігається в оперативній пам'яті сесії RAM (15 хв)."
+        )
+        lbl_sub = Gtk.Label()
+        lbl_sub.set_markup(f"<span size='small' color='#666666'>{GLib.markup_escape_text(sub_text)}</span>")
+        lbl_sub.set_halign(Gtk.Align.START)
+        main_box.append(lbl_sub)
+
+        btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        btn_box.set_halign(Gtk.Align.END)
+        btn_box.set_margin_top(6)
+
+        btn_cancel = Gtk.Button(label="Cancel" if args.lang == "en" else "Скасувати")
+        btn_cancel.add_css_class("cancel-btn")
+        btn_cancel.connect("clicked", lambda b: win.close())
+        btn_box.append(btn_cancel)
+
+        btn_ok = Gtk.Button(label="Sign / Authorize" if args.lang == "en" else "Підписати / Підтвердити")
+        btn_ok.add_css_class("suggested-action")
+
+        def submit():
+            nonlocal result
+            result = {"status": "ok", "password": entry.get_text()}
+            win.close()
+
+        btn_ok.connect("clicked", lambda b: submit())
+        entry.connect("activate", lambda e: submit())
+        btn_box.append(btn_ok)
+        main_box.append(btn_box)
+
+        key_ctrl = Gtk.EventControllerKey.new()
+        def on_key(ctrl, keyval, keycode, state):
+            if keyval == Gdk.KEY_Escape:
+                win.close()
+                return True
+            return False
+        key_ctrl.connect("key-pressed", on_key)
+        win.add_controller(key_ctrl)
+
+        content_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        content_box.append(header_bar)
+        content_box.append(main_box)
+        win.set_content(content_box)
+
+        win.present()
+        entry.grab_focus()
+
+    app.connect("activate", on_activate)
+    app.run(None)
+    print(json.dumps(result, ensure_ascii=False))
+    return 0 if result.get("status") == "ok" else 1
+
+
+def run_verify_report(args: argparse.Namespace) -> int:
+    import gi
+    gi.require_version("Gtk", "4.0")
+    gi.require_version("Adw", "1")
+    from gi.repository import Adw, Gdk, GLib, Gtk
+
+    data = json.loads(args.report_json)
+    verified = bool(data.get("verified"))
+    doc_path = data.get("file", "")
+
+    app = Adw.Application(application_id="org.marmacrypto.dialog.verifyreport")
+
+    def on_activate(app_inst):
+        provider = Gtk.CssProvider()
+        provider.load_from_data(MARMA_GOLD_CSS.encode())
+        display = Gdk.Display.get_default()
+        if display:
+            Gtk.StyleContext.add_provider_for_display(
+                display, provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+            )
+
+        win = Adw.Window(application=app_inst)
+        win.add_css_class("marma-dialog-window")
+        win.set_default_size(650, 480)
+        win.set_resizable(False)
+        win.set_title(
+            "Marma-Crypto Verification Report"
+            if args.lang == "en"
+            else "Результат перевірки геометричного підпису Шрі Янтри"
+        )
+
+        header_bar = Adw.HeaderBar()
+        header_bar.set_show_end_title_buttons(True)
+
+        main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
+        main_box.add_css_class("marma-main-box")
+
+        badge = Gtk.Label()
+        if verified:
+            badge.set_text(
+                "✅ VERIFIED: GEOMETRIC & CRYPTOGRAPHIC INTEGRITY CONFIRMED"
+                if args.lang == "en"
+                else "✅ ВЕРИФІКОВАНО: ЦІЛІСНІСТЬ ТЕКСТУ ТА 9 ТРИКУТНИКІВ ШРІ ЯНТРИ ПІДТВЕРДЖЕНО"
+            )
+            badge.add_css_class("marma-badge-ok")
+        else:
+            reason = data.get("reason", "Tamper or missing signature")
+            badge.set_text(
+                f"❌ VERIFICATION FAILED: {reason}"
+                if args.lang == "en"
+                else f"❌ ПЕРЕВІРКУ НЕ ПРОЙДЕНО (ПОРУШЕННЯ ЦІЛІСНОСТІ): {reason}"
+            )
+            badge.add_css_class("marma-badge-err")
+        badge.set_halign(Gtk.Align.START)
+        main_box.append(badge)
+
+        group = Adw.PreferencesGroup()
+        dstu_ok = bool(data.get("dstu4145_verified") or data.get("dstu4145_ec_verified"))
+        pades_ok = bool(
+            data.get("pades_cades_verified")
+            or data.get("qes_container_report")
+            or data.get("pades_embedded")
+        )
+        dstu_status = (
+            f"ДСТУ 4145-2002 EC: {'✅ OK' if dstu_ok else '—'}  |  "
+            f"PAdES/CAdES КНЕДП: {'✅ OK (КНЕДП / PAdES-LTA)' if pades_ok else ('✅ OK (Криптосейф ДСТУ 4145)' if dstu_ok else '—')}"
+        )
+        s_info = data.get("signer_info") or {}
+        signer_display = (
+            f"{s_info['common_name']} (РНОКПП {s_info.get('rnokpp', '—')}) · {s_info.get('issuer_name', '')}"
+            if s_info.get("common_name")
+            else data.get("signer_key_name", "Sovereign-Vedic-Key-108")
+        )
+        rows_data = [
+            ("Документ / File", os.path.basename(doc_path) if doc_path else "N/A"),
+            ("Підписувач / Сертифікат КЕП", signer_display),
+            ("Стандарт підпису (ДСТУ 4145-2002)", dstu_status),
+            ("ГОСТ 34.311-95 / ДСТУ 7564", f"{str(data.get('gost34311_digest', '—'))[:24]}... / {str(data.get('dstu7564_digest', '—'))[:24]}..."),
+            ("Геометричний вектор (r,s / HMAC)", str(data.get("embedded_hmac_sha256", data.get("expected_hmac_sha256", "—")))[:32] + "..."),
+            (
+                "Інваріант симетрії (lx + rx = 300)",
+                f"Δ_sym = {data.get('max_bilateral_symmetry_error', 0.0):.12f}  |  Δ_coord = {data.get('max_coordinate_signature_drift', 0.0):.10f}",
+            ),
+        ]
+        for r_title, r_sub in rows_data:
+            row = Adw.ActionRow()
+            row.set_title(r_title)
+            row.set_subtitle(str(r_sub))
+            group.add(row)
+        main_box.append(group)
+
+        btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        btn_box.set_halign(Gtk.Align.END)
+        btn_box.set_margin_top(8)
+
+        if doc_path and os.path.isfile(doc_path):
+            btn_proto = Gtk.Button(
+                label="📄 Generate PDF Protocol" if args.lang == "en" else "📄 Сформувати PDF-протокол"
+            )
+            btn_proto.add_css_class("cancel-btn")
+
+            def on_proto(_b):
+                out_p = str(Path(doc_path).with_name(f"{Path(doc_path).stem}_marma_protocol.pdf"))
+                subprocess.Popen(["marma-watermark", "protocol", doc_path, "-o", out_p, "--open"])
+                win.close()
+
+            btn_proto.connect("clicked", on_proto)
+            btn_box.append(btn_proto)
+
+        btn_close = Gtk.Button(label="Close" if args.lang == "en" else "Закрити")
+        btn_close.add_css_class("suggested-action")
+        btn_close.connect("clicked", lambda b: win.close())
+        btn_box.append(btn_close)
+        main_box.append(btn_box)
+
+        content_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        content_box.append(header_bar)
+        content_box.append(main_box)
+        win.set_content(content_box)
+        win.present()
+
+    app.connect("activate", on_activate)
+    app.run(None)
+    return 0
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Marma-Crypto GNOME Adwaita Dialog Engine")
+    subparsers = parser.add_subparsers(dest="subcommand", required=True)
+
+    p_sel = subparsers.add_parser("select-medium")
+    p_sel.add_argument("--title", default="")
+    p_sel.add_argument("--doc-desc", default="")
+    p_sel.add_argument("--lang", default="uk")
+    p_sel.add_argument("--key-path", default="")
+    p_sel.add_argument("--token-detected", action="store_true")
+    p_sel.add_argument("--token-name", default="")
+
+    p_pwd = subparsers.add_parser("password")
+    p_pwd.add_argument("--title", default="")
+    p_pwd.add_argument("--header", default="")
+    p_pwd.add_argument("--prompt", default="")
+    p_pwd.add_argument("--subtext", default="")
+    p_pwd.add_argument("--lang", default="uk")
+
+    p_rep = subparsers.add_parser("verify-report")
+    p_rep.add_argument("--report-json", required=True)
+    p_rep.add_argument("--lang", default="uk")
+
+    args = parser.parse_args()
+    if not (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")):
+        print(json.dumps({"status": "no_display"}))
+        return 2
+
+    if args.subcommand == "select-medium":
+        return run_select_medium(args)
+    if args.subcommand == "password":
+        return run_password_prompt(args)
+    if args.subcommand == "verify-report":
+        return run_verify_report(args)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,24 @@
+cff-version: 1.2.0
+message: "If you use this protocol, software, or mathematical specification, please cite it as below."
+type: software
+title: "Marma-Crypto: A Cryptographic Geometric Watermarking and Sovereign Document Sealing Protocol via Sri Yantra Nonlinear Concurrency and Elliptic Curves over GF(2^257) (DSTU 4145-2002)"
+version: 1.2.1
+date-released: 2026-10-17
+authors:
+  - family-names: "Baienko"
+    given-names: "Yaroslav V."
+    email: "zerhug@gmail.com"
+    affiliation: "Independent Researcher, Attorney-at-Law (Ukraine)"
+repository-code: "https://github.com/YaroslavBaienko/marma-crypto-protocol"
+url: "https://zenodo.org/records/23436152"
+doi: "10.5281/zenodo.23436152"
+license: Apache-2.0
+keywords:
+  - "Cryptographic Watermarking"
+  - "Vector Steganography"
+  - "DSTU 4145-2002"
+  - "Elliptic Curve Cryptography"
+  - "Sri Yantra"
+  - "Nonlinear Planimetry"
+  - "PAdES"
+  - "LegalTech"

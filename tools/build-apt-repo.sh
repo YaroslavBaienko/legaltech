@@ -21,6 +21,7 @@ echo -e "${CLR_BOLD}${CLR_CYAN}=================================================
 # 1. Створення структури папок APT
 mkdir -p "${TARGET_DIR}/pool/main"
 mkdir -p "${TARGET_DIR}/dists/stable/main/binary-amd64"
+mkdir -p "${TARGET_DIR}/dists/stable/main/binary-all"
 
 # 2. Копіювання deb-пакетів у pool/main
 echo -e "${CLR_YELLOW}1. Збирання deb-пакетів у pool/main...${CLR_RESET}"
@@ -34,6 +35,8 @@ echo -e "${CLR_YELLOW}2. Створення індексів Packages та Packa
 cd "${TARGET_DIR}"
 apt-ftparchive packages pool/main > dists/stable/main/binary-amd64/Packages
 gzip -9c dists/stable/main/binary-amd64/Packages > dists/stable/main/binary-amd64/Packages.gz
+cp dists/stable/main/binary-amd64/Packages dists/stable/main/binary-all/Packages
+cp dists/stable/main/binary-amd64/Packages.gz dists/stable/main/binary-all/Packages.gz
 
 # 4. Створення маніфесту Release
 echo -e "${CLR_YELLOW}3. Створення маніфесту Release...${CLR_RESET}"
@@ -43,7 +46,7 @@ apt-ftparchive \
   -o APT::FTPArchive::Release::Label="LegalTech APT Repository" \
   -o APT::FTPArchive::Release::Suite="stable" \
   -o APT::FTPArchive::Release::Codename="stable" \
-  -o APT::FTPArchive::Release::Architectures="amd64" \
+  -o APT::FTPArchive::Release::Architectures="amd64 all" \
   -o APT::FTPArchive::Release::Components="main" \
   release . > Release
 
@@ -94,7 +97,7 @@ cat > "${TARGET_DIR}/index.html" << 'EOF'
   <div class="card">
     <span class="tag">DEBIAN / UBUNTU OFFICIAL APT REPOSITORY</span>
     <h1>⚖️ LegalTech APT Repository</h1>
-    <p>Офіційний статичний APT-репозиторій для встановлення та автоматичного оновлення пакетів юридичних інструментів (LegalTech Suite, QES Tools) в операційних системах Debian, Ubuntu та Linux Mint.</p>
+    <p>Офіційний статичний APT-репозиторій для встановлення та автоматичного оновлення пакетів суверенної криптографії та юридичних інструментів (<strong>qes-tools</strong>, <strong>marma-crypto-watermark</strong>) в операційних системах Debian, Ubuntu та Linux Mint.</p>
 
     <h3>🚀 Швидке встановлення в 1 крок:</h3>
     <pre><code># 1. Завантажити публічний GPG-ключ репозиторію
@@ -103,16 +106,16 @@ curl -fsSL https://yaroslavbaienko.github.io/legaltech/public.gpg | sudo gpg --d
 # 2. Додати репозиторій у системні джерела APT
 echo "deb [signed-by=/etc/apt/keyrings/legaltech.gpg] https://yaroslavbaienko.github.io/legaltech stable main" | sudo tee /etc/apt/sources.list.d/legaltech.list
 
-# 3. Оновити індекси та встановити qes-tools
+# 3. Оновити індекси та встановити qes-tools і marma-crypto-watermark
 sudo apt update
-sudo apt install qes-tools</code></pre>
+sudo apt install qes-tools marma-crypto-watermark</code></pre>
 
     <h3>🔄 Автоматичні оновлення:</h3>
     <p>Після підключення репозиторію всі нові версії будуть встановлюватися стандартною командою системи:</p>
     <pre><code>sudo apt update && sudo apt upgrade</code></pre>
 
     <p style="margin-top: 2rem; border-top: 1px solid #334155; padding-top: 1rem; font-size: 0.9rem;">
-      Вихідний код та документація: <a href="https://github.com/YaroslavBaienko/legaltech">GitHub: YaroslavBaienko/legaltech</a>
+      Вихідний код та документація: <a href="https://github.com/YaroslavBaienko/legaltech">GitHub: YaroslavBaienko/legaltech</a> · <a href="https://doi.org/10.5281/zenodo.23436152">CERN Zenodo: 10.5281/zenodo.23436152</a>
     </p>
   </div>
 </body>

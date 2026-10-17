@@ -38,10 +38,15 @@ jobs:
         working-directory: packages/qes-tools
         run: ./build.sh
 
+      - name: Build marma-crypto-watermark .deb
+        working-directory: packages/marma-crypto-watermark
+        run: ./build.sh
+
       - name: Generate Checksums
         run: |
           mkdir -p dist
           cp packages/qes-tools/dist/*.deb dist/
+          cp packages/marma-crypto-watermark/dist/*.deb dist/
           cd dist
           sha256sum *.deb > SHA256SUMS.txt
           cat SHA256SUMS.txt

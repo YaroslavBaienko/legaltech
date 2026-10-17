@@ -37,9 +37,15 @@ jobs:
         working-directory: packages/qes-tools
         run: ./build.sh
 
-      - name: Upload Debian Package Artifact
+      - name: Build marma-crypto-watermark .deb
+        working-directory: packages/marma-crypto-watermark
+        run: ./build.sh
+
+      - name: Upload Debian Package Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: qes-tools-deb
-          path: packages/qes-tools/dist/*.deb
+          name: legaltech-debs
+          path: |
+            packages/qes-tools/dist/*.deb
+            packages/marma-crypto-watermark/dist/*.deb
           if-no-files-found: error

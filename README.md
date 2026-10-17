@@ -11,6 +11,7 @@ Designed for lawyers, attorneys, insolvency officers, legal IT specialists, and 
 | Package | Description | Status | Documentation |
 | :--- | :--- | :---: | :---: |
 | **`qes-tools`** | Standalone QES/AES suite (DSTU 4145-2002, CAdES-LTA, stamped & unstamped PAdES-LTA archival LTV for 25+ years, official PDF Verification & Certificate Trust Chain Protocol in UA/EN, QR, ASiC-E, GOST encryption, court-ready OCR, 18 Nautilus scripts with Papirus UI & 5 GNOME HIG categories, contextual key/token selector modal, hardware tokens: DepositSign / Almaz-1K / Crystal-1K / SecureToken-337 with native PAdES visual stamp & QR support, official EUSW drivers & browser extension daemon, Web Sign Agent HTTP:8081 / HTTPS:8083). | **v1.0.26** (Stable) | [Package README](packages/qes-tools/README.md) |
+| **`marma-crypto-watermark`** | Cryptographic geometric watermarking & sovereign document sealing suite (Sri Yantra 54-marma nonlinear concurrency lattice × DSTU 4145-2002 PAdES-B-LTA / CAdES-X-Long, GTK4/Libadwaita UI, GNOME Nautilus right-click scripts, CERN Zenodo `DOI: 10.5281/zenodo.23436152`). | **v1.2.1-1** (Stable) | [Package README](packages/marma-crypto-watermark/README.md) |
 | **`deb-package-starter`** | Universal starter template for rapid development of new Debian packages. | **Template** | [Template README](templates/deb-package-starter/README.md) |
 
 ---
@@ -28,9 +29,9 @@ curl -fsSL https://yaroslavbaienko.github.io/legaltech/public.gpg | sudo gpg --d
 # 2. Add the LegalTech repository to APT sources
 echo "deb [signed-by=/etc/apt/keyrings/legaltech.gpg] https://yaroslavbaienko.github.io/legaltech stable main" | sudo tee /etc/apt/sources.list.d/legaltech.list
 
-# 3. Update indices and install qes-tools
+# 3. Update indices and install qes-tools & marma-crypto-watermark
 sudo apt update
-sudo apt install qes-tools
+sudo apt install qes-tools marma-crypto-watermark
 ```
 
 Once installed, future updates will be applied automatically via standard system upgrades:

@@ -20,6 +20,8 @@ test:
 build:
 	@echo "==> Building qes-tools deb package..."
 	@cd packages/qes-tools && ./build.sh
+	@echo "==> Building marma-crypto-watermark deb package..."
+	@cd packages/marma-crypto-watermark && ./build.sh
 
 new-package:
 	@./tools/new-deb-package.sh $(NAME)
