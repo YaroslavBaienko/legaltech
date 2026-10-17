@@ -658,6 +658,18 @@ def _check_strict_key_or_cert_match(
         hmac_ok = (len(embedded_hmac) == 64) and (not rs_sha or embedded_hmac == rs_sha)
         return expected_hex, expected_offsets, hmac_ok
 
+    if (dstu_bundle or {}).get("mode") == "BROWSER_WEBCRYPTO_V1.3":
+        gost_hex = hashlib.sha256(f"MARMA-BROWSER-GOST-V1.3::{payload}".encode("utf-8")).hexdigest()
+        kupyna_hex = hashlib.sha256(f"MARMA-BROWSER-KUPYNA-V1.3::{payload}".encode("utf-8")).hexdigest()
+        sha_hex = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+        comb_hex = hashlib.sha256(f"{gost_hex}::{kupyna_hex}::{sha_hex}".encode("utf-8")).hexdigest()
+        r_b = hmac.new(secret_key.encode("utf-8"), f"MARMA-R-V1.3::{comb_hex}".encode("utf-8"), hashlib.sha256).hexdigest()
+        s_b = hmac.new(secret_key.encode("utf-8"), f"MARMA-S-V1.3::{comb_hex}::{r_b}".encode("utf-8"), hashlib.sha256).hexdigest()
+        expected_hex = hashlib.sha256(f"{r_b}::{s_b}".encode("utf-8")).hexdigest()
+        expected_offsets = derive_offsets_from_hmac_hex(expected_hex)
+        hmac_ok = (embedded_hmac == expected_hex) and (not rs_sha or embedded_hmac == rs_sha)
+        return expected_hex, expected_offsets, hmac_ok
+
     try:
         expected_hex, expected_offsets, derived_dstu = derive_micro_offsets(
             payload, secret_key, key_file_path, raw_password
@@ -1089,16 +1101,29 @@ def verify_pdf_document(
     doc = pymupdf.open(str(pdf_path))
     meta = doc.metadata or {}
     kw = meta.get("keywords", "")
-    if "MARMA_SEAL::" not in kw:
+    raw_bytes = pdf_path.read_bytes()
+    if "MARMA_SEAL::" in kw:
+        raw_json = kw.split("MARMA_SEAL::", 1)[1]
+    elif b"%MARMA_SEAL::" in raw_bytes:
+        tail_part = raw_bytes.rsplit(b"%MARMA_SEAL::", 1)[1]
+        raw_json = tail_part.split(b"\n", 1)[0].decode("utf-8", errors="replace").strip()
+    else:
         doc.close()
         return {"verified": False, "format": "pdf", "file": str(pdf_path), "reason": "No MARMA_SEAL metadata found in PDF"}
 
-    raw_json = kw.split("MARMA_SEAL::", 1)[1]
     seal_packet = json.loads(raw_json)
 
-    full_text = "\n".join(normalize_text(page.get_text("text")) for page in doc)
-    doc.close()
-    content_hash = hashlib.sha256(full_text.encode("utf-8")).hexdigest()
+    if "body_byte_length" in seal_packet:
+        doc.close()
+        b_len = int(seal_packet["body_byte_length"])
+        if b_len <= 0 or b_len > len(raw_bytes):
+            content_hash = "INVALID_BODY_LENGTH"
+        else:
+            content_hash = hashlib.sha256(raw_bytes[:b_len]).hexdigest()
+    else:
+        full_text = "\n".join(normalize_text(page.get_text("text")) for page in doc)
+        doc.close()
+        content_hash = hashlib.sha256(full_text.encode("utf-8")).hexdigest()
     payload = f"PDF-CONTENT-SHA256::{content_hash}"
 
     proto_ver = seal_packet.get("protocol", "MARMA-DSTU4145-V1.2")
@@ -1549,6 +1574,12 @@ def trace_canary_suspects(
         if "MARMA_SEAL::" in kw:
             pkt = json.loads(kw.split("MARMA_SEAL::", 1)[1])
             embedded_pub_canary = str((pkt.get("canary") or {}).get("public_canary_hash", ""))
+        else:
+            raw_b = target_file.read_bytes()
+            if b"%MARMA_SEAL::" in raw_b:
+                tail_p = raw_b.rsplit(b"%MARMA_SEAL::", 1)[1].split(b"\n", 1)[0].decode("utf-8", errors="replace").strip()
+                pkt = json.loads(tail_p)
+                embedded_pub_canary = str((pkt.get("canary") or {}).get("public_canary_hash", ""))
     elif ext == ".docx":
         d_obj = docx.Document(str(target_file))
         for p in d_obj.paragraphs:

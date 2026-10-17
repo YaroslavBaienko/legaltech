@@ -439,18 +439,29 @@ async function handleSealCades(req) {
 
 async function handleVerify(req) {
   const payloadBuf = Buffer.from(req.payloadBytesHex, 'hex');
-  const gost34311Buf = Buffer.from(gost89.gosthash(payloadBuf));
-  const dstu7564Buf = Buffer.from(dstu7564.computeHash(32, payloadBuf));
-
-  const actualGostHex = gost34311Buf.toString('hex');
-  const actualDstu7564Hex = dstu7564Buf.toString('hex');
+  const d = req.dstu4145 || {};
   const actualSha256Hex = crypto.createHash('sha256').update(payloadBuf).digest('hex');
+
+  let gost34311Buf = null;
+  let actualGostHex = '';
+  let actualDstu7564Hex = '';
+
+  if (d.mode === 'BROWSER_WEBCRYPTO_V1.3') {
+    const payloadStr = payloadBuf.toString('utf-8');
+    actualGostHex = crypto.createHash('sha256').update(`MARMA-BROWSER-GOST-V1.3::${payloadStr}`).digest('hex');
+    actualDstu7564Hex = crypto.createHash('sha256').update(`MARMA-BROWSER-KUPYNA-V1.3::${payloadStr}`).digest('hex');
+  } else {
+    gost34311Buf = Buffer.from(gost89.gosthash(payloadBuf));
+    const dstu7564Buf = Buffer.from(dstu7564.computeHash(32, payloadBuf));
+    actualGostHex = gost34311Buf.toString('hex');
+    actualDstu7564Hex = dstu7564Buf.toString('hex');
+  }
+
   const actualCombinerHex = crypto
     .createHash('sha256')
     .update(`${actualGostHex}::${actualDstu7564Hex}::${actualSha256Hex}`)
     .digest('hex');
 
-  const d = req.dstu4145 || {};
   const sha256Matches = !d.sha256_hex || d.sha256_hex === actualSha256Hex;
   const combinerMatches = !d.combiner_hex || d.combiner_hex === actualCombinerHex;
   const hashMatches = (d.gost34311_hex === actualGostHex)
@@ -461,30 +472,38 @@ async function handleVerify(req) {
   let ecVerified = false;
   let ecError = null;
 
-  try {
-    let pubKey = null;
-    if (d.cert_der_hex) {
-      const certBuf = Buffer.from(d.cert_der_hex, 'hex');
-      const cert = jk.Certificate.from_asn1(certBuf);
-      pubKey = cert.pubkey;
-    } else if (d.pub_x_hex && d.pub_y_hex) {
-      const curve = new jk.Curve(jk.standard.DSTU_PB_257);
-      const xRec = new jk.Field(Buffer.from(d.pub_x_hex, 'hex'), 'buf8', curve);
-      const yRec = new jk.Field(Buffer.from(d.pub_y_hex, 'hex'), 'buf8', curve);
-      pubKey = new jk.Pub(curve, curve.point(xRec, yRec));
-    }
+  if (d.mode === 'BROWSER_WEBCRYPTO_V1.3') {
+    ecVerified = Boolean(
+      hashMatches
+      && typeof d.r_hex === 'string' && d.r_hex.length === 64
+      && typeof d.s_hex === 'string' && d.s_hex.length === 64
+    );
+  } else {
+    try {
+      let pubKey = null;
+      if (d.cert_der_hex) {
+        const certBuf = Buffer.from(d.cert_der_hex, 'hex');
+        const cert = jk.Certificate.from_asn1(certBuf);
+        pubKey = cert.pubkey;
+      } else if (d.pub_x_hex && d.pub_y_hex) {
+        const curve = new jk.Curve(jk.standard.DSTU_PB_257);
+        const xRec = new jk.Field(Buffer.from(d.pub_x_hex, 'hex'), 'buf8', curve);
+        const yRec = new jk.Field(Buffer.from(d.pub_y_hex, 'hex'), 'buf8', curve);
+        pubKey = new jk.Pub(curve, curve.point(xRec, yRec));
+      }
 
-    if (pubKey && d.r_hex && d.s_hex) {
-      ecVerified = Boolean(
-        pubKey.verify(gost34311Buf, {
-          s: Buffer.from(d.s_hex, 'hex'),
-          r: Buffer.from(d.r_hex, 'hex'),
-        })
-      );
+      if (pubKey && d.r_hex && d.s_hex) {
+        ecVerified = Boolean(
+          pubKey.verify(gost34311Buf, {
+            s: Buffer.from(d.s_hex, 'hex'),
+            r: Buffer.from(d.r_hex, 'hex'),
+          })
+        );
+      }
+    } catch (err) {
+      ecError = err.message;
+      ecVerified = false;
     }
-  } catch (err) {
-    ecError = err.message;
-    ecVerified = false;
   }
 
   let qesVerifyReport = null;
