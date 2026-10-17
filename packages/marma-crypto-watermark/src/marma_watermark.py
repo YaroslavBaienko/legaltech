@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
-"""Marma-Crypto Geometric Watermark & Zero-Tolerance Document Verifier (v1.1.0).
+"""Marma-Crypto Geometric Watermark & Zero-Tolerance Document Verifier (v1.3.0).
 
 Full LegalTech / Nautilus-integrated engine modeled after /home/attor/legaltech (qes-tools).
 Supports:
 - Key selection from ~/.secure_keys/ (.pfx, .p12, .key, .cer), hardware USB tokens,
   arbitrary key files, or passphrase via GTK4/Libadwaita `marma-dialog`.
 - 15-minute RAM session cache (/run/user/$UID/marma-crypto-session.json, chmod 0600).
+- Parallel Multi-Hash Combiner: SHA-256(GOST 34.311-95 || Kupyna-256 || SHA-256).
+- Full 256-Bit Bijective Geometric Mantissa Encoding across 9 triangles & 24 symmetric Marma pairs.
+- Canary Leak-Tracing (`--recipient-id` & `trace --suspects`) via innermost Bindu apex (`D5.ay`).
 - Signing & Stamping PDF, DOCX, and SVG documents (--mode both | watermark | seal).
 - Instant public & cryptographic verification + strict key verification (--strict-key).
 - Official Vector PDF Verification Protocol generator (`marma-watermark protocol`).
@@ -45,7 +48,7 @@ try:
 except Exception:
     pymupdf = None  # type: ignore[assignment]
 
-VERSION = "1.2.1"
+VERSION = "1.3.0"
 
 # Canonical 9-Triangle Coordinates (lx, by, ay, rx, is_upward) in 300x300 space (R=100)
 CANONICAL_TRIANGLES: list[tuple[str, float, float, float, float, bool]] = [
@@ -276,8 +279,176 @@ def normalize_text(text: str) -> str:
     return "\n".join(line for line in lines if line)
 
 
+def compute_parallel_combiner_hex(gost34311_hex: str, dstu7564_hex: str, sha256_hex: str) -> str:
+    """Compute the Multi-Collision Resistant Parallel Combiner SHA-256(GOST34311 || Kupyna256 || SHA256)."""
+    return hashlib.sha256(f"{gost34311_hex}::{dstu7564_hex}::{sha256_hex}".encode("utf-8")).hexdigest()
+
+
+def split_256bits_to_26_words(hex_sig: str) -> list[int]:
+    """Bijectively split a 256-bit (64-hex) digest into 26 words in [0..1023] (25x10-bit + 1x6-bit scaled)."""
+    val = int(hex_sig, 16)
+    words: list[int] = []
+    for i in range(25):
+        shift = 256 - (i + 1) * 10
+        words.append((val >> shift) & 0x3FF)
+    words.append((val & 0x3F) << 4)
+    return words
+
+
+def words_26_to_256bit_hex(words: list[int]) -> str:
+    """Reconstruct the exact 64-character 256-bit hex digest from 26 coordinate words."""
+    if len(words) < 26:
+        return ""
+    val = 0
+    for i in range(25):
+        w = max(0, min(1023, int(words[i])))
+        val = (val << 10) | (w & 0x3FF)
+    w25 = max(0, min(1023, int(words[25])))
+    val = (val << 6) | ((int(round(w25 / 16.0))) & 0x3F)
+    return f"{val:064x}"
+
+
+def word10_to_delta(w: int) -> float:
+    """Map a 10-bit integer w in [0..1023] to an exact integer-nanometer shift in [-9.207e-6, +9.207e-6]."""
+    return round((int(w) * 18 - 9207) * 1e-9, 9)
+
+
+def delta_to_word10(delta: float) -> int:
+    """Losslessly invert a sub-micron coordinate shift back to its 10-bit integer word in [0..1023]."""
+    nano = round(float(delta) * 1e9)
+    return int(round((nano + 9207) / 18.0))
+
+
+def encode_256bit_marma_pairs(hex_sig: str, canary_beacon_word: int = 0) -> list[dict]:
+    """Encode all 256 bits of hex_sig + 8-bit Canary tag across the 24 symmetric Marma pairs (11 bits/pair = 264 bits)."""
+    val256 = int(hex_sig, 16)
+    canary8 = int(canary_beacon_word) & 0xFF
+    val264 = (val256 << 8) | canary8
+    pairs: list[dict] = []
+    for k in range(24):
+        shift = 264 - (k + 1) * 11
+        w11 = (val264 >> shift) & 0x7FF
+        delta_m = round((w11 * 9 - 9211) * 1e-9, 9)
+        pairs.append(
+            {
+                "pair_index": k + 1,
+                "word_11bit": w11,
+                "delta_left": delta_m,
+                "delta_right": round(-delta_m, 9),
+                "sym_sum_error": 0.0,
+            }
+        )
+    return pairs
+
+
+def decode_256bit_marma_pairs(marma_pairs: list[dict]) -> tuple[str, int]:
+    """Losslessly recover (64-char hex_sig, 8-bit canary_crc) from the 24 symmetric Marma pair shifts."""
+    if len(marma_pairs) != 24:
+        return "", 0
+    val264 = 0
+    for p in marma_pairs:
+        d = float(p.get("delta_left", 0.0))
+        w11 = int(round((round(d * 1e9) + 9211) / 9.0))
+        w11 = max(0, min(2047, w11))
+        val264 = (val264 << 11) | w11
+    canary8 = val264 & 0xFF
+    val256 = val264 >> 8
+    return f"{val256:064x}", canary8
+
+
+def compute_canary_tag(
+    secret_key: str,
+    content_sha256: str,
+    recipient_id: str,
+    key_fingerprint: str = "",
+) -> dict:
+    """Compute a zero-plaintext Canary Leak-Tracing tag & 10-bit geometric beacon word for D5.ay."""
+    clean_rec = recipient_id.strip()
+    if not clean_rec:
+        return {"enabled": False, "beacon_word": 0, "public_canary_hash": "", "hmac_commitment": ""}
+    if not key_fingerprint:
+        key_fingerprint = hashlib.sha256(secret_key.encode("utf-8")).hexdigest()
+    pub_canary_hash = hashlib.sha256(
+        f"MARMA-CANARY-PUB-V1.3::{content_sha256}::{key_fingerprint}::{clean_rec}".encode("utf-8")
+    ).hexdigest()
+    hmac_commitment = hmac.new(
+        secret_key.encode("utf-8"),
+        f"MARMA-CANARY-V1.3::{content_sha256}::{clean_rec}".encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+    beacon_word = (int(pub_canary_hash[:4], 16) % 1023) + 1  # Strictly in [1..1023]
+    return {
+        "enabled": True,
+        "beacon_word": beacon_word,
+        "beacon_delta": word10_to_delta(beacon_word),
+        "public_canary_hash": pub_canary_hash,
+        "hmac_commitment": hmac_commitment,
+    }
+
+
+def build_perturbed_triangles_v13(
+    hex_sig: str,
+    canary_beacon_word: int = 0,
+    cx: float = 150.0,
+) -> list[dict]:
+    """Encode all 256 bits of hex_sig + optional Canary beacon word into 9 triangles (27 symmetric DoF)."""
+    scale = 2.0 if cx == 300.0 else 1.0
+    words_26 = split_256bits_to_26_words(hex_sig)
+    perturbed: list[dict] = []
+    for idx, (name, lx, by, ay, rx, is_up) in enumerate(CANONICAL_TRIANGLES):
+        d_lx = word10_to_delta(words_26[idx * 3])
+        d_by = word10_to_delta(words_26[idx * 3 + 1])
+        if idx < 8:
+            d_ay = word10_to_delta(words_26[idx * 3 + 2])
+        else:
+            d_ay = word10_to_delta(canary_beacon_word) if int(canary_beacon_word) > 0 else 0.0
+
+        lx_s = round(lx * scale + d_lx, 9)
+        rx_s = round(cx * 2.0 - lx_s, 9)
+        by_s = round(by * scale + d_by, 9)
+        ay_s = round(ay * scale + d_ay, 9)
+        perturbed.append(
+            {
+                "name": name,
+                "lx": lx_s,
+                "by": by_s,
+                "ay": ay_s,
+                "rx": rx_s,
+                "is_up": is_up,
+            }
+        )
+    return perturbed
+
+
+def recover_256bit_from_triangles(
+    triangles: list[dict],
+    cx: float = 150.0,
+) -> tuple[str, int]:
+    """Losslessly invert all 256 bits of the signature digest + Canary beacon word from the 9 triangles alone."""
+    if len(triangles) != 9:
+        return "", 0
+    scale = 2.0 if cx == 300.0 else 1.0
+    words: list[int] = []
+    canary_word = 0
+    for idx, (_, lx_can, by_can, ay_can, _, _) in enumerate(CANONICAL_TRIANGLES):
+        t = triangles[idx]
+        d_lx = round(float(t["lx"]) - round(lx_can * scale, 9), 9)
+        d_by = round(float(t["by"]) - round(by_can * scale, 9), 9)
+        words.append(delta_to_word10(d_lx))
+        words.append(delta_to_word10(d_by))
+        d_ay = round(float(t["ay"]) - round(ay_can * scale, 9), 9)
+        if idx < 8:
+            words.append(delta_to_word10(d_ay))
+        else:
+            if abs(d_ay) < 1e-11:
+                canary_word = 0
+            else:
+                canary_word = delta_to_word10(d_ay)
+    return words_26_to_256bit_hex(words), canary_word
+
+
 def derive_offsets_from_hmac_hex(hex_sig: str) -> list[float]:
-    """Deterministically map a 64-char hex digest into 9 micro-offsets in [-1e-5, +1e-5]."""
+    """Deterministically map a 64-char hex digest into 9 micro-offsets in [-1e-5, +1e-5] (v1.2 baseline)."""
     digest = bytes.fromhex(hex_sig)
     offsets = []
     for i in range(9):
@@ -293,7 +464,7 @@ def derive_micro_offsets(
     key_file_path: str = "",
     raw_password: str = "",
 ) -> tuple[str, list[float], dict]:
-    """Derive (hex_sig, 9 micro-offsets, dstu4145_bundle) using DSTU 4145-2002 elliptic curve + GOST 34.311-95."""
+    """Derive (hex_sig, 9 micro-offsets, dstu4145_bundle) using DSTU 4145-2002 elliptic curve + Parallel Combiner."""
     dstu_res = call_dstu4145_bridge(
         {
             "action": "sign",
@@ -319,12 +490,19 @@ def build_perturbed_triangles(
     secret_key: str,
     key_file_path: str = "",
     raw_password: str = "",
+    canary_beacon_word: int = 0,
+    protocol: str = "MARMA-DSTU4145-V1.3",
 ) -> tuple[str, list[float], list[dict], dict]:
     """Return (hex_sig, offsets, perturbed_triangle_dicts, dstu4145_bundle) preserving lx + rx == 300.0."""
-    hex_sig, offsets, dstu4145_bundle = derive_micro_offsets(payload, secret_key, key_file_path, raw_password)
+    hex_sig, offsets_v12, dstu4145_bundle = derive_micro_offsets(payload, secret_key, key_file_path, raw_password)
+    if protocol == "MARMA-DSTU4145-V1.3":
+        perturbed = build_perturbed_triangles_v13(hex_sig, canary_beacon_word=canary_beacon_word, cx=150.0)
+        offsets = [round(t["lx"] - CANONICAL_TRIANGLES[i][1], 9) for i, t in enumerate(perturbed)]
+        return hex_sig, offsets, perturbed, dstu4145_bundle
+
     perturbed = []
     for idx, (name, lx, by, ay, rx, is_up) in enumerate(CANONICAL_TRIANGLES):
-        delta = offsets[idx]
+        delta = offsets_v12[idx]
         lx_s = round(lx + delta, 9)
         rx_s = round(300.0 - lx_s, 9)
         by_s = round(by + delta * 0.5, 9)
@@ -339,7 +517,7 @@ def build_perturbed_triangles(
                 "is_up": is_up,
             }
         )
-    return hex_sig, offsets, perturbed, dstu4145_bundle
+    return hex_sig, offsets_v12, perturbed, dstu4145_bundle
 
 
 def compute_public_seal_digest(
@@ -358,7 +536,7 @@ def compute_public_seal_digest(
 
 
 # ==============================================================================
-# 1. SVG SIGNING & VERIFICATION (DSTU 4145-2002 + 9-Triangle Micro-Perturbation)
+# 1. SVG SIGNING & VERIFICATION (DSTU 4145-2002 + 256-Bit 9-Triangle Geometry)
 # ==============================================================================
 def sign_sri_yantra_svg(
     payload: str,
@@ -368,13 +546,22 @@ def sign_sri_yantra_svg(
     key_fingerprint: str = "",
     key_file_path: str = "",
     raw_password: str = "",
+    recipient_id: str = "",
 ) -> dict:
-    """Generate a cryptographically watermarked Sri Yantra SVG with DSTU 4145-2002 + 9-triangle signature."""
+    """Generate a cryptographically watermarked Sri Yantra SVG with DSTU 4145-2002 + 256-bit geometry."""
     if not key_fingerprint:
         key_fingerprint = hashlib.sha256(secret_key.encode("utf-8")).hexdigest()
     content_sha256 = hashlib.sha256(payload.encode("utf-8")).hexdigest()
+    canary_info = compute_canary_tag(secret_key, content_sha256, recipient_id, key_fingerprint)
+    beacon_word = int(canary_info.get("beacon_word", 0))
+
     hex_sig, offsets, perturbed, dstu_bundle = build_perturbed_triangles(
-        payload, secret_key, key_file_path, raw_password
+        payload,
+        secret_key,
+        key_file_path,
+        raw_password,
+        canary_beacon_word=beacon_word,
+        protocol="MARMA-DSTU4145-V1.3",
     )
     pub_seal = compute_public_seal_digest(content_sha256, hex_sig, key_fingerprint, perturbed)
     dstu_json_b64 = ""
@@ -387,17 +574,25 @@ def sign_sri_yantra_svg(
         svg_polygons.append(
             f'  <polygon id="tri_{t["name"]}" data-lx="{t["lx"]:.9f}" data-by="{t["by"]:.9f}" '
             f'data-ay="{t["ay"]:.9f}" data-rx="{t["rx"]:.9f}" '
-            f'points="{t["lx"]:.7f},{t["by"]:.7f} 150.0000000,{t["ay"]:.7f} {t["rx"]:.7f},{t["by"]:.7f}" '
+            f'points="{t["lx"]:.9f},{t["by"]:.9f} 150.000000000,{t["ay"]:.9f} {t["rx"]:.9f},{t["by"]:.9f}" '
             f'fill="none" stroke="#f0d078" stroke-width="0.65" />'
+        )
+
+    canary_attrs = ""
+    if canary_info.get("enabled"):
+        canary_attrs = (
+            f' data-canary-word="{beacon_word}"'
+            f' data-canary-pub="{canary_info["public_canary_hash"]}"'
+            f' data-canary-hmac="{canary_info["hmac_commitment"]}"'
         )
 
     svg_content = (
         '<?xml version="1.0" encoding="UTF-8"?>\n'
         '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 300" width="1200" height="1200">\n'
-        f'  <metadata data-payload="{payload}" data-content-sha256="{content_sha256}" '
+        f'  <metadata data-protocol="MARMA-DSTU4145-V1.3" data-payload="{payload}" data-content-sha256="{content_sha256}" '
         f'data-hmac-sha256="{hex_sig}" data-signer="{signer_key_name}" '
         f'data-key-fp="{key_fingerprint}" data-public-seal="{pub_seal}" '
-        f'data-dstu4145-b64="{dstu_json_b64}" />\n'
+        f'data-dstu4145-b64="{dstu_json_b64}"{canary_attrs} />\n'
         '  <rect width="300" height="300" fill="#060913" />\n'
         '  <circle cx="150" cy="150" r="100" fill="none" stroke="#e6bd53" stroke-width="0.8" />\n'
         + "\n".join(svg_polygons)
@@ -419,6 +614,8 @@ def sign_sri_yantra_svg(
 
     return {
         "format": "svg",
+        "protocol": "MARMA-DSTU4145-V1.3",
+        "marma_bits": 256,
         "output_file": str(out_svg),
         "standard": dstu_bundle.get("standard", "ДСТУ 4145-2002 / ГОСТ 34.311-95"),
         "signer_key_name": signer_key_name,
@@ -427,9 +624,11 @@ def sign_sri_yantra_svg(
         "content_sha256": content_sha256,
         "gost34311_digest": dstu_bundle.get("gost34311_hex", ""),
         "dstu7564_digest": dstu_bundle.get("dstu7564_hex", ""),
+        "combiner_digest": dstu_bundle.get("combiner_hex", ""),
         "dstu4145_r": dstu_bundle.get("r_hex", ""),
         "dstu4145_s": dstu_bundle.get("s_hex", ""),
         "hmac_sha256": hex_sig,
+        "canary": canary_info,
         "cades_p7s": cades_res.get("p7s_path"),
         "offsets": offsets,
     }
@@ -490,11 +689,38 @@ def verify_triangle_coordinates(
     embedded_tris: list[dict],
     expected_offsets: list[float],
     cx: float = 150.0,
+    protocol: str = "MARMA-DSTU4145-V1.2",
+    expected_hex: str = "",
+    canary_beacon_word: int = 0,
 ) -> tuple[float, float]:
     """Verify all 36 coordinates (lx, rx, by, ay) and bilateral symmetry (lx + rx == 2*cx) across 9 triangles."""
     scale = 2.0 if cx == 300.0 else 1.0
     max_coord_drift = 0.0
     max_sym_err = 0.0
+
+    if protocol == "MARMA-DSTU4145-V1.3" and len(expected_hex) == 64:
+        exp_tris = build_perturbed_triangles_v13(expected_hex, canary_beacon_word=canary_beacon_word, cx=cx)
+        for idx in range(9):
+            t = embedded_tris[idx]
+            exp = exp_tris[idx]
+            lx_s = float(t["lx"])
+            rx_s = float(t["rx"])
+            by_s = float(t["by"])
+            ay_s = float(t["ay"])
+
+            sym_err = abs((lx_s + rx_s) - cx * 2.0)
+            drift = max(
+                abs(lx_s - float(exp["lx"])),
+                abs(rx_s - float(exp["rx"])),
+                abs(by_s - float(exp["by"])),
+                abs(ay_s - float(exp["ay"])),
+            )
+            if sym_err > max_sym_err:
+                max_sym_err = sym_err
+            if drift > max_coord_drift:
+                max_coord_drift = drift
+        return max_coord_drift, max_sym_err
+
     for idx, (name, lx_can, by_can, ay_can, rx_can, _) in enumerate(CANONICAL_TRIANGLES):
         t = embedded_tris[idx]
         delta = expected_offsets[idx]
@@ -529,6 +755,7 @@ def verify_sri_yantra_svg(
     key_file_path: str = "",
     raw_password: str = "",
     svg_path: Path | None = None,
+    recipient_id: str = "",
 ) -> dict:
     """Verify the DSTU 4145-2002 elliptic curve signature and 9-triangle geometric watermark."""
     if payload is None:
@@ -537,6 +764,8 @@ def verify_sri_yantra_svg(
             return {"verified": False, "format": "svg", "reason": "Missing data-payload in SVG metadata"}
         payload = m_pay.group(1)
 
+    m_proto = re.search(r'data-protocol="([^"]+)"', svg_text)
+    proto_ver = m_proto.group(1) if m_proto else "MARMA-DSTU4145-V1.2"
     m_hmac = re.search(r'data-hmac-sha256="([0-9a-fA-F]+)"', svg_text)
     embedded_hmac = m_hmac.group(1) if m_hmac else ""
     m_csha = re.search(r'data-content-sha256="([0-9a-fA-F]+)"', svg_text)
@@ -547,6 +776,10 @@ def verify_sri_yantra_svg(
     signer_name = m_signer.group(1) if m_signer else "Sovereign-Vedic-Key-108"
     m_kfp = re.search(r'data-key-fp="([0-9a-fA-F]+)"', svg_text)
     key_fp = m_kfp.group(1) if m_kfp else ""
+    m_cword = re.search(r'data-canary-word="([0-9]+)"', svg_text)
+    embedded_canary_word = int(m_cword.group(1)) if m_cword else 0
+    m_cpub = re.search(r'data-canary-pub="([0-9a-fA-F]+)"', svg_text)
+    embedded_canary_pub = m_cpub.group(1) if m_cpub else ""
     m_dstu = re.search(r'data-dstu4145-b64="([^"]*)"', svg_text)
     dstu_bundle = {}
     if m_dstu and m_dstu.group(1):
@@ -591,17 +824,43 @@ def verify_sri_yantra_svg(
         triangles.append({"name": name, "lx": lx_s, "by": by_s, "ay": ay_s, "rx": rx_s})
 
     cx = 300.0 if (triangles[0]["lx"] + triangles[0]["rx"]) > 400.0 else 150.0
-    max_offset_diff, max_sym_err = verify_triangle_coordinates(triangles, expected_offsets, cx=cx)
-
     eff_hmac = embedded_hmac or expected_hex
+    max_offset_diff, max_sym_err = verify_triangle_coordinates(
+        triangles,
+        expected_offsets,
+        cx=cx,
+        protocol=proto_ver,
+        expected_hex=eff_hmac,
+        canary_beacon_word=embedded_canary_word,
+    )
+
+    rec_256_hex, rec_canary_word = (
+        recover_256bit_from_triangles(triangles, cx=cx)
+        if proto_ver == "MARMA-DSTU4145-V1.3"
+        else ("", 0)
+    )
+    bijective_match = (proto_ver != "MARMA-DSTU4145-V1.3") or (
+        rec_256_hex == eff_hmac and rec_canary_word == embedded_canary_word
+    )
+
     expected_pseal = compute_public_seal_digest(computed_csha, eff_hmac, key_fp, triangles) if key_fp else ""
     pub_seal_ok = (not embedded_pseal) or (not expected_pseal) or (embedded_pseal == expected_pseal)
+
+    canary_recipient_match = None
+    if recipient_id:
+        cand_tag = compute_canary_tag(secret_key or DEFAULT_SECRET, computed_csha, recipient_id, key_fp)
+        canary_recipient_match = bool(
+            rec_canary_word > 0
+            and rec_canary_word == cand_tag["beacon_word"]
+            and (not embedded_canary_pub or embedded_canary_pub == cand_tag["public_canary_hash"])
+        )
 
     verified = (
         content_matches
         and hmac_match
         and dstu_ok
         and pub_seal_ok
+        and bijective_match
         and (max_offset_diff < 1e-8)
         and (max_sym_err < 1e-8)
     )
@@ -613,19 +872,22 @@ def verify_sri_yantra_svg(
         reason = "ДСТУ 4145-2002 elliptic curve verification failed"
     elif not hmac_match:
         reason = "Cryptographic key / digest mismatch"
-    elif not pub_seal_ok or max_offset_diff >= 1e-8 or max_sym_err >= 1e-8:
+    elif not pub_seal_ok or not bijective_match or max_offset_diff >= 1e-8 or max_sym_err >= 1e-8:
         reason = "Geometric coordinate tampering detected"
 
     return {
         "verified": verified,
         "reason": reason,
         "format": "svg",
+        "protocol": proto_ver,
+        "marma_bits": 256 if proto_ver == "MARMA-DSTU4145-V1.3" else 24,
         "standard": dstu_bundle.get("standard", "ДСТУ 4145-2002 / ГОСТ 34.311-95"),
         "dstu4145_verified": dstu_ok,
         "dstu4145_ec_verified": dstu_ok,
         "pades_cades_verified": bool(dstu_verify.get("qes_container_report")),
         "gost34311_digest": dstu_bundle.get("gost34311_hex", ""),
         "dstu7564_digest": dstu_bundle.get("dstu7564_hex", ""),
+        "combiner_digest": dstu_bundle.get("combiner_hex", ""),
         "dstu4145_r": dstu_bundle.get("r_hex", ""),
         "dstu4145_s": dstu_bundle.get("s_hex", ""),
         "signer_info": dstu_bundle.get("signer_info"),
@@ -635,6 +897,11 @@ def verify_sri_yantra_svg(
         "key_fingerprint": key_fp,
         "hmac_match": hmac_match,
         "public_seal_match": pub_seal_ok,
+        "bijective_256bit_match": bijective_match,
+        "recovered_256bit_digest": rec_256_hex,
+        "canary_active": bool(rec_canary_word > 0),
+        "canary_beacon_word": rec_canary_word,
+        "canary_recipient_verified": canary_recipient_match,
         "computed_content_sha256": computed_csha,
         "expected_hmac_sha256": expected_hex,
         "embedded_hmac_sha256": eff_hmac,
@@ -656,8 +923,9 @@ def stamp_pdf_document(
     key_fingerprint: str = "",
     key_file_path: str = "",
     raw_password: str = "",
+    recipient_id: str = "",
 ) -> dict:
-    """Stamp a PDF with a vector Sri Yantra watermark + corner seal + DSTU 4145-2002 PAdES signature."""
+    """Stamp a PDF with a vector Sri Yantra watermark + corner seal + DSTU 4145-2002 PAdES signature (256-bit v1.3)."""
     if not key_fingerprint:
         key_fingerprint = hashlib.sha256(secret_key.encode("utf-8")).hexdigest()
 
@@ -666,8 +934,16 @@ def stamp_pdf_document(
     content_hash = hashlib.sha256(full_text.encode("utf-8")).hexdigest()
     payload = f"PDF-CONTENT-SHA256::{content_hash}"
 
+    canary_info = compute_canary_tag(secret_key, content_hash, recipient_id, key_fingerprint)
+    beacon_word = int(canary_info.get("beacon_word", 0))
+
     hex_sig, offsets, perturbed, dstu_bundle = build_perturbed_triangles(
-        payload, secret_key, key_file_path, raw_password
+        payload,
+        secret_key,
+        key_file_path,
+        raw_password,
+        canary_beacon_word=beacon_word,
+        protocol="MARMA-DSTU4145-V1.3",
     )
     pub_seal = compute_public_seal_digest(content_hash, hex_sig, key_fingerprint, perturbed)
 
@@ -743,7 +1019,8 @@ def stamp_pdf_document(
             )
 
     seal_packet = {
-        "protocol": "MARMA-DSTU4145-V1.2",
+        "protocol": "MARMA-DSTU4145-V1.3",
+        "marma_bits": 256,
         "signer_key_name": signer_key_name,
         "key_fingerprint": key_fingerprint,
         "content_sha256": content_hash,
@@ -751,13 +1028,20 @@ def stamp_pdf_document(
         "public_seal_digest": pub_seal,
         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
         "dstu4145": dstu_bundle,
+        "canary": canary_info if canary_info.get("enabled") else {"enabled": False, "beacon_word": 0},
         "triangles": [{k: t[k] for k in ("name", "lx", "by", "ay", "rx")} for t in perturbed],
     }
     meta = doc.metadata or {}
     meta["keywords"] = "MARMA_SEAL::" + json.dumps(seal_packet, separators=(",", ":"))
     doc.set_metadata(meta)
-    doc.save(str(out_pdf))
-    doc.close()
+    if in_pdf.exists() and out_pdf.exists() and in_pdf.resolve() == out_pdf.resolve():
+        tmp_out = out_pdf.with_name(f".{out_pdf.name}.marma_tmp.pdf")
+        doc.save(str(tmp_out))
+        doc.close()
+        tmp_out.replace(out_pdf)
+    else:
+        doc.save(str(out_pdf))
+        doc.close()
 
     pades_res = {}
     if key_file_path:
@@ -773,6 +1057,8 @@ def stamp_pdf_document(
 
     return {
         "format": "pdf",
+        "protocol": "MARMA-DSTU4145-V1.3",
+        "marma_bits": 256,
         "input_file": str(in_pdf),
         "output_file": str(out_pdf),
         "standard": dstu_bundle.get("standard", "ДСТУ 4145-2002 / ГОСТ 34.311-95"),
@@ -783,9 +1069,11 @@ def stamp_pdf_document(
         "content_sha256": content_hash,
         "gost34311_digest": dstu_bundle.get("gost34311_hex", ""),
         "dstu7564_digest": dstu_bundle.get("dstu7564_hex", ""),
+        "combiner_digest": dstu_bundle.get("combiner_hex", ""),
         "dstu4145_r": dstu_bundle.get("r_hex", ""),
         "dstu4145_s": dstu_bundle.get("s_hex", ""),
         "hmac_sha256": hex_sig,
+        "canary": canary_info,
         "offsets": offsets,
     }
 
@@ -795,6 +1083,7 @@ def verify_pdf_document(
     secret_key: str | None = None,
     key_file_path: str = "",
     raw_password: str = "",
+    recipient_id: str = "",
 ) -> dict:
     """Verify text integrity, DSTU 4145-2002 EC signature, PAdES container, and 9-triangle geometry of a PDF."""
     doc = pymupdf.open(str(pdf_path))
@@ -812,11 +1101,15 @@ def verify_pdf_document(
     content_hash = hashlib.sha256(full_text.encode("utf-8")).hexdigest()
     payload = f"PDF-CONTENT-SHA256::{content_hash}"
 
+    proto_ver = seal_packet.get("protocol", "MARMA-DSTU4145-V1.2")
     embedded_hmac = seal_packet.get("hmac_sha256", "")
     embedded_content_sha = seal_packet.get("content_sha256", content_hash)
     signer_name = seal_packet.get("signer_key_name", "Sovereign-Vedic-Key-108")
     key_fp = seal_packet.get("key_fingerprint", "")
     dstu_bundle = seal_packet.get("dstu4145") or {}
+    canary_pkt = seal_packet.get("canary") or {}
+    embedded_canary_word = int(canary_pkt.get("beacon_word", 0))
+    embedded_canary_pub = str(canary_pkt.get("public_canary_hash", ""))
     embedded_tris = seal_packet.get("triangles", [])
     if len(embedded_tris) != 9:
         return {"verified": False, "format": "pdf", "file": str(pdf_path), "reason": "Corrupted triangle array"}
@@ -841,17 +1134,43 @@ def verify_pdf_document(
     hmac_match = content_matches and hmac_raw_match
 
     cx = 300.0 if (float(embedded_tris[0]["lx"]) + float(embedded_tris[0]["rx"])) > 400.0 else 150.0
-    max_offset_diff, max_sym_err = verify_triangle_coordinates(embedded_tris, expected_offsets, cx=cx)
+    max_offset_diff, max_sym_err = verify_triangle_coordinates(
+        embedded_tris,
+        expected_offsets,
+        cx=cx,
+        protocol=proto_ver,
+        expected_hex=embedded_hmac,
+        canary_beacon_word=embedded_canary_word,
+    )
+
+    rec_256_hex, rec_canary_word = (
+        recover_256bit_from_triangles(embedded_tris, cx=cx)
+        if proto_ver == "MARMA-DSTU4145-V1.3"
+        else ("", 0)
+    )
+    bijective_match = (proto_ver != "MARMA-DSTU4145-V1.3") or (
+        rec_256_hex == embedded_hmac and rec_canary_word == embedded_canary_word
+    )
 
     embedded_pseal = seal_packet.get("public_seal_digest", "")
     expected_pseal = compute_public_seal_digest(content_hash, embedded_hmac, key_fp, embedded_tris) if key_fp else ""
     pub_seal_ok = (not embedded_pseal) or (not expected_pseal) or (embedded_pseal == expected_pseal)
+
+    canary_recipient_match = None
+    if recipient_id:
+        cand_tag = compute_canary_tag(secret_key or DEFAULT_SECRET, content_hash, recipient_id, key_fp)
+        canary_recipient_match = bool(
+            rec_canary_word > 0
+            and rec_canary_word == cand_tag["beacon_word"]
+            and (not embedded_canary_pub or embedded_canary_pub == cand_tag["public_canary_hash"])
+        )
 
     verified = (
         content_matches
         and hmac_match
         and dstu_ok
         and pub_seal_ok
+        and bijective_match
         and (max_offset_diff < 1e-8)
         and (max_sym_err < 1e-8)
     )
@@ -863,13 +1182,15 @@ def verify_pdf_document(
         reason = "Cryptographic key mismatch (ДСТУ 4145-2002 / HMAC)"
     elif not dstu_ok:
         reason = "ДСТУ 4145-2002 elliptic curve verification failed"
-    elif not pub_seal_ok or max_offset_diff >= 1e-8 or max_sym_err >= 1e-8:
+    elif not pub_seal_ok or not bijective_match or max_offset_diff >= 1e-8 or max_sym_err >= 1e-8:
         reason = "Geometric coordinate tampering detected"
 
     return {
         "verified": verified,
         "reason": reason,
         "format": "pdf",
+        "protocol": proto_ver,
+        "marma_bits": 256 if proto_ver == "MARMA-DSTU4145-V1.3" else 24,
         "file": str(pdf_path),
         "standard": dstu_bundle.get("standard", "ДСТУ 4145-2002 / ГОСТ 34.311-95"),
         "dstu4145_verified": dstu_ok,
@@ -877,6 +1198,7 @@ def verify_pdf_document(
         "pades_cades_verified": bool(dstu_verify.get("qes_container_report")),
         "gost34311_digest": dstu_bundle.get("gost34311_hex", ""),
         "dstu7564_digest": dstu_bundle.get("dstu7564_hex", ""),
+        "combiner_digest": dstu_bundle.get("combiner_hex", ""),
         "dstu4145_r": dstu_bundle.get("r_hex", ""),
         "dstu4145_s": dstu_bundle.get("s_hex", ""),
         "signer_info": dstu_bundle.get("signer_info"),
@@ -885,6 +1207,11 @@ def verify_pdf_document(
         "key_fingerprint": key_fp,
         "hmac_match": hmac_match,
         "public_seal_match": pub_seal_ok,
+        "bijective_256bit_match": bijective_match,
+        "recovered_256bit_digest": rec_256_hex,
+        "canary_active": bool(rec_canary_word > 0),
+        "canary_beacon_word": rec_canary_word,
+        "canary_recipient_verified": canary_recipient_match,
         "computed_content_sha256": content_hash,
         "expected_hmac_sha256": expected_hex,
         "embedded_hmac_sha256": embedded_hmac,
@@ -962,6 +1289,7 @@ def stamp_docx_document(
     key_fingerprint: str = "",
     key_file_path: str = "",
     raw_password: str = "",
+    recipient_id: str = "",
 ) -> dict:
     """Stamp a Word (.docx) document with a Sri Yantra visual seal and DSTU 4145-2002 coordinate signature."""
     if not key_fingerprint:
@@ -972,8 +1300,16 @@ def stamp_docx_document(
     content_hash = hashlib.sha256(body_text.encode("utf-8")).hexdigest()
     payload = f"DOCX-CONTENT-SHA256::{content_hash}"
 
+    canary_info = compute_canary_tag(secret_key, content_hash, recipient_id, key_fingerprint)
+    beacon_word = int(canary_info.get("beacon_word", 0))
+
     hex_sig, offsets, perturbed, dstu_bundle = build_perturbed_triangles(
-        payload, secret_key, key_file_path, raw_password
+        payload,
+        secret_key,
+        key_file_path,
+        raw_password,
+        canary_beacon_word=beacon_word,
+        protocol="MARMA-DSTU4145-V1.3",
     )
     pub_seal = compute_public_seal_digest(content_hash, hex_sig, key_fingerprint, perturbed)
 
@@ -994,7 +1330,8 @@ def stamp_docx_document(
         run_sig.font.color.rgb = RGBColor(165, 130, 45)
 
         seal_packet = {
-            "protocol": "MARMA-DSTU4145-V1.2",
+            "protocol": "MARMA-DSTU4145-V1.3",
+            "marma_bits": 256,
             "signer_key_name": signer_key_name,
             "key_fingerprint": key_fingerprint,
             "content_sha256": content_hash,
@@ -1002,6 +1339,7 @@ def stamp_docx_document(
             "public_seal_digest": pub_seal,
             "timestamp_utc": datetime.now(timezone.utc).isoformat(),
             "dstu4145": dstu_bundle,
+            "canary": canary_info if canary_info.get("enabled") else {"enabled": False, "beacon_word": 0},
             "triangles": [{k: t[k] for k in ("name", "lx", "by", "ay", "rx")} for t in perturbed],
         }
         p_hidden = doc_obj.add_paragraph()
@@ -1027,6 +1365,8 @@ def stamp_docx_document(
 
     return {
         "format": "docx",
+        "protocol": "MARMA-DSTU4145-V1.3",
+        "marma_bits": 256,
         "input_file": str(in_docx),
         "output_file": str(out_docx),
         "standard": dstu_bundle.get("standard", "ДСТУ 4145-2002 / ГОСТ 34.311-95"),
@@ -1036,9 +1376,11 @@ def stamp_docx_document(
         "content_sha256": content_hash,
         "gost34311_digest": dstu_bundle.get("gost34311_hex", ""),
         "dstu7564_digest": dstu_bundle.get("dstu7564_hex", ""),
+        "combiner_digest": dstu_bundle.get("combiner_hex", ""),
         "dstu4145_r": dstu_bundle.get("r_hex", ""),
         "dstu4145_s": dstu_bundle.get("s_hex", ""),
         "hmac_sha256": hex_sig,
+        "canary": canary_info,
         "cades_p7s": cades_res.get("p7s_path"),
         "offsets": offsets,
     }
@@ -1049,6 +1391,7 @@ def verify_docx_document(
     secret_key: str | None = None,
     key_file_path: str = "",
     raw_password: str = "",
+    recipient_id: str = "",
 ) -> dict:
     """Verify the text integrity, DSTU 4145-2002 EC signature, and 9-triangle watermark of a .docx document."""
     doc_obj = docx.Document(str(docx_path))
@@ -1065,11 +1408,15 @@ def verify_docx_document(
     content_hash = hashlib.sha256(body_text.encode("utf-8")).hexdigest()
     payload = f"DOCX-CONTENT-SHA256::{content_hash}"
 
+    proto_ver = seal_packet.get("protocol", "MARMA-DSTU4145-V1.2")
     embedded_hmac = seal_packet.get("hmac_sha256", "")
     embedded_content_sha = seal_packet.get("content_sha256", content_hash)
     signer_name = seal_packet.get("signer_key_name", "Sovereign-Vedic-Key-108")
     key_fp = seal_packet.get("key_fingerprint", "")
     dstu_bundle = seal_packet.get("dstu4145") or {}
+    canary_pkt = seal_packet.get("canary") or {}
+    embedded_canary_word = int(canary_pkt.get("beacon_word", 0))
+    embedded_canary_pub = str(canary_pkt.get("public_canary_hash", ""))
     embedded_tris = seal_packet.get("triangles", [])
     if len(embedded_tris) != 9:
         return {"verified": False, "format": "docx", "file": str(docx_path), "reason": "Corrupted triangle array"}
@@ -1094,17 +1441,43 @@ def verify_docx_document(
     hmac_match = content_matches and hmac_raw_match
 
     cx = 300.0 if (float(embedded_tris[0]["lx"]) + float(embedded_tris[0]["rx"])) > 400.0 else 150.0
-    max_offset_diff, max_sym_err = verify_triangle_coordinates(embedded_tris, expected_offsets, cx=cx)
+    max_offset_diff, max_sym_err = verify_triangle_coordinates(
+        embedded_tris,
+        expected_offsets,
+        cx=cx,
+        protocol=proto_ver,
+        expected_hex=embedded_hmac,
+        canary_beacon_word=embedded_canary_word,
+    )
+
+    rec_256_hex, rec_canary_word = (
+        recover_256bit_from_triangles(embedded_tris, cx=cx)
+        if proto_ver == "MARMA-DSTU4145-V1.3"
+        else ("", 0)
+    )
+    bijective_match = (proto_ver != "MARMA-DSTU4145-V1.3") or (
+        rec_256_hex == embedded_hmac and rec_canary_word == embedded_canary_word
+    )
 
     embedded_pseal = seal_packet.get("public_seal_digest", "")
     expected_pseal = compute_public_seal_digest(content_hash, embedded_hmac, key_fp, embedded_tris) if key_fp else ""
     pub_seal_ok = (not embedded_pseal) or (not expected_pseal) or (embedded_pseal == expected_pseal)
+
+    canary_recipient_match = None
+    if recipient_id:
+        cand_tag = compute_canary_tag(secret_key or DEFAULT_SECRET, content_hash, recipient_id, key_fp)
+        canary_recipient_match = bool(
+            rec_canary_word > 0
+            and rec_canary_word == cand_tag["beacon_word"]
+            and (not embedded_canary_pub or embedded_canary_pub == cand_tag["public_canary_hash"])
+        )
 
     verified = (
         content_matches
         and hmac_match
         and dstu_ok
         and pub_seal_ok
+        and bijective_match
         and (max_offset_diff < 1e-8)
         and (max_sym_err < 1e-8)
     )
@@ -1116,13 +1489,15 @@ def verify_docx_document(
         reason = "Cryptographic key mismatch"
     elif not dstu_ok:
         reason = "ДСТУ 4145-2002 elliptic curve verification failed"
-    elif not pub_seal_ok or max_offset_diff >= 1e-8 or max_sym_err >= 1e-8:
+    elif not pub_seal_ok or not bijective_match or max_offset_diff >= 1e-8 or max_sym_err >= 1e-8:
         reason = "Geometric coordinate tampering detected"
 
     return {
         "verified": verified,
         "reason": reason,
         "format": "docx",
+        "protocol": proto_ver,
+        "marma_bits": 256 if proto_ver == "MARMA-DSTU4145-V1.3" else 24,
         "file": str(docx_path),
         "standard": dstu_bundle.get("standard", "ДСТУ 4145-2002 / ГОСТ 34.311-95"),
         "dstu4145_verified": dstu_ok,
@@ -1130,6 +1505,7 @@ def verify_docx_document(
         "pades_cades_verified": bool(dstu_verify.get("qes_container_report")),
         "gost34311_digest": dstu_bundle.get("gost34311_hex", ""),
         "dstu7564_digest": dstu_bundle.get("dstu7564_hex", ""),
+        "combiner_digest": dstu_bundle.get("combiner_hex", ""),
         "dstu4145_r": dstu_bundle.get("r_hex", ""),
         "dstu4145_s": dstu_bundle.get("s_hex", ""),
         "signer_info": dstu_bundle.get("signer_info"),
@@ -1138,12 +1514,85 @@ def verify_docx_document(
         "key_fingerprint": key_fp,
         "hmac_match": hmac_match,
         "public_seal_match": pub_seal_ok,
+        "bijective_256bit_match": bijective_match,
+        "recovered_256bit_digest": rec_256_hex,
+        "canary_active": bool(rec_canary_word > 0),
+        "canary_beacon_word": rec_canary_word,
+        "canary_recipient_verified": canary_recipient_match,
         "computed_content_sha256": content_hash,
         "expected_hmac_sha256": expected_hex,
         "embedded_hmac_sha256": embedded_hmac,
         "max_coordinate_signature_drift": round(max_offset_diff, 10),
         "max_bilateral_symmetry_error": round(max_sym_err, 12),
         "triangles": embedded_tris,
+    }
+
+
+def trace_canary_suspects(
+    target_file: Path,
+    suspects: list[str],
+    secret_key: str | None = None,
+) -> dict:
+    """Forensically attribute a leaked document against a list of suspect recipient IDs via D5.ay Canary Beacon."""
+    ver = verify_any_file(target_file, secret_key=secret_key)
+    beacon_word = int(ver.get("canary_beacon_word", 0))
+    csha = str(ver.get("computed_content_sha256", ""))
+    kfp = str(ver.get("key_fingerprint", ""))
+
+    # Extract embedded public_canary_hash if present
+    embedded_pub_canary = ""
+    ext = target_file.suffix.lower()
+    if ext == ".pdf":
+        d = pymupdf.open(str(target_file))
+        kw = (d.metadata or {}).get("keywords", "")
+        d.close()
+        if "MARMA_SEAL::" in kw:
+            pkt = json.loads(kw.split("MARMA_SEAL::", 1)[1])
+            embedded_pub_canary = str((pkt.get("canary") or {}).get("public_canary_hash", ""))
+    elif ext == ".docx":
+        d_obj = docx.Document(str(target_file))
+        for p in d_obj.paragraphs:
+            if "MARMA_SEAL_PACKET::" in p.text:
+                pkt = json.loads(p.text.split("MARMA_SEAL_PACKET::", 1)[1].strip())
+                embedded_pub_canary = str((pkt.get("canary") or {}).get("public_canary_hash", ""))
+                break
+    elif ext == ".svg":
+        txt = target_file.read_text(encoding="utf-8")
+        m_cp = re.search(r'data-canary-pub="([0-9a-fA-F]+)"', txt)
+        if m_cp:
+            embedded_pub_canary = m_cp.group(1)
+
+    matched_suspects: list[str] = []
+    tested_candidates: list[dict] = []
+    for s in suspects:
+        s_clean = s.strip()
+        if not s_clean:
+            continue
+        tag = compute_canary_tag(secret_key or DEFAULT_SECRET, csha, s_clean, kfp)
+        word_match = beacon_word > 0 and (tag["beacon_word"] == beacon_word)
+        hash_match = (not embedded_pub_canary) or (tag["public_canary_hash"] == embedded_pub_canary)
+        is_hit = bool(word_match and hash_match)
+        if is_hit:
+            matched_suspects.append(s_clean)
+        tested_candidates.append(
+            {
+                "recipient_id": s_clean,
+                "expected_beacon_word": tag["beacon_word"],
+                "public_canary_hash": tag["public_canary_hash"],
+                "match": is_hit,
+            }
+        )
+
+    return {
+        "file": str(target_file),
+        "document_verified": bool(ver.get("verified")),
+        "canary_active": beacon_word > 0,
+        "extracted_d5_ay_beacon_word": beacon_word,
+        "embedded_public_canary_hash": embedded_pub_canary,
+        "matched_recipient": matched_suspects[0] if len(matched_suspects) == 1 else (matched_suspects or None),
+        "matched_count": len(matched_suspects),
+        "candidates_tested": len(tested_candidates),
+        "results": tested_candidates,
     }
 
 
@@ -1194,9 +1643,9 @@ def generate_pdf_verification_protocol(
         else "MARMA-CRYPTO · ДСТУ 4145-2002 — ПРОТОКОЛ ПЕРЕВІРКИ ПІДПИСУ ШРІ ЯНТРИ"
     )
     sub_str = (
-        "DSTU 4145-2002 Elliptic Curve GF(2^257) · GOST 34.311-95 · DSTU 7564 · 9-Triangle Marma Audit"
+        "DSTU 4145-2002 Elliptic Curve GF(2^257) · GOST 34.311-95 · DSTU 7564 · 256-Bit Marma Audit"
         if lang == "en"
-        else "ДСТУ 4145-2002 GF(2^257) · ГОСТ 34.311-95 · ДСТУ 7564 «Купина» · 9 трикутників Шрі Янтри"
+        else "ДСТУ 4145-2002 GF(2^257) · ГОСТ 34.311-95 · ДСТУ 7564 «Купина» · 256-бітний Аудит Шрі Янтри"
     )
     page.insert_text(pymupdf.Point(104, 44), title_str, fontsize=10.5, fontname="helv", color=(0.98, 0.86, 0.48))
     page.insert_text(pymupdf.Point(104, 64), sub_str, fontsize=8.0, fontname="helv", color=(0.82, 0.84, 0.88))
@@ -1213,7 +1662,7 @@ def generate_pdf_verification_protocol(
     sh_stat.draw_rect(pymupdf.Rect(36, 120, 559, 158))
     if verified:
         sh_stat.finish(fill=(0.91, 0.97, 0.92), color=(0.18, 0.49, 0.20), width=1.2)
-        stat_txt = "VERIFIED: TRUE — DSTU 4145-2002 ELLIPTIC CURVE & 9-TRIANGLE SRI YANTRA GEOMETRY ARE VALID"
+        stat_txt = "VERIFIED: TRUE — DSTU 4145-2002 ELLIPTIC CURVE & 256-BIT SRI YANTRA GEOMETRY ARE VALID"
         stat_col = (0.12, 0.38, 0.14)
     else:
         sh_stat.finish(fill=(0.99, 0.92, 0.92), color=(0.78, 0.16, 0.16), width=1.2)
@@ -1237,6 +1686,7 @@ def generate_pdf_verification_protocol(
         ("Key Medium & Fingerprint", f"{ver_res.get('signer_key_name')} [{str(ver_res.get('key_fingerprint', ''))[:24]}...]"),
         ("GOST 34.311-95 Digest", str(ver_res.get("gost34311_digest") or ver_res.get("computed_content_sha256", "—"))),
         ("DSTU 7564-256 (Kupyna)", str(ver_res.get("dstu7564_digest") or "—")),
+        ("Parallel Combiner SHA-256", str(ver_res.get("combiner_digest") or "—")),
         ("DSTU 4145-2002 Vector (r)", str(ver_res.get("dstu4145_r") or ver_res.get("embedded_hmac_sha256", "—"))[:64]),
         ("DSTU 4145-2002 Vector (s)", str(ver_res.get("dstu4145_s") or "—")[:64]),
         ("Max Coordinate Drift (Δ_coord)", f"{ver_res.get('max_coordinate_signature_drift', 0.0):.10f} (threshold < 1e-8)"),
@@ -1245,10 +1695,10 @@ def generate_pdf_verification_protocol(
     for label, val in meta_rows:
         page.insert_text(pymupdf.Point(40, y_cur), f"{label}:", fontsize=8.0, fontname="helv", color=(0.25, 0.28, 0.35))
         page.insert_text(pymupdf.Point(195, y_cur), str(val), fontsize=7.6, fontname="cour", color=(0.08, 0.10, 0.15))
-        y_cur += 18
+        y_cur += 17
 
     # 9-Triangle Coordinate Audit Table
-    y_cur += 12
+    y_cur += 10
     page.insert_text(
         pymupdf.Point(40, y_cur),
         "9-Triangle Micro-Perturbation Coordinate Audit Table (Bound to DSTU 4145-2002 Signature Vector r, s):",
@@ -1288,14 +1738,17 @@ def generate_pdf_verification_protocol(
     proto_hash = hashlib.sha256(proto_text.encode("utf-8")).hexdigest()
     proto_payload = f"PDF-CONTENT-SHA256::{proto_hash}"
     eff_sec = secret_key or DEFAULT_SECRET
-    p_hex, _, p_tris, p_dstu = build_perturbed_triangles(proto_payload, eff_sec)
+    p_hex, _, p_tris, p_dstu = build_perturbed_triangles(
+        proto_payload, eff_sec, canary_beacon_word=0, protocol="MARMA-DSTU4145-V1.3"
+    )
     if s_info and p_dstu:
         p_dstu["signer_info"] = s_info
     p_kfp = str(ver_res.get("key_fingerprint") or hashlib.sha256(eff_sec.encode("utf-8")).hexdigest())
     p_kname = str(ver_res.get("signer_key_name") or "Sovereign-Vedic-Key-108")
     p_pseal = compute_public_seal_digest(proto_hash, p_hex, p_kfp, p_tris)
     proto_seal_packet = {
-        "protocol": "MARMA-DSTU4145-V1.2",
+        "protocol": "MARMA-DSTU4145-V1.3",
+        "marma_bits": 256,
         "signer_key_name": p_kname,
         "key_fingerprint": p_kfp,
         "content_sha256": proto_hash,
@@ -1303,6 +1756,7 @@ def generate_pdf_verification_protocol(
         "public_seal_digest": p_pseal,
         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
         "dstu4145": p_dstu,
+        "canary": {"enabled": False, "beacon_word": 0},
         "triangles": [{k: t[k] for k in ("name", "lx", "by", "ay", "rx")} for t in p_tris],
     }
     meta = doc.metadata or {}
@@ -1328,6 +1782,7 @@ def sign_any_file(
     key_fingerprint: str = "",
     key_file_path: str = "",
     raw_password: str = "",
+    recipient_id: str = "",
 ) -> dict:
     ext = in_path.suffix.lower()
     if out_path is None:
@@ -1337,12 +1792,14 @@ def sign_any_file(
             in_path, out_path, secret_key=secret_key, mode=mode,
             signer_key_name=signer_key_name, key_fingerprint=key_fingerprint,
             key_file_path=key_file_path, raw_password=raw_password,
+            recipient_id=recipient_id,
         )
     if ext == ".docx":
         return stamp_docx_document(
             in_path, out_path, secret_key=secret_key,
             signer_key_name=signer_key_name, key_fingerprint=key_fingerprint,
             key_file_path=key_file_path, raw_password=raw_password,
+            recipient_id=recipient_id,
         )
     if ext == ".svg":
         pay = payload or f"SVG-FILE::{in_path.name}"
@@ -1350,6 +1807,7 @@ def sign_any_file(
             pay, secret_key, out_path,
             signer_key_name=signer_key_name, key_fingerprint=key_fingerprint,
             key_file_path=key_file_path, raw_password=raw_password,
+            recipient_id=recipient_id,
         )
     raise ValueError(f"Формат файлу не підтримується: {ext} (підтримуються .pdf, .docx, .svg)")
 
@@ -1360,6 +1818,7 @@ def verify_any_file(
     payload: str | None = None,
     key_file_path: str = "",
     raw_password: str = "",
+    recipient_id: str = "",
 ) -> dict:
     ext = in_path.suffix.lower()
     if ext == ".p7s" and in_path.with_suffix("").is_file():
@@ -1369,14 +1828,20 @@ def verify_any_file(
         in_path = in_path.with_suffix(".pdf")
         ext = ".pdf"
     if ext == ".pdf":
-        return verify_pdf_document(in_path, secret_key=secret_key, key_file_path=key_file_path, raw_password=raw_password)
+        return verify_pdf_document(
+            in_path, secret_key=secret_key, key_file_path=key_file_path,
+            raw_password=raw_password, recipient_id=recipient_id,
+        )
     if ext == ".docx":
-        return verify_docx_document(in_path, secret_key=secret_key, key_file_path=key_file_path, raw_password=raw_password)
+        return verify_docx_document(
+            in_path, secret_key=secret_key, key_file_path=key_file_path,
+            raw_password=raw_password, recipient_id=recipient_id,
+        )
     if ext == ".svg":
         res = verify_sri_yantra_svg(
             in_path.read_text(encoding="utf-8"), payload, secret_key,
             key_file_path=key_file_path, raw_password=raw_password,
-            svg_path=in_path,
+            svg_path=in_path, recipient_id=recipient_id,
         )
         res["file"] = str(in_path)
         return res
@@ -1384,9 +1849,9 @@ def verify_any_file(
 
 
 def run_self_test(out_dir: Path | None = None) -> int:
-    """Run an end-to-end cryptographic self-test across SVG, PDF, DOCX, DSTU 4145-2002, and Protocol PDF."""
+    """Run an end-to-end cryptographic self-test across SVG, PDF, DOCX, DSTU 4145-2002, Canary, and Protocol PDF."""
     print("================================================================================")
-    print(f"MARMA-CRYPTO WATERMARK SUITE v{VERSION} (ДСТУ 4145-2002) — SELF-TEST")
+    print(f"MARMA-CRYPTO WATERMARK SUITE v{VERSION} (ДСТУ 4145-2002 · 256-BIT) — SELF-TEST")
     print("================================================================================")
     work_dir = out_dir or Path(tempfile.mkdtemp(prefix="marma-self-test."))
     work_dir.mkdir(parents=True, exist_ok=True)
@@ -1394,13 +1859,13 @@ def run_self_test(out_dir: Path | None = None) -> int:
     # 1. SVG Test
     svg_file = work_dir / "sri_yantra_cryptographically_signed.svg"
     payload = "EDU-VEDI::Canonical-Sri-Yantra-Monograph::Yaroslav::2026-10-17"
-    sign_sri_yantra_svg(payload, DEFAULT_SECRET, svg_file)
+    sign_sri_yantra_svg(payload, DEFAULT_SECRET, svg_file, recipient_id="Investor-Room-Alpha")
     svg_text = svg_file.read_text(encoding="utf-8")
-    svg_ok = verify_sri_yantra_svg(svg_text, payload, DEFAULT_SECRET)
+    svg_ok = verify_sri_yantra_svg(svg_text, payload, DEFAULT_SECRET, recipient_id="Investor-Room-Alpha")
     tampered_svg = svg_text.replace('id="tri_U1" data-lx="52.98', 'id="tri_U1" data-lx="52.99')
     svg_tamper = verify_sri_yantra_svg(tampered_svg, payload, DEFAULT_SECRET)
 
-    # 2. PDF Test + Protocol Test
+    # 2. PDF Test + Canary Trace Test + Protocol Test
     pdf_in = work_dir / "test_input.pdf"
     pdf_out = work_dir / "test_signed.pdf"
     proto_out = work_dir / "test_protocol.pdf"
@@ -1409,8 +1874,9 @@ def run_self_test(out_dir: Path | None = None) -> int:
     p.insert_text((72, 100), "Sovereign Mathematical Proof — Sri Yantra 54 Marma Concurrency", fontsize=13)
     d.save(str(pdf_in))
     d.close()
-    stamp_pdf_document(pdf_in, pdf_out, DEFAULT_SECRET, mode="both")
-    pdf_ok = verify_pdf_document(pdf_out)
+    stamp_pdf_document(pdf_in, pdf_out, DEFAULT_SECRET, mode="both", recipient_id="M&A-Party-07")
+    pdf_ok = verify_pdf_document(pdf_out, recipient_id="M&A-Party-07")
+    trace_ok = trace_canary_suspects(pdf_out, ["M&A-Party-01", "M&A-Party-07", "M&A-Party-12"])
     generate_pdf_verification_protocol(pdf_out, proto_out, lang="uk")
 
     # 3. DOCX Test
@@ -1426,18 +1892,23 @@ def run_self_test(out_dir: Path | None = None) -> int:
     all_passed = (
         svg_ok["verified"]
         and svg_ok.get("dstu4145_verified", False)
+        and svg_ok.get("bijective_256bit_match", False)
+        and svg_ok.get("canary_recipient_verified", False)
         and (not svg_tamper["verified"])
         and pdf_ok["verified"]
         and pdf_ok.get("dstu4145_verified", False)
+        and pdf_ok.get("bijective_256bit_match", False)
+        and trace_ok.get("matched_recipient") == "M&A-Party-07"
         and proto_out.is_file()
         and docx_ok["verified"]
         and docx_ok.get("dstu4145_verified", False)
     )
-    print(f"  ✓ SVG + ДСТУ 4145-2002 EC:     {svg_ok['verified']} (EC={svg_ok.get('dstu4145_verified')}, drift={svg_ok['max_coordinate_signature_drift']})")
+    print(f"  ✓ SVG + 256-Bit + ДСТУ 4145:   {svg_ok['verified']} (EC={svg_ok.get('dstu4145_verified')}, drift={svg_ok['max_coordinate_signature_drift']})")
     print(f"  ✓ SVG Tamper Rejection:        {not svg_tamper['verified']} (detected drift={svg_tamper['max_coordinate_signature_drift']})")
-    print(f"  ✓ PDF + ДСТУ 4145-2002 EC:     {pdf_ok['verified']} (EC={pdf_ok.get('dstu4145_verified')}, drift={pdf_ok['max_coordinate_signature_drift']})")
+    print(f"  ✓ PDF + 256-Bit + ДСТУ 4145:   {pdf_ok['verified']} (EC={pdf_ok.get('dstu4145_verified')}, drift={pdf_ok['max_coordinate_signature_drift']})")
+    print(f"  ✓ Canary Leak-Tracing (D5.ay): {trace_ok.get('matched_recipient') == 'M&A-Party-07'} (matched={trace_ok.get('matched_recipient')})")
     print(f"  ✓ PDF Protocol Generation:     {proto_out.is_file()} ({proto_out.stat().st_size} bytes)")
-    print(f"  ✓ DOCX + ДСТУ 4145-2002 EC:    {docx_ok['verified']} (EC={docx_ok.get('dstu4145_verified')}, drift={docx_ok['max_coordinate_signature_drift']})")
+    print(f"  ✓ DOCX + 256-Bit + ДСТУ 4145:  {docx_ok['verified']} (EC={docx_ok.get('dstu4145_verified')}, drift={docx_ok['max_coordinate_signature_drift']})")
     print(f"  ✓ Overall Self-Test Status:    {'PASS' if all_passed else 'FAIL'}")
     return 0 if all_passed else 1
 
@@ -1445,13 +1916,13 @@ def run_self_test(out_dir: Path | None = None) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(
         prog="marma-watermark",
-        description="Marma-Crypto & DSTU 4145-2002 Geometric Watermark CLI & GUI for PDF, DOCX, and SVG documents.",
+        description="Marma-Crypto v1.3.0 & DSTU 4145-2002 256-Bit Geometric Watermark & Canary Leak-Tracing CLI/GUI.",
     )
     parser.add_argument(
         "action",
         nargs="?",
-        choices=["sign", "verify", "protocol", "keygen", "clear-session", "selftest"],
-        help="Action: sign, verify, protocol, keygen, clear-session, or selftest",
+        choices=["sign", "verify", "trace", "protocol", "keygen", "clear-session", "selftest"],
+        help="Action: sign, verify, trace, protocol, keygen, clear-session, or selftest",
     )
     parser.add_argument("files", nargs="*", type=Path, help="Target documents (.pdf, .docx, .svg)")
     parser.add_argument("--stamp-pdf", type=Path, help="Input PDF file to stamp with Sri Yantra watermark")
@@ -1462,6 +1933,8 @@ def main() -> int:
     parser.add_argument("--verify-svg", type=Path, help="Signed SVG file to verify")
     parser.add_argument("--protocol", action="store_true", help="Generate official PDF Verification Protocol")
     parser.add_argument("--payload", type=str, help="Custom payload string for SVG signing/verification")
+    parser.add_argument("--recipient-id", type=str, default="", help="Canary Leak-Tracing recipient ID to embed/verify in D5.ay")
+    parser.add_argument("--suspects", type=str, default="", help="Comma-separated suspect recipient IDs for `trace` attribution")
     parser.add_argument("--output", "-o", type=Path, help="Output path for stamped document or protocol")
     parser.add_argument("--key-file", "-k", type=Path, help="Path to key file in ~/.secure_keys/ (.pfx, .p12, .key)")
     parser.add_argument("--secret", type=str, default=None, help="Author's secret key or password")
@@ -1499,6 +1972,14 @@ def main() -> int:
     if args.action == "selftest":
         return run_self_test()
 
+    if args.action == "trace":
+        if not args.files:
+            parser.error("Вкажіть файл (.pdf, .docx, .svg) для трасування витоку Canary.")
+        suspect_list = [s.strip() for s in (args.suspects or args.recipient_id).split(",") if s.strip()]
+        results = [trace_canary_suspects(f, suspect_list, secret_key=args.secret) for f in args.files]
+        print(json.dumps(results if len(results) > 1 else results[0], indent=2, ensure_ascii=False))
+        return 0
+
     if args.action == "protocol" or args.protocol:
         targets = args.files
         if not targets:
@@ -1522,6 +2003,7 @@ def main() -> int:
             r = sign_any_file(
                 f, out, secret_key=sec, mode=args.mode, payload=args.payload,
                 signer_key_name=kname, key_fingerprint=kfp, key_file_path=kpath, raw_password=rpwd,
+                recipient_id=args.recipient_id,
             )
             results.append(r)
         print(json.dumps(results if len(results) > 1 else results[0], indent=2, ensure_ascii=False))
@@ -1541,7 +2023,10 @@ def main() -> int:
         all_ok = True
         dlg_bin = find_marma_dialog_bin()
         for f in args.files:
-            res = verify_any_file(f, secret_key=sec, payload=args.payload, key_file_path=kpath, raw_password=rpwd)
+            res = verify_any_file(
+                f, secret_key=sec, payload=args.payload, key_file_path=kpath,
+                raw_password=rpwd, recipient_id=args.recipient_id,
+            )
             print(json.dumps(res, indent=2, ensure_ascii=False))
             if not res.get("verified"):
                 all_ok = False
@@ -1552,31 +2037,42 @@ def main() -> int:
     if args.stamp_pdf:
         sec, kname, kfp, kpath, rpwd = resolve_signing_credentials(args.gui, args.key_file, args.secret, doc_desc=args.stamp_pdf.name)
         out = args.output or args.stamp_pdf.with_name(f"{args.stamp_pdf.stem}_marma_signed.pdf")
-        res = stamp_pdf_document(args.stamp_pdf, out, secret_key=sec, mode=args.mode, signer_key_name=kname, key_fingerprint=kfp, key_file_path=kpath, raw_password=rpwd)
+        res = stamp_pdf_document(
+            args.stamp_pdf, out, secret_key=sec, mode=args.mode, signer_key_name=kname,
+            key_fingerprint=kfp, key_file_path=kpath, raw_password=rpwd, recipient_id=args.recipient_id,
+        )
         print(json.dumps(res, indent=2, ensure_ascii=False))
         return 0
     if args.verify_pdf:
-        res = verify_pdf_document(args.verify_pdf, secret_key=args.secret)
+        res = verify_pdf_document(args.verify_pdf, secret_key=args.secret, recipient_id=args.recipient_id)
         print(json.dumps(res, indent=2, ensure_ascii=False))
         return 0 if res.get("verified") else 2
     if args.stamp_docx:
         sec, kname, kfp, kpath, rpwd = resolve_signing_credentials(args.gui, args.key_file, args.secret, doc_desc=args.stamp_docx.name)
         out = args.output or args.stamp_docx.with_name(f"{args.stamp_docx.stem}_marma_signed.docx")
-        res = stamp_docx_document(args.stamp_docx, out, secret_key=sec, signer_key_name=kname, key_fingerprint=kfp, key_file_path=kpath, raw_password=rpwd)
+        res = stamp_docx_document(
+            args.stamp_docx, out, secret_key=sec, signer_key_name=kname, key_fingerprint=kfp,
+            key_file_path=kpath, raw_password=rpwd, recipient_id=args.recipient_id,
+        )
         print(json.dumps(res, indent=2, ensure_ascii=False))
         return 0
     if args.verify_docx:
-        res = verify_docx_document(args.verify_docx, secret_key=args.secret)
+        res = verify_docx_document(args.verify_docx, secret_key=args.secret, recipient_id=args.recipient_id)
         print(json.dumps(res, indent=2, ensure_ascii=False))
         return 0 if res.get("verified") else 2
     if args.sign_svg:
         sec, kname, kfp, kpath, rpwd = resolve_signing_credentials(args.gui, args.key_file, args.secret, doc_desc=args.sign_svg.name)
         pay = args.payload or f"EDU-VEDI::Canonical-Sri-Yantra::{args.sign_svg.name}"
-        res = sign_sri_yantra_svg(pay, sec, args.sign_svg, signer_key_name=kname, key_fingerprint=kfp, key_file_path=kpath, raw_password=rpwd)
+        res = sign_sri_yantra_svg(
+            pay, sec, args.sign_svg, signer_key_name=kname, key_fingerprint=kfp,
+            key_file_path=kpath, raw_password=rpwd, recipient_id=args.recipient_id,
+        )
         print(json.dumps(res, indent=2, ensure_ascii=False))
         return 0
     if args.verify_svg:
-        res = verify_sri_yantra_svg(args.verify_svg.read_text(encoding="utf-8"), args.payload, args.secret)
+        res = verify_sri_yantra_svg(
+            args.verify_svg.read_text(encoding="utf-8"), args.payload, args.secret, recipient_id=args.recipient_id,
+        )
         print(json.dumps(res, indent=2, ensure_ascii=False))
         return 0 if res.get("verified") else 2
 

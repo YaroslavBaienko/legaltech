@@ -288,19 +288,19 @@ cat > "${TARGET_DIR}/index.html" << 'EOF'
       <div class="pkg-card">
         <div class="pkg-header">
           <span class="pkg-title">🔱 marma-crypto-watermark</span>
-          <span class="pkg-meta">v1.2.1-1 · Architecture: all · Suite: stable/main</span>
+          <span class="pkg-meta">v1.3.0-1 · Architecture: all · Suite: stable/main</span>
         </div>
         <p style="margin: 0.3rem 0;">
-          <strong>Sri Yantra Cryptographic Geometric Watermarking &amp; Sovereign Document Sealing Suite.</strong>
+          <strong>Sri Yantra Cryptographic Geometric Watermarking, 256-Bit Bijective Sealing &amp; Canary Leak-Tracing Suite.</strong>
         </p>
         <ul>
-          <li><strong>Mathematical &amp; Cryptographic Specification:</strong> Implements the <em>Marma-Crypto Protocol</em> (<a href="https://doi.org/10.5281/zenodo.23436152">CERN Zenodo DOI: 10.5281/zenodo.23436152</a>), mapping a 512-bit cryptographic signature / payload digest into 24-bit block-quantized affine micro-coordinate perturbations (&delta;<sub>k</sub> &in; [&minus;10<sup>&minus;5</sup>, +10<sup>&minus;5</sup>]) across the 9 interlocked triangles and 54 triple intersections (<em>marma-sth&#257;na</em>) of the canonical Sri Yantra (&Delta;E &approx; 6.13 &times; 10<sup>&minus;11</sup> rad &lt; &varepsilon;<sub>float64</sub>).</li>
-          <li><strong>Core Capabilities:</strong> Dual-layer visual &amp; structural watermarking for <strong>PDF</strong>, <strong>DOCX</strong>, and <strong>SVG</strong> documents (<code class="inline">--mode both | watermark | seal</code>), Golden Bindu cryptographic seal, zero-tolerance tamper detection across all 36 triangle coordinates, official Vector PDF Verification Protocol generator, deterministic DSTU 4145-2002 (RFC 6979 over GF(2<sup>257</sup>)) bridge, GTK4 / Libadwaita key-selection dialog (<code class="inline">~/.secure_keys/</code> &amp; USB tokens), and 15-minute RAM session cache.</li>
-          <li><strong>CLI &amp; Desktop Integration:</strong> Provides <code class="inline">marma-watermark</code> (<code class="inline">sign</code>, <code class="inline">verify</code>, <code class="inline">protocol</code>, <code class="inline">keygen</code>, <code class="inline">selftest</code>), <code class="inline">marma-dialog</code>, <code class="inline">marma-config</code>, and GNOME Files (Nautilus) right-click scripts (<em>"🔱 Sri Yantra &middot; Marma-Crypto"</em> in EN/UA).</li>
+          <li><strong>Mathematical &amp; Cryptographic Specification:</strong> Implements the <em>Marma-Crypto Protocol v1.3.0</em> (<a href="https://doi.org/10.5281/zenodo.23436152">CERN Zenodo DOI: 10.5281/zenodo.23436152</a>), combining a Parallel Multi-Hash Combiner <code class="inline">SHA-256(GOST 34.311-95 || "::" || Kupyna-256 || "::" || SHA-256)</code> with a full <strong>256-bit bijective integer-nanometer lattice</strong> across 26 symmetric coordinates (&delta;(w) = (18w &minus; 9207) &times; 10<sup>&minus;9</sup>) and 24 symmetric Marma pairs of the 9-triangle Sri Yantra (&Delta;E &approx; 6.13 &times; 10<sup>&minus;11</sup> rad &lt; &varepsilon;<sub>float64</sub>).</li>
+          <li><strong>Core Capabilities:</strong> Dual-layer visual &amp; structural watermarking for <strong>PDF</strong>, <strong>DOCX</strong>, and <strong>SVG</strong> documents (<code class="inline">--mode both | watermark | seal</code>), <strong>Canary Leak-Tracing</strong> (<code class="inline">--recipient-id</code> &amp; <code class="inline">trace --suspects</code> via 27th symmetric coordinate <code class="inline">D5.ay</code>), Golden Bindu cryptographic seal, zero-tolerance tamper detection across all 36 triangle coordinates, official Vector PDF Verification Protocol generator, deterministic DSTU 4145-2002 (RFC 6979 over GF(2<sup>257</sup>)) bridge, GTK4 / Libadwaita key-selection dialog (<code class="inline">~/.secure_keys/</code> &amp; USB tokens), and 15-minute RAM session cache.</li>
+          <li><strong>CLI &amp; Desktop Integration:</strong> Provides <code class="inline">marma-watermark</code> (<code class="inline">sign</code>, <code class="inline">verify</code>, <code class="inline">trace</code>, <code class="inline">protocol</code>, <code class="inline">keygen</code>, <code class="inline">selftest</code>), <code class="inline">marma-dialog</code>, <code class="inline">marma-config</code>, and GNOME Files (Nautilus) right-click scripts (<em>"🔱 Sri Yantra &middot; Marma-Crypto"</em> in EN/UA).</li>
         </ul>
         <div class="pkg-links">
           🛡️ <a href="https://yaroslavbaienko.github.io/marma-crypto-protocol/">Live Interactive Browser Verifier</a> ·
-          📄 <a href="https://doi.org/10.5281/zenodo.23436152">CERN Zenodo Whitepaper (v1.2.1)</a> ·
+          📄 <a href="https://doi.org/10.5281/zenodo.23436152">CERN Zenodo Whitepaper (v1.3.0)</a> ·
           💻 <a href="https://github.com/YaroslavBaienko/marma-crypto-protocol">Upstream Repository</a>
         </div>
       </div>

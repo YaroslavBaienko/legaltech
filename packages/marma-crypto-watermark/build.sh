@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# build.sh — Збірка .deb пакета marma-crypto-watermark v1.2.1 (Nautilus + GTK4/Adwaita)
+# build.sh — Збірка .deb пакета marma-crypto-watermark v1.3.0 (Nautilus + GTK4/Adwaita)
 # За зразком архітектури $HOME/legaltech (qes-tools)
 #
 # Встановлює у систему:
@@ -24,7 +24,7 @@ BIN_DIR="${SCRIPT_DIR}/bin"
 NAUTILUS_SRC="${SCRIPT_DIR}/nautilus-scripts"
 
 PKG_NAME="marma-crypto-watermark"
-PKG_VERSION="1.2.1-1"
+PKG_VERSION="1.3.0-1"
 PKG_ARCH="all"
 PKG_MAINTAINER="Yaroslav Baienko <yaroslav@advocacy.uno>"
 
@@ -103,7 +103,7 @@ _marma_watermark_completions() {
     COMPREPLY=()
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
-    opts="sign verify protocol keygen clear-session selftest --stamp-pdf --verify-pdf --stamp-docx --verify-docx --sign-svg --verify-svg --protocol --key-file -k --output -o --secret --strict-key --mode --lang --gui --open --help --version"
+    opts="sign verify trace protocol keygen clear-session selftest --stamp-pdf --verify-pdf --stamp-docx --verify-docx --sign-svg --verify-svg --protocol --recipient-id --suspects --key-file -k --output -o --secret --strict-key --mode --lang --gui --open --help --version"
     if [[ ${cur} == -* ]] || [[ ${COMP_CWORD} -eq 1 ]]; then
         COMPREPLY=( $(compgen -W "${opts}" -- ${cur}) )
         return 0
@@ -138,9 +138,9 @@ Description: Sri Yantra Cryptographic Geometric Watermark & Nautilus Suite
  tokens, and GNOME Files (Nautilus) right-click Scripts menu ("🔱 Шрі Янтра · Marma-Crypto").
  .
  Provides /usr/bin/marma-watermark, /usr/bin/marma-dialog (GTK4/Libadwaita),
- and /usr/bin/marma-config for stamping vector watermarks, golden Bindu seals,
- verifying 9-triangle concurrency invariants, and generating official PDF
- verification protocols.
+ and /usr/bin/marma-config for stamping 256-bit bijective vector watermarks,
+ golden Bindu seals, Canary leak-tracing (--recipient-id / trace), verifying
+ 9-triangle concurrency invariants, and generating official PDF protocols.
 EOF
 
 cat > "${PKGROOT}/DEBIAN/postinst" <<'EOF'
@@ -160,9 +160,10 @@ if [ "$1" = "configure" ]; then
     fi
 
     echo "================================================================================"
-    echo " 🔱 Встановлено комплекс геометричного підпису marma-crypto-watermark v1.2.1"
-    echo " • marma-watermark sign     — накладання водяного знака та Золотої печатки (PDF, DOCX, SVG)"
-    echo " • marma-watermark verify   — перевірка цілісності тексту та 9 трикутників Шрі Янтри"
+    echo " 🔱 Встановлено комплекс геометричного підпису marma-crypto-watermark v1.3.0"
+    echo " • marma-watermark sign     — накладання 256-бітного водяного знака та Золотої печатки (PDF, DOCX, SVG)"
+    echo " • marma-watermark verify   — перевірка цілісності тексту, комбінера та 9 трикутників Шрі Янтри"
+    echo " • marma-watermark trace    — криміналістичний пошук джерела витоку (Canary Leak-Tracing)"
     echo " • marma-watermark protocol — формування офіційного PDF-протоколу перевірки"
     echo " • marma-dialog             — нативні вікна GTK4 / Libadwaita (вибір ключа з ~/.secure_keys)"
     echo " • marma-config             — керування мовою меню Nautilus (marma-config --lang uk|en|auto)"

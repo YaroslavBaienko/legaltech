@@ -168,6 +168,11 @@ async function handleSign(req) {
 
   const gost34311Hex = gost34311Buf.toString('hex');
   const dstu7564Hex = dstu7564Buf.toString('hex');
+  const sha256Hex = crypto.createHash('sha256').update(payloadBuf).digest('hex');
+  const combinerHex = crypto
+    .createHash('sha256')
+    .update(`${gost34311Hex}::${dstu7564Hex}::${sha256Hex}`)
+    .digest('hex');
 
   const keyPath = req.keyPath || '';
   const password = req.password || '';
@@ -214,6 +219,9 @@ async function handleSign(req) {
       curve_type: 'QES_KEY_CURVE',
       gost34311_hex: gost34311Hex,
       dstu7564_hex: dstu7564Hex,
+      sha256_hex: sha256Hex,
+      combiner_hex: combinerHex,
+      combiner_alg: 'SHA256(GOST34311||Kupyna256||SHA256)',
       r_hex: rHex,
       s_hex: sHex,
       rs_digest_hex: rsDigestHex,
@@ -266,6 +274,9 @@ async function handleSign(req) {
     curve_type: 'DSTU_PB_257',
     gost34311_hex: gost34311Hex,
     dstu7564_hex: dstu7564Hex,
+    sha256_hex: sha256Hex,
+    combiner_hex: combinerHex,
+    combiner_alg: 'SHA256(GOST34311||Kupyna256||SHA256)',
     r_hex: rHex,
     s_hex: sHex,
     rs_digest_hex: rsDigestHex,
@@ -387,9 +398,19 @@ async function handleVerify(req) {
 
   const actualGostHex = gost34311Buf.toString('hex');
   const actualDstu7564Hex = dstu7564Buf.toString('hex');
+  const actualSha256Hex = crypto.createHash('sha256').update(payloadBuf).digest('hex');
+  const actualCombinerHex = crypto
+    .createHash('sha256')
+    .update(`${actualGostHex}::${actualDstu7564Hex}::${actualSha256Hex}`)
+    .digest('hex');
 
   const d = req.dstu4145 || {};
-  const hashMatches = (d.gost34311_hex === actualGostHex) && (!d.dstu7564_hex || d.dstu7564_hex === actualDstu7564Hex);
+  const sha256Matches = !d.sha256_hex || d.sha256_hex === actualSha256Hex;
+  const combinerMatches = !d.combiner_hex || d.combiner_hex === actualCombinerHex;
+  const hashMatches = (d.gost34311_hex === actualGostHex)
+    && (!d.dstu7564_hex || d.dstu7564_hex === actualDstu7564Hex)
+    && sha256Matches
+    && combinerMatches;
 
   let ecVerified = false;
   let ecError = null;
@@ -462,11 +483,14 @@ async function handleVerify(req) {
     status: 'ok',
     dstu4145_valid: Boolean(hashMatches && ecVerified && rsDigestMatches),
     gost34311_match: hashMatches,
+    combiner_match: combinerMatches,
     ec_signature_valid: ecVerified,
     rs_digest_match: rsDigestMatches,
     expected_rs_digest_hex: expectedRsDigest,
     actual_gost34311_hex: actualGostHex,
     actual_dstu7564_hex: actualDstu7564Hex,
+    actual_sha256_hex: actualSha256Hex,
+    actual_combiner_hex: actualCombinerHex,
     ec_error: ecError,
     qes_container_report: qesVerifyReport,
   };
