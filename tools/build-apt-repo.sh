@@ -81,7 +81,25 @@ cat > "${TARGET_DIR}/index.html" << 'EOF'
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>LegalTech — Official Debian & Ubuntu APT Repository</title>
+  <title>LegalTech — Official Debian &amp; Ubuntu APT Repository (qes-tools &amp; marma-crypto-watermark)</title>
+  <meta name="description" content="Official GPG-signed Debian/Ubuntu APT repository for Ukrainian Qualified Electronic Signatures (DSTU 4145-2002 / PAdES-B-LTA) and Sri Yantra Cryptographic Geometric Watermarking (Marma-Crypto Protocol, DOI: 10.5281/zenodo.23436152).">
+  <link rel="canonical" href="https://yaroslavbaienko.github.io/legaltech/">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="LegalTech — Official Debian &amp; Ubuntu APT Repository">
+  <meta property="og:description" content="Install qes-tools and marma-crypto-watermark with one command. Sovereign QES (DSTU 4145-2002 / PAdES-B-LTA) &amp; Sri Yantra Cryptographic Geometric Watermarking.">
+  <meta property="og:url" content="https://yaroslavbaienko.github.io/legaltech/">
+  <meta property="og:image" content="https://yaroslavbaienko.github.io/marma-crypto-protocol/og_card.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:site" content="@baienko">
+  <meta name="twitter:creator" content="@baienko">
+  <meta name="twitter:title" content="LegalTech — Official Debian &amp; Ubuntu APT Repository">
+  <meta name="twitter:description" content="sudo apt install qes-tools marma-crypto-watermark — Sovereign QES (DSTU 4145-2002 / PAdES-B-LTA) &amp; Sri Yantra Geometric Watermarking.">
+  <meta name="twitter:image" content="https://yaroslavbaienko.github.io/marma-crypto-protocol/og_card.png">
+  <meta name="citation_title" content="The Marma-Crypto Protocol: A Cryptographic-Geometric Watermark Based on the Nonlinear Planimetry of Sri Yantra and Elliptic Curves DSTU 4145-2002 over GF(2^257)">
+  <meta name="citation_author" content="Baienko, Yaroslav">
+  <meta name="citation_publication_date" content="2026/10/17">
+  <meta name="citation_doi" content="10.5281/zenodo.23436152">
+  <meta name="citation_pdf_url" content="https://yaroslavbaienko.github.io/marma-crypto-protocol/whitepaper/Marma_Crypto_Whitepaper_EN.pdf">
   <style>
     :root {
       --bg: #0b1120;
@@ -303,6 +321,41 @@ sudo apt install qes-tools marma-crypto-watermark</code></pre>
     <h2>🔄 Automated System Upgrades</h2>
     <p>Once the repository is configured, all future releases are verified via GPG and installed automatically through standard Debian/Ubuntu system updates:</p>
     <pre><code>sudo apt update &amp;&amp; sudo apt upgrade</code></pre>
+
+    <h2>🏛️ Enterprise Integration &amp; Forensic Legal Advisory</h2>
+    <p>
+      While the core <strong>qes-tools</strong> and <strong>marma-crypto-watermark</strong> suites are open-source (Apache 2.0),
+      we provide turnkey enterprise engineering, custom institutional seals, and court-admissible forensic opinions for banks, law firms, M&amp;A data rooms, and RWA/Web3 platforms:
+    </p>
+    <div class="pkg-grid" style="grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));">
+      <div class="pkg-card" style="border-color: rgba(245, 158, 11, 0.4);">
+        <div class="pkg-meta" style="color: #fcd34d; margin-bottom: 0.35rem;">PACKAGE 01 · CI/CD &amp; API</div>
+        <div class="pkg-title" style="font-size: 1.05rem; margin-bottom: 0.5rem;">Enterprise Document Sealing CI/CD</div>
+        <p style="margin: 0; font-size: 0.9rem;">
+          Turnkey integration of Marma-Crypto + Qualified Electronic Signatures (DSTU 4145-2002 / eIDAS PAdES-B-LTA + RFC 3161 TSP) into automated banking, legal, M&amp;A, and RWA/Web3 document pipelines via headless Linux CLI, Docker, or on-premise microservice.
+        </p>
+      </div>
+      <div class="pkg-card" style="border-color: rgba(245, 158, 11, 0.4);">
+        <div class="pkg-meta" style="color: #fcd34d; margin-bottom: 0.35rem;">PACKAGE 02 · INSTITUTIONAL IDENTITY</div>
+        <div class="pkg-title" style="font-size: 1.05rem; margin-bottom: 0.5rem;">Custom Corporate Geometric Seal</div>
+        <p style="margin: 0; font-size: 0.9rem;">
+          Dedicated organizational geometric-cryptographic seal bound to your corporate HSM / PKCS#11 / QES certificate, custom white-label verification portal, and brand-aligned vector templates for high-value contracts, share certificates, and board resolutions.
+        </p>
+      </div>
+      <div class="pkg-card" style="border-color: rgba(245, 158, 11, 0.4);">
+        <div class="pkg-meta" style="color: #fcd34d; margin-bottom: 0.35rem;">PACKAGE 03 · LITIGATION &amp; ARBITRATION</div>
+        <div class="pkg-title" style="font-size: 1.05rem; margin-bottom: 0.5rem;">Forensic Document Authenticity &amp; Expert Opinion</div>
+        <p style="margin: 0; font-size: 0.9rem;">
+          Independent cryptographic and geometric forensic examination of disputed electronic evidence (.pdf, .docx, .svg, .p7s), sub-micron tamper localization across all 36 triangle coordinates, and formal legal/technical expert reports for courts and international arbitration.
+        </p>
+      </div>
+    </div>
+    <div style="margin-top: 1.15rem; display: flex; flex-wrap: wrap; gap: 0.75rem;">
+      <a class="tag gold" style="padding: 0.55rem 1rem; font-size: 0.85rem; text-transform: none;" href="mailto:zerhug@gmail.com?subject=LegalTech%20%2F%20Marma-Crypto%20Enterprise%20Inquiry">✉️ Request Enterprise / Forensic Consultation</a>
+      <a class="tag" style="padding: 0.55rem 1rem; font-size: 0.85rem; text-transform: none; background: #1e293b; border: 1px solid #334155;" href="https://x.com/baienko" target="_blank" rel="noopener">𝕏 Direct Message (@baienko)</a>
+      <a class="tag" style="padding: 0.55rem 1rem; font-size: 0.85rem; text-transform: none; background: #1e293b; border: 1px solid #334155;" href="https://www.producthunt.com/products/marma-crypto-protocol" target="_blank" rel="noopener">🚀 Product Hunt</a>
+      <a class="tag" style="padding: 0.55rem 1rem; font-size: 0.85rem; text-transform: none; background: #1e293b; border: 1px solid #334155;" href="https://yaroslavbaienko.github.io/marma-crypto-protocol/" target="_blank" rel="noopener">🛡️ Live Marma-Crypto Verifier</a>
+    </div>
 
     <div class="footer">
       <span>
