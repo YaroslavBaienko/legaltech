@@ -32,7 +32,10 @@
    - **24-Pair Symmetric Marma Mantissa Encoding (`encode_256bit_marma_pairs` / `decode_256bit_marma_pairs`):** Encodes 11 bits per symmetric Marma pair ($24 \times 11 = 264\text{ bits} \ge 256\text{ bits}$ + 8-bit Canary CRC) while preserving exact bilateral symmetry $\Delta_{\text{sym}} = 0.000000000000$.
 3. **Forensic Canary Leak-Tracing (`--recipient-id` & `marma-watermark trace --suspects`):**
    Uses the **27th independent symmetric degree of freedom** — the vertical apex $ay_9$ (`D5.ay`) of the innermost Bindu triangle $\nabla_{\text{D5}}$ — as a dedicated 10-bit forensic Canary beacon $w_{\text{canary}} \in [1, 1023]$ coupled with zero-plaintext SHA-256/HMAC commitments. No plaintext recipient name is ever stored in the file, yet leaked copies can be deterministically attributed against a suspect pool via CLI or in the Browser Verifier.
-4. **100% Backward Compatibility:**
+4. **Dual-Mode QES / Direct PB-257 Vault Fallback & GNOME Files (Nautilus) Companion Resolution:**
+   - **Resilient Vault Signing (`DSTU4145_PB257_DIRECT` Fallback):** When signing with a `.pfx`/`.p12`/`.zs2` container from `~/.secure_keys/`, `dstu4145_bridge.js` automatically attempts full PKCS#12 unlock (including automatic `UA ↔ EN` keyboard-layout swap recovery) and seamlessly falls back to deterministic `DSTU4145_PB257_DIRECT` signing over $\mathbb{F}_{2^{257}}$ with certificate metadata attachment if an empty password (file-digest mode) or custom vault passphrase is provided.
+   - **Companion `.pdf` Auto-Resolution:** Selecting a companion `.txt`, `.typ`, or `.p7s` file in GNOME Files (Nautilus) or CLI (`marma-watermark sign` / `verify`) automatically resolves and processes the corresponding `.pdf` document in the same directory.
+5. **100% Backward Compatibility:**
    All `MARMA-DSTU4145-V1.2` hardware-signed PAdES-LTA / CAdES-X-Long / OpenTimestamps artifacts remain 100% verifiable with zero drift.
 
 ---
