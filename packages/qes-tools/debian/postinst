@@ -195,6 +195,8 @@ EOF_NMH_FX
     # 4. Ініціалізація загальносистемного сховища сертифікатів КНЕДП та сумісності з ІІТ (/data/certificates)
     mkdir -p /var/lib/qes-tools/certificates 2>/dev/null || true
     chmod 0777 /var/lib/qes-tools/certificates 2>/dev/null || true
+    chmod 0777 /opt/iit/eu/sw 2>/dev/null || true
+    chmod 0666 /opt/iit/eu/sw/osplm.ini 2>/dev/null || true
 
     # Створюємо символічне посилання для сумісності з дефолтним шляхом ІІТ (/data/certificates)
     if [ ! -d /data ]; then
@@ -208,16 +210,22 @@ EOF_NMH_FX
         chmod -R 0666 /var/lib/qes-tools/certificates/*.cer 2>/dev/null || true
     fi
 
-    # Налаштовуємо сховище в домашній директорії користувачів
+    # Налаштовуємо сховище та користувацький контур EUSW в домашній директорії користувачів
     for user_home in /home/*; do
         if [ -d "$user_home" ]; then
             u=$(basename "$user_home")
             if id "$u" >/dev/null 2>&1; then
                 u_store="$user_home/.local/share/qes-tools/certificates"
-                mkdir -p "$u_store" 2>/dev/null || true
+                u_eusw="$user_home/.local/share/qes-tools/eusw"
+                mkdir -p "$u_store" "$u_eusw" 2>/dev/null || true
                 cp -rn /var/lib/qes-tools/certificates/*.cer "$u_store/" 2>/dev/null || true
                 if [ -d "$user_home/.secure_keys" ]; then
                     cp -rn "$user_home/.secure_keys"/*.cer "$u_store/" 2>/dev/null || true
+                fi
+                if [ -d /opt/iit/eu/sw ]; then
+                    cp -rf /opt/iit/eu/sw/* "$u_eusw/" 2>/dev/null || true
+                    chmod 0755 "$u_eusw/euscpnmh" 2>/dev/null || true
+                    chmod 0666 "$u_eusw/osplm.ini" 2>/dev/null || true
                 fi
                 chown -R "$u:" "$user_home/.local/share/qes-tools" 2>/dev/null || true
             fi

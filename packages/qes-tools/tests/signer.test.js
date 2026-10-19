@@ -1243,3 +1243,42 @@ print(f"PANGO_OK:{checked}")
   assert.match(res.stdout, /PANGO_OK:10/);
 });
 
+test('EUSW NmhBridge: SetFileStoreSettings succeeds with code 0 (no Error 11 EU_ERROR_WRITE_SETTINGS)', async () => {
+  const { NmhBridge, getNmhBinaryPath, ensureUserWritableEusw } = require('../src/web-agent');
+  const nmhPath = ensureUserWritableEusw() || getNmhBinaryPath();
+  if (!fs.existsSync(nmhPath)) {
+    return;
+  }
+  const bridge = new NmhBridge(nmhPath);
+  const callRpc = (id, method, params) =>
+    new Promise((resolve, reject) => {
+      bridge.call({ jsonrpc: '2.0', id, method, params }, (err, res) => {
+        if (err) return reject(err);
+        try {
+          resolve(JSON.parse(res));
+        } catch (e) {
+          reject(e);
+        }
+      });
+    });
+
+  try {
+    const initRes = await callRpc(1, 'Initialize', []);
+    assert.strictEqual(initRes.result.error.code, 0, 'Initialize should return code 0');
+
+    const getRes = await callRpc(2, 'GetFileStoreSettings', []);
+    assert.strictEqual(getRes.result.error.code, 0, 'GetFileStoreSettings should return code 0');
+
+    const fsSettings = getRes.result.result;
+    const setRes = await callRpc(3, 'SetFileStoreSettings', [fsSettings]);
+    assert.strictEqual(
+      setRes.result.error.code,
+      0,
+      `SetFileStoreSettings must not fail with Error 11 (got ${JSON.stringify(setRes)})`
+    );
+  } finally {
+    bridge.destroy();
+  }
+});
+
+

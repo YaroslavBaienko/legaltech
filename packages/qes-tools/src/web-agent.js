@@ -13,9 +13,56 @@ const path = require('path');
 const os = require('os');
 const { spawn, execSync, spawnSync } = require('child_process');
 
+// Ensure a user-writable EUSW directory exists so libosi.so can write osplm.ini without Error 11 (EU_ERROR_WRITE_SETTINGS)
+function ensureUserWritableEusw(systemSwDir = '/opt/iit/eu/sw') {
+  try {
+    const srcDir = fs.existsSync(systemSwDir)
+      ? systemSwDir
+      : path.resolve(__dirname, '..', 'opt', 'iit', 'eu', 'sw');
+    if (typeof process.getuid === 'function' && process.getuid() === 0 && fs.existsSync(srcDir)) {
+      return path.join(srcDir, 'euscpnmh');
+    }
+    const home = os.homedir();
+    const userEusw = path.join(home, '.local', 'share', 'qes-tools', 'eusw');
+    const userNmh = path.join(userEusw, 'euscpnmh');
+    const userIni = path.join(userEusw, 'osplm.ini');
+    if (fs.existsSync(userNmh) && fs.existsSync(userIni)) {
+      return userNmh;
+    }
+    if (fs.existsSync(srcDir)) {
+      const userCerts = path.join(home, '.local', 'share', 'qes-tools', 'certificates');
+      const secureKeys = path.join(home, '.secure_keys');
+      fs.mkdirSync(userEusw, { recursive: true });
+      fs.mkdirSync(userCerts, { recursive: true });
+      for (const f of fs.readdirSync(srcDir)) {
+        const src = path.join(srcDir, f);
+        const dst = path.join(userEusw, f);
+        if (f === 'osplm.ini') {
+          let ini = fs.readFileSync(src, 'utf8');
+          ini = ini.replace(/Path=\/usr\/lib\/qes-tools\/certs/g, 'Path=' + userCerts);
+          ini = ini.replace(/Path=\/var\/lib\/qes-tools\/certificates/g, 'Path=' + userCerts);
+          ini = ini.replace('Folders\\/data/certificates]', 'Folders\\' + secureKeys + ']');
+          ini = ini.replace('Path=/data/certificates', 'Path=' + secureKeys);
+          fs.writeFileSync(dst, ini, { mode: 0o666 });
+        } else {
+          fs.copyFileSync(src, dst);
+          if (f === 'euscpnmh') fs.chmodSync(dst, 0o755);
+        }
+      }
+      if (fs.existsSync(userNmh)) return userNmh;
+    }
+  } catch (e) {}
+  return null;
+}
+
 // Determine location of euscpnmh binary
 function getNmhBinaryPath() {
+  const userWritable = ensureUserWritableEusw('/opt/iit/eu/sw');
+  if (userWritable && fs.existsSync(userWritable)) {
+    return userWritable;
+  }
   const candidatePaths = [
+    path.join(os.homedir(), '.local', 'share', 'qes-tools', 'eusw', 'euscpnmh'),
     '/opt/iit/eu/sw/euscpnmh',
     '/usr/bin/euscpnmh',
     path.resolve(__dirname, '..', 'opt', 'iit', 'eu', 'sw', 'euscpnmh'),
@@ -473,6 +520,7 @@ function detectTokens() {
 }
 
 module.exports = {
+  ensureUserWritableEusw,
   getNmhBinaryPath,
   NmhBridge,
   startWebAgentServer,
