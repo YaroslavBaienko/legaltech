@@ -24,7 +24,7 @@ BIN_DIR="${SCRIPT_DIR}/bin"
 NAUTILUS_SRC="${SCRIPT_DIR}/nautilus-scripts"
 
 PKG_NAME="marma-crypto-watermark"
-PKG_VERSION="1.3.0-1"
+PKG_VERSION="2.1.0-1"
 PKG_ARCH="all"
 PKG_MAINTAINER="Yaroslav Baienko <yaroslav@advocacy.uno>"
 
@@ -60,6 +60,7 @@ mkdir -p \
     "${PKGROOT}/DEBIAN" \
     "${PKGROOT}/usr/bin" \
     "${PKGROOT}/usr/lib/marma-crypto-watermark/bin" \
+    "${PKGROOT}/usr/lib/marma-crypto-watermark/marma_crypto" \
     "${PKGROOT}/usr/share/marma-crypto-watermark/nautilus-scripts" \
     "${PKGROOT}/usr/share/icons/hicolor/scalable/apps" \
     "${PKGROOT}/usr/share/bash-completion/completions" \
@@ -67,6 +68,7 @@ mkdir -p \
 
 install -m 0755 "${SOURCE_DIR}/marma_watermark.py" "${PKGROOT}/usr/lib/marma-crypto-watermark/marma_watermark.py"
 install -m 0755 "${SOURCE_DIR}/dstu4145_bridge.js" "${PKGROOT}/usr/lib/marma-crypto-watermark/dstu4145_bridge.js"
+install -m 0644 "${SOURCE_DIR}/marma_crypto/"*.py  "${PKGROOT}/usr/lib/marma-crypto-watermark/marma_crypto/"
 install -m 0755 "${BIN_DIR}/marma-dialog"          "${PKGROOT}/usr/lib/marma-crypto-watermark/bin/marma-dialog"
 install -m 0755 "${BIN_DIR}/marma-config"          "${PKGROOT}/usr/lib/marma-crypto-watermark/bin/marma-config"
 install -m 0644 "${SCRIPT_DIR}/README.md"          "${PKGROOT}/usr/share/doc/marma-crypto-watermark/README.md"
@@ -103,7 +105,7 @@ _marma_watermark_completions() {
     COMPREPLY=()
     cur="${COMP_WORDS[COMP_CWORD]}"
     prev="${COMP_WORDS[COMP_CWORD-1]}"
-    opts="sign verify trace protocol keygen clear-session selftest --stamp-pdf --verify-pdf --stamp-docx --verify-docx --sign-svg --verify-svg --protocol --recipient-id --suspects --key-file -k --output -o --secret --strict-key --mode --lang --gui --open --help --version"
+    opts="sign verify trace protocol keygen clear-session selftest batch-seal serve-api --stamp-pdf --verify-pdf --stamp-docx --verify-docx --sign-svg --verify-svg --protocol --recipient-id --recipients --suspects --emblem --optical-ring --image --content-sha256 --port --key-file -k --output -o --secret --strict-key --mode --lang --gui --open --help --version"
     if [[ ${cur} == -* ]] || [[ ${COMP_CWORD} -eq 1 ]]; then
         COMPREPLY=( $(compgen -W "${opts}" -- ${cur}) )
         return 0
@@ -160,13 +162,15 @@ if [ "$1" = "configure" ]; then
     fi
 
     echo "================================================================================"
-    echo " 🔱 Встановлено комплекс геометричного підпису marma-crypto-watermark v1.3.0"
-    echo " • marma-watermark sign     — накладання 256-бітного водяного знака та Золотої печатки (PDF, DOCX, SVG)"
-    echo " • marma-watermark verify   — перевірка цілісності тексту, комбінера та 9 трикутників Шрі Янтри"
-    echo " • marma-watermark trace    — криміналістичний пошук джерела витоку (Canary Leak-Tracing)"
-    echo " • marma-watermark protocol — формування офіційного PDF-протоколу перевірки"
-    echo " • marma-dialog             — нативні вікна GTK4 / Libadwaita (вибір ключа з ~/.secure_keys)"
-    echo " • marma-config             — керування мовою меню Nautilus (marma-config --lang uk|en|auto)"
+    echo " 🔱 Встановлено комплекс геометричного підпису marma-crypto-watermark v2.1.0"
+    echo " • marma-watermark sign       — накладання 256-бітного водяного знака та печатки (Шрі Янтра / Тризуб / Щит / CAD)"
+    echo " • marma-watermark batch-seal — пакетне штампування Deal-Room (N отримувачів + Optical Lotus ECC)"
+    echo " • marma-watermark verify     — перевірка цілісності тексту, комбінера та 27-DOF геометрії"
+    echo " • marma-watermark trace      — розшук джерела витоку з PDF/DOCX/SVG або фото екрана (.png/.jpg)"
+    echo " • marma-watermark serve-api  — локальний REST-мікросервіс Deal-Room (/v1/seal-batch, /v1/trace-leak)"
+    echo " • marma-watermark protocol   — формування офіційного PDF-протоколу перевірки"
+    echo " • marma-dialog               — нативні вікна GTK4 / Libadwaita (вибір ключа з ~/.secure_keys)"
+    echo " • marma-config               — керування мовою меню Nautilus (marma-config --lang uk|en|auto)"
     echo " 🖱️ Інтегровано у файловий менеджер GNOME (правий клік -> Скрипти -> 🔱 Шрі Янтра · Marma-Crypto)"
     echo "================================================================================"
 fi
@@ -204,7 +208,7 @@ chmod 0755 "${PKGROOT}/DEBIAN/postrm"
     echo "Package: ${PKG_NAME} ${PKG_VERSION} (${PKG_ARCH})"
     echo "Built: $(date -u -Iseconds)"
     echo "Upstream Repository: https://github.com/YaroslavBaienko/marma-crypto-protocol"
-    echo "CERN Zenodo DOI: 10.5281/zenodo.23436152"
+    echo "CERN Zenodo DOI: 10.5281/zenodo.23510005"
     echo "Ecosystem Suite: https://github.com/YaroslavBaienko/legaltech"
     echo "Engine SHA-256: $(sha256sum "${SOURCE_DIR}/marma_watermark.py" | awk '{print $1}')"
     echo "Dialog SHA-256: $(sha256sum "${BIN_DIR}/marma-dialog" | awk '{print $1}')"
@@ -219,7 +223,8 @@ chmod 755 "${PKGROOT}/DEBIAN"
 chmod 644 "${PKGROOT}/DEBIAN/control"
 dpkg-deb --build --root-owner-group -Zzstd "${PKGROOT}" "${DEB_FILE}" >/dev/null
 
-# Keep a symlink/copy for 1.0.0-1 compatibility if referenced
+# Keep compatibility copy/symlink for scripts referencing 1.3.0-1 or latest
+cp -f "${DEB_FILE}" "${DIST_DIR}/${PKG_NAME}_1.3.0-1_${PKG_ARCH}.deb"
 ln -sf "$(basename "${DEB_FILE}")" "${DIST_DIR}/${PKG_NAME}_latest_all.deb"
 
 echo

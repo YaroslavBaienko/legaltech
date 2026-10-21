@@ -26,10 +26,16 @@ get_marma_lang() {
 MARMA_LANG="${MARMA_LANG:-$(get_marma_lang)}"
 export MARMA_LANG
 
-if [[ -f "$HOME/ai-debian-admin/deb-packages/marma-crypto-watermark/src/marma_watermark.py" ]]; then
-    export PATH="$HOME/ai-debian-admin/deb-packages/marma-crypto-watermark/bin:$PATH"
+if [[ -f "$HOME/002_AI/PROJECTS/EDU-VEDI/marma-crypto-protocol/src/marma_watermark.py" ]]; then
+    export PATH="$HOME/002_AI/PROJECTS/EDU-VEDI/marma-crypto-protocol/bin:$HOME/.local/bin:$PATH"
     marma-watermark() {
-        python3 $HOME/ai-debian-admin/deb-packages/marma-crypto-watermark/src/marma_watermark.py "$@"
+        python3 "$HOME/002_AI/PROJECTS/EDU-VEDI/marma-crypto-protocol/src/marma_watermark.py" "$@"
+    }
+    export -f marma-watermark 2>/dev/null || true
+elif [[ -f "$HOME/ai-debian-admin/deb-packages/marma-crypto-watermark/src/marma_watermark.py" ]]; then
+    export PATH="$HOME/ai-debian-admin/deb-packages/marma-crypto-watermark/bin:$HOME/.local/bin:$PATH"
+    marma-watermark() {
+        python3 "$HOME/ai-debian-admin/deb-packages/marma-crypto-watermark/src/marma_watermark.py" "$@"
     }
     export -f marma-watermark 2>/dev/null || true
 fi

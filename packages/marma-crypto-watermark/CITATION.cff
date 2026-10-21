@@ -1,25 +1,55 @@
 cff-version: 1.2.0
-message: "If you use this protocol, software, or mathematical specification, please cite it as below."
+message: "If you use this protocol, specification, or software, please cite both the whitepaper (Zenodo DOI) and the software implementation."
+title: "Marma-Crypto (Marma-256) v2.1.0: Sub-Micron Dithered Quantization Index Modulation, Universal Vector Emblems, Deal-Room REST API, and Optical Screen-Photo ECC over GF(2^257) (DSTU 4145-2002)"
 type: software
-title: "Marma-Crypto: A Cryptographic Geometric Watermarking and Sovereign Document Sealing Protocol via Sri Yantra Nonlinear Concurrency and Elliptic Curves over GF(2^257) (DSTU 4145-2002)"
-version: 1.3.0
-date-released: 2026-10-17
+version: "2.1.0"
+date-released: "2026-10-21"
+doi: "10.5281/zenodo.23510005"
+license: "Apache-2.0"
+repository-code: "https://github.com/YaroslavBaienko/marma-crypto-protocol"
+url: "https://yaroslavbaienko.github.io/marma-crypto-protocol/"
 authors:
   - family-names: "Baienko"
-    given-names: "Yaroslav V."
-    email: "zerhug@gmail.com"
-    affiliation: "Independent Researcher, Attorney-at-Law (Ukraine)"
-repository-code: "https://github.com/YaroslavBaienko/marma-crypto-protocol"
-url: "https://zenodo.org/records/23436152"
-doi: "10.5281/zenodo.23436152"
-license: Apache-2.0
+    given-names: "Yaroslav"
+    orcid: "https://orcid.org/0009-0006-7498-2133"
+    affiliation: "Ukrainian National Bar Association / GOLAW"
+identifiers:
+  - type: doi
+    value: "10.5281/zenodo.23510005"
+    description: "CERN Zenodo Version 3 DOI"
+  - type: doi
+    value: "10.5281/zenodo.23429017"
+    description: "CERN Zenodo Concept DOI (All Versions)"
+  - type: doi
+    value: "10.2139/ssrn.7631458"
+    description: "Elsevier SSRN eJournal DOI"
+  - type: url
+    value: "https://yaroslavbaienko.github.io/marma-crypto-protocol/"
+    description: "Live Client-Side Browser Document Sealer, Canary Studio & Verifier"
 keywords:
   - "Cryptographic Watermarking"
+  - "Quantization Index Modulation"
   - "Vector Steganography"
   - "DSTU 4145-2002"
   - "Elliptic Curve Cryptography"
   - "Sri Yantra"
-  - "Nonlinear Planimetry"
+  - "Ukrainian State Trident (Tryzub)"
+  - "Optical Error-Correcting Codes"
+  - "PAdES-LTA"
   - "Canary Leak-Tracing"
-  - "PAdES"
   - "LegalTech"
+  - "Document Integrity"
+preferred-citation:
+  type: article
+  title: "Marma-256 (Marma-Crypto): Sub-Micron Dithered Quantization Index Modulation and Orthogonal Subspace Multiplexing on Overdetermined Planar Incidence Manifolds for Bijective 2D Vector Graphics Watermarking and Fragile Authentication"
+  authors:
+    - family-names: "Baienko"
+      given-names: "Yaroslav"
+      orcid: "https://orcid.org/0009-0006-7498-2133"
+      affiliation: "Ukrainian National Bar Association / GOLAW"
+  year: 2026
+  month: 10
+  doi: "10.5281/zenodo.23510005"
+  url: "https://doi.org/10.5281/zenodo.23510005"
+  institution:
+    name: "CERN Zenodo / Elsevier Signal Processing (SIGPRO-D-26-04464)"

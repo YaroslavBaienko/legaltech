@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=65.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "marma-crypto"
+version = "2.1.0"
+description = "Sub-Micron Keyed Dithered QIM Vector Watermarking, Universal Emblem Modulator (Sri Yantra / Tryzub / Corporate / CAD), and Optical Screen-Photo Traitor Tracing Suite"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "Proprietary / Sovereign LegalTech"}
+authors = [
+    {name = "Yaroslav Baienko", email = "yaroslav@advocacy.uno"}
+]
+keywords = [
+    "watermarking",
+    "quantization-index-modulation",
+    "traitor-tracing",
+    "vector-graphics",
+    "pdf-security",
+    "dstu-4145",
+]
+dependencies = [
+    "PyMuPDF>=1.23.0",
+    "python-docx>=1.0.0",
+    "pycairo>=1.24.0",
+    "Pillow>=10.0.0",
+    "numpy>=1.24.0",
+]
+
+[project.scripts]
+marma-watermark = "marma_watermark:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+py-modules = ["marma_watermark"]
+packages = ["marma_crypto"]

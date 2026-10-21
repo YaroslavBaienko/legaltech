@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Marma-Crypto Geometric Watermark & Zero-Tolerance Document Verifier (v1.3.0).
+"""Marma-Crypto Geometric Watermark & Zero-Tolerance Document Verifier (v2.1.0).
 
 Full LegalTech / Nautilus-integrated engine modeled after /home/attor/legaltech (qes-tools).
 Supports:
@@ -8,7 +8,10 @@ Supports:
 - 15-minute RAM session cache (/run/user/$UID/marma-crypto-session.json, chmod 0600).
 - Parallel Multi-Hash Combiner: SHA-256(GOST 34.311-95 || Kupyna-256 || SHA-256).
 - Full 256-Bit Bijective Geometric Mantissa Encoding across 9 triangles & 24 symmetric Marma pairs.
-- Canary Leak-Tracing (`--recipient-id` & `trace --suspects`) via innermost Bindu apex (`D5.ay`).
+- Marma-Universal (v2.1): Generalized 27-DOF Keyed Dithered QIM (`sri-yantra`, `tryzub`, `corporate-shield`, `cad-polygon`).
+- Marma-Optical (v2.1): 32-Sector Optical Lotus ECC Ring (`[32, 16, d_min=8]`) for screen-photo / print-cam leak tracing.
+- Deal-Room Batch Engine & REST API (`batch-seal`, `serve-api`).
+- Canary Leak-Tracing (`--recipient-id` & `trace --suspects`) via innermost Bindu apex (`D5.ay`) or raster image.
 - Signing & Stamping PDF, DOCX, and SVG documents (--mode both | watermark | seal).
 - Instant public & cryptographic verification + strict key verification (--strict-key).
 - Official Vector PDF Verification Protocol generator (`marma-watermark protocol`).
@@ -49,7 +52,7 @@ try:
 except Exception:
     pymupdf = None  # type: ignore[assignment]
 
-VERSION = "1.3.0"
+VERSION = "2.1.0"
 
 # Canonical 9-Triangle Coordinates (lx, by, ay, rx, is_upward) in 300x300 space (R=100)
 CANONICAL_TRIANGLES: list[tuple[str, float, float, float, float, bool]] = [
@@ -387,22 +390,59 @@ def compute_canary_tag(
     }
 
 
+def derive_keyed_qim_schedule(secret_key: str, doc_nonce: str = "") -> tuple[list[int], list[int]]:
+    """Derive a keyed pseudorandom channel permutation pi_K in S_27 and 27-word Chen-Wornell dither vector d_K in [0..1023]^27."""
+    key_bytes = secret_key.encode("utf-8")
+    perm = list(range(27))
+    seed_hex = hmac.new(
+        key_bytes, f"MARMA-QIM-PERM-V2::{doc_nonce}".encode("utf-8"), hashlib.sha256
+    ).hexdigest()
+    for i in range(26, 0, -1):
+        step_hex = hmac.new(
+            key_bytes, f"MARMA-QIM-PERM-STEP-V2::{seed_hex}::{i}".encode("utf-8"), hashlib.sha256
+        ).hexdigest()
+        j = int(step_hex[:8], 16) % (i + 1)
+        perm[i], perm[j] = perm[j], perm[i]
+    dither: list[int] = []
+    for k in range(27):
+        dh_hex = hmac.new(
+            key_bytes, f"MARMA-QIM-DITHER-V2::{doc_nonce}::{k}".encode("utf-8"), hashlib.sha256
+        ).hexdigest()
+        dither.append(int(dh_hex[:4], 16) & 0x3FF)
+    return perm, dither
+
+
 def build_perturbed_triangles_v13(
     hex_sig: str,
     canary_beacon_word: int = 0,
     cx: float = 150.0,
+    qim_key: str = "",
+    doc_nonce: str = "",
 ) -> list[dict]:
-    """Encode all 256 bits of hex_sig + optional Canary beacon word into 9 triangles (27 symmetric DoF)."""
+    """Encode all 256 bits of hex_sig + optional Canary beacon word into 9 triangles (27 symmetric DoF).
+    When qim_key is provided, applies Keyed Dithered QIM (d_K) and pseudorandom channel permutation (pi_K).
+    """
     scale = 2.0 if cx == 300.0 else 1.0
     words_26 = split_256bits_to_26_words(hex_sig)
+    logical_words = list(words_26) + [int(canary_beacon_word) & 0x3FF]
+
+    if qim_key:
+        perm, dither = derive_keyed_qim_schedule(qim_key, doc_nonce)
+        physical_deltas = [0.0] * 27
+        for k in range(27):
+            dithered_w = (logical_words[k] + dither[k]) & 0x3FF
+            physical_deltas[perm[k]] = word10_to_delta(dithered_w)
+    else:
+        physical_deltas = [word10_to_delta(w) for w in words_26]
+        physical_deltas.append(
+            word10_to_delta(canary_beacon_word) if int(canary_beacon_word) > 0 else 0.0
+        )
+
     perturbed: list[dict] = []
     for idx, (name, lx, by, ay, rx, is_up) in enumerate(CANONICAL_TRIANGLES):
-        d_lx = word10_to_delta(words_26[idx * 3])
-        d_by = word10_to_delta(words_26[idx * 3 + 1])
-        if idx < 8:
-            d_ay = word10_to_delta(words_26[idx * 3 + 2])
-        else:
-            d_ay = word10_to_delta(canary_beacon_word) if int(canary_beacon_word) > 0 else 0.0
+        d_lx = physical_deltas[idx * 3]
+        d_by = physical_deltas[idx * 3 + 1]
+        d_ay = physical_deltas[idx * 3 + 2]
 
         lx_s = round(lx * scale + d_lx, 9)
         rx_s = round(cx * 2.0 - lx_s, 9)
@@ -424,27 +464,32 @@ def build_perturbed_triangles_v13(
 def recover_256bit_from_triangles(
     triangles: list[dict],
     cx: float = 150.0,
+    qim_key: str = "",
+    doc_nonce: str = "",
 ) -> tuple[str, int]:
     """Losslessly invert all 256 bits of the signature digest + Canary beacon word from the 9 triangles alone."""
     if len(triangles) != 9:
         return "", 0
     scale = 2.0 if cx == 300.0 else 1.0
-    words: list[int] = []
-    canary_word = 0
+    physical_deltas: list[float] = []
     for idx, (_, lx_can, by_can, ay_can, _, _) in enumerate(CANONICAL_TRIANGLES):
         t = triangles[idx]
         d_lx = round(float(t["lx"]) - round(lx_can * scale, 9), 9)
         d_by = round(float(t["by"]) - round(by_can * scale, 9), 9)
-        words.append(delta_to_word10(d_lx))
-        words.append(delta_to_word10(d_by))
         d_ay = round(float(t["ay"]) - round(ay_can * scale, 9), 9)
-        if idx < 8:
-            words.append(delta_to_word10(d_ay))
-        else:
-            if abs(d_ay) < 1e-11:
-                canary_word = 0
-            else:
-                canary_word = delta_to_word10(d_ay)
+        physical_deltas.extend([d_lx, d_by, d_ay])
+
+    if qim_key:
+        perm, dither = derive_keyed_qim_schedule(qim_key, doc_nonce)
+        logical_words: list[int] = [0] * 27
+        for k in range(27):
+            w_phys = delta_to_word10(physical_deltas[perm[k]])
+            logical_words[k] = (w_phys - dither[k]) & 0x3FF
+        return words_26_to_256bit_hex(logical_words[:26]), logical_words[26]
+
+    words = [delta_to_word10(d) for d in physical_deltas[:26]]
+    d_ay_last = physical_deltas[26]
+    canary_word = 0 if abs(d_ay_last) < 1e-11 else delta_to_word10(d_ay_last)
     return words_26_to_256bit_hex(words), canary_word
 
 
@@ -1963,15 +2008,25 @@ def run_self_test(out_dir: Path | None = None) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(
         prog="marma-watermark",
-        description="Marma-Crypto v1.3.0 & DSTU 4145-2002 256-Bit Geometric Watermark & Canary Leak-Tracing CLI/GUI.",
+        description="Marma-Crypto v2.1.0 & DSTU 4145-2002 256-Bit Universal Geometric Watermark, Deal-Room API & Optical Leak-Tracing Suite.",
     )
     parser.add_argument(
         "action",
         nargs="?",
-        choices=["sign", "verify", "trace", "protocol", "keygen", "clear-session", "selftest"],
-        help="Action: sign, verify, trace, protocol, keygen, clear-session, or selftest",
+        choices=[
+            "sign",
+            "verify",
+            "trace",
+            "protocol",
+            "keygen",
+            "clear-session",
+            "selftest",
+            "batch-seal",
+            "serve-api",
+        ],
+        help="Action: sign, verify, trace, protocol, keygen, clear-session, selftest, batch-seal, or serve-api",
     )
-    parser.add_argument("files", nargs="*", type=Path, help="Target documents (.pdf, .docx, .svg)")
+    parser.add_argument("files", nargs="*", type=Path, help="Target documents (.pdf, .docx, .svg, .png, .jpg)")
     parser.add_argument("--stamp-pdf", type=Path, help="Input PDF file to stamp with Sri Yantra watermark")
     parser.add_argument("--verify-pdf", type=Path, help="Signed PDF file to verify")
     parser.add_argument("--stamp-docx", type=Path, help="Input DOCX file to stamp with Sri Yantra seal")
@@ -1981,7 +2036,22 @@ def main() -> int:
     parser.add_argument("--protocol", action="store_true", help="Generate official PDF Verification Protocol")
     parser.add_argument("--payload", type=str, help="Custom payload string for SVG signing/verification")
     parser.add_argument("--recipient-id", type=str, default="", help="Canary Leak-Tracing recipient ID to embed/verify in D5.ay")
+    parser.add_argument("--recipients", type=str, default="", help="Comma-separated Deal-Room recipient IDs for `batch-seal`")
     parser.add_argument("--suspects", type=str, default="", help="Comma-separated suspect recipient IDs for `trace` attribution")
+    parser.add_argument(
+        "--emblem",
+        choices=["sri-yantra", "tryzub", "corporate-shield", "cad-polygon"],
+        default="sri-yantra",
+        help="Vector emblem geometry: 'sri-yantra', 'tryzub' (Ukrainian Trident), 'corporate-shield', or 'cad-polygon'",
+    )
+    parser.add_argument(
+        "--optical-ring",
+        action="store_true",
+        help="Embed 32-Sector Optical Lotus ECC Ring around seal for screen-photo / print-cam leak tracing",
+    )
+    parser.add_argument("--image", type=Path, help="Raster screenshot / camera photo (.png, .jpg) for optical leak tracing")
+    parser.add_argument("--content-sha256", type=str, default="", help="Optional document content SHA-256 for optical suspect matching")
+    parser.add_argument("--port", type=int, default=8765, help="HTTP port for `serve-api` Deal-Room microservice")
     parser.add_argument("--output", "-o", type=Path, help="Output path for stamped document or protocol")
     parser.add_argument("--key-file", "-k", type=Path, help="Path to key file in ~/.secure_keys/ (.pfx, .p12, .key)")
     parser.add_argument("--secret", type=str, default=None, help="Author's secret key or password")
@@ -2019,11 +2089,57 @@ def main() -> int:
     if args.action == "selftest":
         return run_self_test()
 
-    if args.action == "trace":
+    if args.action == "serve-api":
+        from marma_crypto.api_server import MarmaDealRoomServer
+        srv = MarmaDealRoomServer(host="127.0.0.1", port=args.port).start()
+        print(json.dumps({"status": "listening", "url": srv.base_url}, ensure_ascii=False))
+        try:
+            while True:
+                time.sleep(1.0)
+        except KeyboardInterrupt:
+            srv.stop()
+        return 0
+
+    if args.action == "batch-seal":
         if not args.files:
-            parser.error("Вкажіть файл (.pdf, .docx, .svg) для трасування витоку Canary.")
+            parser.error("Вкажіть вхідний PDF-файл для пакетного штампування Deal-Room.")
+        from marma_crypto.api_server import batch_seal_dealroom
+        in_f = args.files[0]
+        rec_list = [r.strip() for r in (args.recipients or args.recipient_id).split(",") if r.strip()]
+        if not rec_list:
+            parser.error("Вкажіть список отримувачів через --recipients 'Investor_A,Investor_B,...'")
+        sec, kname, _, _, _ = resolve_signing_credentials(args.gui, args.key_file, args.secret, doc_desc=in_f.name)
+        out_dir = args.output or in_f.parent / f"{in_f.stem}_dealroom_copies"
+        res = batch_seal_dealroom(
+            in_pdf=in_f,
+            out_dir=out_dir,
+            recipients=rec_list,
+            secret_key=sec,
+            emblem_type=args.emblem,
+            optical_ring=True if not args.optical_ring else args.optical_ring,
+            mode=args.mode,
+            signer_key_name=kname,
+        )
+        print(json.dumps(res, indent=2, ensure_ascii=False))
+        return 0
+
+    if args.action == "trace":
+        targets = list(args.files)
+        if args.image:
+            targets.append(args.image)
+        if not targets:
+            parser.error("Вкажіть файл (.pdf, .docx, .svg, .png, .jpg) для трасування витоку Canary.")
         suspect_list = [s.strip() for s in (args.suspects or args.recipient_id).split(",") if s.strip()]
-        results = [trace_canary_suspects(f, suspect_list, secret_key=args.secret) for f in args.files]
+        from marma_crypto.api_server import trace_leak_any_medium
+        results = [
+            trace_leak_any_medium(
+                f,
+                suspect_list,
+                secret_key=args.secret or DEFAULT_SECRET,
+                content_sha256=args.content_sha256,
+            )
+            for f in targets
+        ]
         print(json.dumps(results if len(results) > 1 else results[0], indent=2, ensure_ascii=False))
         return 0
 
@@ -2047,11 +2163,28 @@ def main() -> int:
         results = []
         for f in args.files:
             out = args.output if len(args.files) == 1 else None
-            r = sign_any_file(
-                f, out, secret_key=sec, mode=args.mode, payload=args.payload,
-                signer_key_name=kname, key_fingerprint=kfp, key_file_path=kpath, raw_password=rpwd,
-                recipient_id=args.recipient_id,
-            )
+            ext = f.suffix.lower()
+            if ext == ".pdf" and (args.emblem != "sri-yantra" or args.optical_ring):
+                from marma_crypto.api_server import stamp_pdf_universal_v21
+                eff_out = out or f.with_name(f"{f.stem}_marma_{args.emblem}.pdf")
+                r = stamp_pdf_universal_v21(
+                    f, eff_out, secret_key=sec, recipient_id=args.recipient_id,
+                    emblem_type=args.emblem, optical_ring=args.optical_ring,
+                    mode=args.mode, signer_key_name=kname, key_fingerprint=kfp,
+                )
+            elif ext == ".svg" and args.emblem != "sri-yantra":
+                from marma_crypto.universal_qim import stamp_universal_svg_drawing
+                eff_out = out or f.with_name(f"{f.stem}_marma_{args.emblem}.svg")
+                r = stamp_universal_svg_drawing(
+                    f, eff_out, secret_key=sec, emblem_type=args.emblem,
+                    recipient_id=args.recipient_id, signer_key_name=kname,
+                )
+            else:
+                r = sign_any_file(
+                    f, out, secret_key=sec, mode=args.mode, payload=args.payload,
+                    signer_key_name=kname, key_fingerprint=kfp, key_file_path=kpath, raw_password=rpwd,
+                    recipient_id=args.recipient_id,
+                )
             results.append(r)
         print(json.dumps(results if len(results) > 1 else results[0], indent=2, ensure_ascii=False))
         return 0
@@ -2070,10 +2203,18 @@ def main() -> int:
         all_ok = True
         dlg_bin = find_marma_dialog_bin()
         for f in args.files:
-            res = verify_any_file(
-                f, secret_key=sec, payload=args.payload, key_file_path=kpath,
-                raw_password=rpwd, recipient_id=args.recipient_id,
-            )
+            ext = f.suffix.lower()
+            if ext == ".pdf":
+                from marma_crypto.api_server import verify_pdf_universal_v21
+                res = verify_pdf_universal_v21(f, secret_key=sec or DEFAULT_SECRET, recipient_id=args.recipient_id)
+            elif ext == ".svg" and "marma_universal_seal" in f.read_text(encoding="utf-8", errors="ignore"):
+                from marma_crypto.universal_qim import verify_universal_svg_drawing
+                res = verify_universal_svg_drawing(f, secret_key=sec or DEFAULT_SECRET, recipient_id=args.recipient_id)
+            else:
+                res = verify_any_file(
+                    f, secret_key=sec, payload=args.payload, key_file_path=kpath,
+                    raw_password=rpwd, recipient_id=args.recipient_id,
+                )
             print(json.dumps(res, indent=2, ensure_ascii=False))
             if not res.get("verified"):
                 all_ok = False

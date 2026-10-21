@@ -12,8 +12,8 @@ ORDERED_CATEGORIES_UK=(
 )
 
 declare -A CATEGORIES_UK=(
-    ["✍️ Підписання та Водяний знак"]="1_stamp_both.sh:🔱 Підписати (Водяний знак + Золота печатка)|1b_stamp_watermark.sh:🌊 Підписати PDF (Лише фоновий водяний знак)|1c_stamp_seal.sh:🪙 Підписати (Лише кутова Золота печатка Бінду)|2_sign_svg.sh:📐 Згенерувати еталонну підписану Шрі Янтру (.svg)"
-    ["🔍 Перевірка та Протоколи"]="3_verify.sh:🔍 Перевірити підпис та геометрію Шрі Янтри|4_pdf_protocol.sh:📄 Сформувати PDF-протокол перевірки Marma-Crypto|5_verify_strict_key.sh:🔐 Глибока звірка з особистим ключем КЕП та Сейфа"
+    ["✍️ Підписання та Водяний знак"]="1_stamp_both.sh:🔱 Підписати (Водяний знак + Золота печатка)|1b_stamp_watermark.sh:🌊 Підписати PDF (Лише фоновий водяний знак)|1c_stamp_seal.sh:🪙 Підписати (Лише кутова Золота печатка Бінду)|2_sign_svg.sh:📐 Згенерувати еталонну підписану Шрі Янтру (.svg)|8_stamp_tryzub.sh:🇺🇦 Підписати Гербом-Тризубом або Щитом (Marma-Universal)|9_stamp_cad_universal.sh:🏗️ Захистити креслення CAD-SVG (27-DOF)|10_batch_dealroom.sh:📦 Пакетне штампування Deal-Room (N отримувачів)"
+    ["🔍 Перевірка та Протоколи"]="3_verify.sh:🔍 Перевірити підпис та геометрію Шрі Янтри|4_pdf_protocol.sh:📄 Сформувати PDF-протокол перевірки Marma-Crypto|5_verify_strict_key.sh:🔐 Глибока звірка з особистим ключем КЕП та Сейфа|11_trace_leak_optical.sh:🕵️ Розшук джерела витоку (PDF або Фото екрана Marma-Optical)"
     ["⚙️ Ключі, Сесія та Довідка"]="6_keygen.sh:🗝️ Створити та керувати ключем у сейфі (.secure_keys)|7_lock_session.sh:🔒 Скинути кеш пароля в RAM (Заблокувати сесію)|0_help.sh:📖 Довідка та Математичний Стандарт Шрі Янтри"
 )
 
@@ -24,8 +24,8 @@ ORDERED_CATEGORIES_EN=(
 )
 
 declare -A CATEGORIES_EN=(
-    ["✍️ Watermark & Signing"]="1_stamp_both.sh:🔱 Sign (Background Watermark + Golden Seal)|1b_stamp_watermark.sh:🌊 Sign PDF (Background Watermark Only)|1c_stamp_seal.sh:🪙 Sign (Corner Golden Bindu Seal Only)|2_sign_svg.sh:📐 Generate Canonical Signed Sri Yantra (.svg)"
-    ["🔍 Verification & Protocols"]="3_verify.sh:🔍 Verify Sri Yantra Geometric Signature|4_pdf_protocol.sh:📄 Generate PDF Verification Protocol|5_verify_strict_key.sh:🔐 Strict Cryptographic Key Verification"
+    ["✍️ Watermark & Signing"]="1_stamp_both.sh:🔱 Sign (Background Watermark + Golden Seal)|1b_stamp_watermark.sh:🌊 Sign PDF (Background Watermark Only)|1c_stamp_seal.sh:🪙 Sign (Corner Golden Bindu Seal Only)|2_sign_svg.sh:📐 Generate Canonical Signed Sri Yantra (.svg)|8_stamp_tryzub.sh:🇺🇦 Sign with Ukrainian Trident or Shield (Marma-Universal)|9_stamp_cad_universal.sh:🏗️ Protect CAD-SVG Drawing (27-DOF)|10_batch_dealroom.sh:📦 Batch Deal-Room Stamping (N Recipients)"
+    ["🔍 Verification & Protocols"]="3_verify.sh:🔍 Verify Sri Yantra Geometric Signature|4_pdf_protocol.sh:📄 Generate PDF Verification Protocol|5_verify_strict_key.sh:🔐 Strict Cryptographic Key Verification|11_trace_leak_optical.sh:🕵️ Trace Leak Source (PDF or Screen-Photo Marma-Optical)"
     ["⚙️ Keys, Session & Help"]="6_keygen.sh:🗝️ Manage Vault Key (.secure_keys)|7_lock_session.sh:🔒 Lock RAM Session (Wipe Cached Key)|0_help.sh:📖 Help & Sri Yantra Mathematical Standard"
 )
 

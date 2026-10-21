@@ -1,0 +1,55 @@
+{
+  "@context": "https://doi.org/10.5063/schema/codemeta-2.0",
+  "@type": "SoftwareSourceCode",
+  "name": "Marma-Crypto Protocol (Marma-256)",
+  "description": "266-Bit Keyed Dithered QIM Vector Watermarking, Universal Vector Emblems (Sri Yantra, Ukrainian State Trident / Tryzub, Corporate Shield, CAD/SVG Polygons), Optical Screen-Photo ECC ([32, 16, d_min=8]), Deal-Room REST API, and Sovereign Document Sealing Protocol over GF(2^257) (DSTU 4145-2002 / PAdES-LTA)",
+  "version": "2.1.0",
+  "datePublished": "2026-10-17",
+  "dateModified": "2026-10-21",
+  "license": "https://spdx.org/licenses/Apache-2.0",
+  "identifier": "https://doi.org/10.5281/zenodo.23510005",
+  "codeRepository": "https://github.com/YaroslavBaienko/marma-crypto-protocol",
+  "url": "https://yaroslavbaienko.github.io/marma-crypto-protocol/",
+  "programmingLanguage": [
+    "Python",
+    "JavaScript",
+    "Shell"
+  ],
+  "operatingSystem": [
+    "Linux",
+    "Debian",
+    "Ubuntu",
+    "Web Browser (Client-Side WebCrypto/JS)"
+  ],
+  "author": [
+    {
+      "@type": "Person",
+      "@id": "https://orcid.org/0009-0006-7498-2133",
+      "givenName": "Yaroslav",
+      "familyName": "Baienko",
+      "affiliation": {
+        "@type": "Organization",
+        "name": "Ukrainian National Bar Association / GOLAW"
+      }
+    }
+  ],
+  "referencePublication": {
+    "@type": "ScholarlyArticle",
+    "@id": "https://doi.org/10.5281/zenodo.23510005",
+    "name": "Marma-256 (Marma-Crypto): Sub-Micron Dithered Quantization Index Modulation and Orthogonal Subspace Multiplexing on Overdetermined Planar Incidence Manifolds for Bijective 2D Vector Graphics Watermarking and Fragile Authentication"
+  },
+  "keywords": [
+    "Cryptographic Watermarking",
+    "Quantization Index Modulation",
+    "Vector Steganography",
+    "DSTU 4145-2002",
+    "Elliptic Curve Cryptography",
+    "Sri Yantra",
+    "Tryzub",
+    "Optical Error-Correcting Codes",
+    "PAdES-LTA",
+    "Canary Leak-Tracing",
+    "LegalTech",
+    "ISO/IEC 18670"
+  ]
+}
