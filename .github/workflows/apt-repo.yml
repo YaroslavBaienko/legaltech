@@ -51,10 +51,23 @@ jobs:
           npm ci || npm install --omit=dev
           ./build.sh
 
-      - name: Build marma-crypto-watermark .deb
-        working-directory: packages/marma-crypto-watermark
+      # The marma-crypto-watermark .deb is built and signed locally (its SVG icon
+      # carries a detached .p7s signature that requires the author's key) and then
+      # committed. CI must publish that exact artifact, not rebuild it: a runner-side
+      # rebuild produces an unsigned package with different bytes under the same
+      # version string. Rebuild + commit the .deb locally on every version bump.
+      - name: Verify canonical marma-crypto-watermark .deb
         run: |
-          ./build.sh
+          set -euo pipefail
+          DEB="packages/marma-crypto-watermark/dist/marma-crypto-watermark_2.1.0-1_all.deb"
+          test -f "$DEB"
+          echo "canonical artifact: $DEB"
+          md5sum "$DEB"
+          test "$(md5sum "$DEB" | cut -d' ' -f1)" = "f17c86646d6e212f12828e5826e940fd"
+          test "$(stat -c%s "$DEB")" = "88926"
+          dpkg-deb -f "$DEB" Version | grep -qx "2.1.0-1"
+          dpkg-deb -c "$DEB" | grep -q "marma-crypto-watermark.svg.p7s"
+          echo "OK: canonical signed artifact verified"
 
       - name: Build and Sign APT Repository
         env:
