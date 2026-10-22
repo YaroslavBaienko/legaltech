@@ -223,8 +223,8 @@ chmod 755 "${PKGROOT}/DEBIAN"
 chmod 644 "${PKGROOT}/DEBIAN/control"
 dpkg-deb --build --root-owner-group -Zzstd "${PKGROOT}" "${DEB_FILE}" >/dev/null
 
-# Keep compatibility copy/symlink for scripts referencing 1.3.0-1 or latest
-cp -f "${DEB_FILE}" "${DIST_DIR}/${PKG_NAME}_1.3.0-1_${PKG_ARCH}.deb"
+# Keep only the "latest" symlink; never duplicate the current build under an old
+# version filename (that produced a misleading 1.3.0-1 artefact carrying 2.1.0 bits).
 ln -sf "$(basename "${DEB_FILE}")" "${DIST_DIR}/${PKG_NAME}_latest_all.deb"
 
 echo
