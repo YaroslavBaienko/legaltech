@@ -40,3 +40,6 @@ metadata/
 reports/
 .qdrant_key
 .litellm_key
+
+# knowledge_os tenant corpus extraction shelves (working state, not source)
+docs/0[1-9]_*/
