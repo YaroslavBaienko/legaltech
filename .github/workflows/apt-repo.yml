@@ -65,7 +65,7 @@ jobs:
           md5sum "$DEB"
           test "$(md5sum "$DEB" | cut -d' ' -f1)" = "f17c86646d6e212f12828e5826e940fd"
           test "$(stat -c%s "$DEB")" = "88926"
-          dpkg-deb -f "$DEB" Version | grep -qx "2.1.0-1"
+          dpkg-deb -f "$DEB" Version | grep -qx "Version: 2.1.0-1"
           dpkg-deb -c "$DEB" | grep -q "marma-crypto-watermark.svg.p7s"
           echo "OK: canonical signed artifact verified"
 
