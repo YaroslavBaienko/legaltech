@@ -65,8 +65,11 @@ jobs:
           md5sum "$DEB"
           test "$(md5sum "$DEB" | cut -d' ' -f1)" = "f17c86646d6e212f12828e5826e940fd"
           test "$(stat -c%s "$DEB")" = "88926"
-          dpkg-deb -f "$DEB" Version | grep -qx "Version: 2.1.0-1"
-          dpkg-deb -c "$DEB" | grep -q "marma-crypto-watermark.svg.p7s"
+          VER="$(dpkg-deb -f "$DEB" Version)"
+          echo "version: $VER"
+          case "$VER" in *2.1.0-1*) ;; *) echo "unexpected version: $VER"; exit 1;; esac
+          dpkg-deb -c "$DEB" > "$RUNNER_TEMP/pkg.list" 2>&1 || { echo "dpkg-deb -c failed"; exit 1; }
+          grep -q "marma-crypto-watermark.svg.p7s" "$RUNNER_TEMP/pkg.list"
           echo "OK: canonical signed artifact verified"
 
       - name: Build and Sign APT Repository
