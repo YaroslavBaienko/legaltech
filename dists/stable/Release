@@ -1,0 +1,31 @@
+Architectures: amd64 all
+Codename: stable
+Components: main
+Date: Thu, 22 Oct 2026 21:21:14 +0000
+Label: LegalTech APT Repository
+Origin: LegalTech
+Suite: stable
+MD5Sum:
+ c66ba49b3aff4362240ae0bd393a309e              161 Release
+ 4df674c2ad4cda08507145402b58f32e             3273 main/binary-all/Packages
+ 477064ac35c5c129c014ff4294e153a7             1918 main/binary-all/Packages.gz
+ 4df674c2ad4cda08507145402b58f32e             3273 main/binary-amd64/Packages
+ 477064ac35c5c129c014ff4294e153a7             1918 main/binary-amd64/Packages.gz
+SHA1:
+ eebf3829338300c2c6efa723d3b68eb458713866              161 Release
+ 2bce0a5ec6a17a6b81cd3c183a8a6e232c9871e3             3273 main/binary-all/Packages
+ 05ac3b5a7b2d8bced30a86812675e5ebf3bffe45             1918 main/binary-all/Packages.gz
+ 2bce0a5ec6a17a6b81cd3c183a8a6e232c9871e3             3273 main/binary-amd64/Packages
+ 05ac3b5a7b2d8bced30a86812675e5ebf3bffe45             1918 main/binary-amd64/Packages.gz
+SHA256:
+ e3ed4a8cef02c9b3b884d462c93d8c982962b6ecef1da66fac70a8f6956a7769              161 Release
+ f115374159cd462d0c4208a663f93bddabd803b38f8860e1fb36a899ec30f248             3273 main/binary-all/Packages
+ e519478b14484a654cc1bf419a0c9cb8f0b2e4e2c84dbba7ba6e79c66cb36b98             1918 main/binary-all/Packages.gz
+ f115374159cd462d0c4208a663f93bddabd803b38f8860e1fb36a899ec30f248             3273 main/binary-amd64/Packages
+ e519478b14484a654cc1bf419a0c9cb8f0b2e4e2c84dbba7ba6e79c66cb36b98             1918 main/binary-amd64/Packages.gz
+SHA512:
+ 26a39c703e8f2e7ca63374c17090ff89b8da0a448c4532c55a12c4d322c5df3fe8b093df50137e68d94e227374d218b9e5ae380227e9f437c3183427138c9194              161 Release
+ 1e2c71bce371363b2f631cf0fa743556ab10a90d450a16e58b633f5d640980514cb02fe095e6d893ae9dae856d7c83036a271077c24dbe7c6454d5d34e8fcfe4             3273 main/binary-all/Packages
+ 6adfce7fb808bfeedd0eb33b1f013fed7c4d317ce4c1cbabf1bfe19c4fac64060ad46f7e4c864016807e7d096d9fa886b4c830eafd17da9372c4470a6506497e             1918 main/binary-all/Packages.gz
+ 1e2c71bce371363b2f631cf0fa743556ab10a90d450a16e58b633f5d640980514cb02fe095e6d893ae9dae856d7c83036a271077c24dbe7c6454d5d34e8fcfe4             3273 main/binary-amd64/Packages
+ 6adfce7fb808bfeedd0eb33b1f013fed7c4d317ce4c1cbabf1bfe19c4fac64060ad46f7e4c864016807e7d096d9fa886b4c830eafd17da9372c4470a6506497e             1918 main/binary-amd64/Packages.gz

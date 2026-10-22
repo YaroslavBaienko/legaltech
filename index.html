@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LegalTech — Official Debian &amp; Ubuntu APT Repository (qes-tools &amp; marma-crypto-watermark)</title>
+  <meta name="description" content="Official GPG-signed Debian/Ubuntu APT repository for Ukrainian Qualified Electronic Signatures (DSTU 4145-2002 / PAdES-B-LTA) and Sri Yantra Cryptographic Geometric Watermarking (Marma-Crypto Protocol, DOI: 10.5281/zenodo.23436152).">
+  <link rel="canonical" href="https://yaroslavbaienko.github.io/legaltech/">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="LegalTech — Official Debian &amp; Ubuntu APT Repository">
+  <meta property="og:description" content="Install qes-tools and marma-crypto-watermark with one command. Sovereign QES (DSTU 4145-2002 / PAdES-B-LTA) &amp; Sri Yantra Cryptographic Geometric Watermarking.">
+  <meta property="og:url" content="https://yaroslavbaienko.github.io/legaltech/">
+  <meta property="og:image" content="https://yaroslavbaienko.github.io/marma-crypto-protocol/og_card.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:site" content="@baienko">
+  <meta name="twitter:creator" content="@baienko">
+  <meta name="twitter:title" content="LegalTech — Official Debian &amp; Ubuntu APT Repository">
+  <meta name="twitter:description" content="sudo apt install qes-tools marma-crypto-watermark — Sovereign QES (DSTU 4145-2002 / PAdES-B-LTA) &amp; Sri Yantra Geometric Watermarking.">
+  <meta name="twitter:image" content="https://yaroslavbaienko.github.io/marma-crypto-protocol/og_card.png">
+  <meta name="citation_title" content="The Marma-Crypto Protocol: A Cryptographic-Geometric Watermark Based on the Nonlinear Planimetry of Sri Yantra and Elliptic Curves DSTU 4145-2002 over GF(2^257)">
+  <meta name="citation_author" content="Baienko, Yaroslav">
+  <meta name="citation_publication_date" content="2026/10/17">
+  <meta name="citation_doi" content="10.5281/zenodo.23436152">
+  <meta name="citation_pdf_url" content="https://yaroslavbaienko.github.io/marma-crypto-protocol/whitepaper/Marma_Crypto_Whitepaper_EN.pdf">
+  <style>
+    :root {
+      --bg: #0b1120;
+      --card: #111827;
+      --card-alt: #1e293b;
+      --border: #334155;
+      --accent: #38bdf8;
+      --accent-gold: #f59e0b;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --code-bg: #070b14;
+      --code-text: #a5f3fc;
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, sans-serif;
+      background: radial-gradient(circle at top, #172554 0%, var(--bg) 55%);
+      color: var(--text);
+      margin: 0;
+      padding: 2.5rem 1.25rem;
+      display: flex;
+      justify-content: center;
+    }
+    .container {
+      background: var(--card);
+      border-radius: 14px;
+      padding: 2.5rem;
+      max-width: 920px;
+      width: 100%;
+      box-shadow: 0 20px 45px rgba(0, 0, 0, 0.6);
+      border: 1px solid var(--border);
+    }
+    .badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-bottom: 1rem;
+    }
+    .tag {
+      display: inline-block;
+      background: #0369a1;
+      color: #fff;
+      padding: 0.25rem 0.7rem;
+      border-radius: 6px;
+      font-size: 0.76rem;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .tag.gold {
+      background: rgba(245, 158, 11, 0.16);
+      color: #fcd34d;
+      border: 1px solid rgba(245, 158, 11, 0.4);
+    }
+    h1 {
+      color: var(--text);
+      margin: 0 0 0.75rem 0;
+      font-size: 2rem;
+      letter-spacing: -0.02em;
+    }
+    h2 {
+      color: var(--accent);
+      font-size: 1.25rem;
+      margin: 2rem 0 0.85rem 0;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 0.45rem;
+    }
+    p, li {
+      line-height: 1.65;
+      color: var(--muted);
+      font-size: 0.97rem;
+    }
+    .pkg-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 1.25rem;
+      margin-top: 1rem;
+    }
+    .pkg-card {
+      background: var(--card-alt);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.4rem 1.5rem;
+    }
+    .pkg-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-bottom: 0.6rem;
+    }
+    .pkg-title {
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: #fff;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+    .pkg-meta {
+      font-size: 0.82rem;
+      color: var(--accent);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+    .pkg-card ul {
+      margin: 0.6rem 0 0.8rem 1.2rem;
+      padding: 0;
+    }
+    .pkg-card li {
+      margin-bottom: 0.35rem;
+    }
+    .pkg-links {
+      font-size: 0.88rem;
+      margin-top: 0.75rem;
+      padding-top: 0.65rem;
+      border-top: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    pre {
+      background: var(--code-bg);
+      padding: 1.15rem 1.25rem;
+      border-radius: 8px;
+      border: 1px solid #1e293b;
+      overflow-x: auto;
+      color: var(--code-text);
+      font-size: 0.9rem;
+      line-height: 1.55;
+      margin: 0.75rem 0;
+    }
+    code.inline {
+      background: rgba(15, 23, 42, 0.8);
+      color: #e2e8f0;
+      padding: 0.15rem 0.4rem;
+      border-radius: 4px;
+      font-size: 0.86rem;
+      border: 1px solid rgba(148, 163, 184, 0.2);
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .footer {
+      margin-top: 2.25rem;
+      border-top: 1px solid var(--border);
+      padding-top: 1.1rem;
+      font-size: 0.88rem;
+      color: var(--muted);
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="badges">
+      <span class="tag">Debian / Ubuntu Official APT Repository</span>
+      <span class="tag gold">GPG Signed · SHA-512 · 100% Offline-First</span>
+    </div>
+    <h1>⚖️ LegalTech &amp; Sovereign Cryptography APT Repository</h1>
+    <p>
+      Official static Debian/Ubuntu APT repository for installing and automatically updating open-source
+      <strong>LegalTech</strong>, <strong>Qualified Electronic Signature (QES / DSTU 4145-2002)</strong>, and
+      <strong>Cryptographic Geometric Watermarking</strong> packages on Debian, Ubuntu, Linux Mint, and Pop!_OS.
+      Designed with strict adherence to 100% offline-first execution, zero telemetry, and attorney-client privilege preservation.
+    </p>
+
+    <h2>📦 Available Packages &amp; Tool Descriptions</h2>
+    <div class="pkg-grid">
+      <div class="pkg-card">
+        <div class="pkg-header">
+          <span class="pkg-title">🔐 qes-tools</span>
+          <span class="pkg-meta">v1.0.26 · Architecture: amd64 · Suite: stable/main</span>
+        </div>
+        <p style="margin: 0.3rem 0;">
+          <strong>Ukrainian Qualified Electronic Signature (QES / КЕП) &amp; LegalTech Cryptographic Suite.</strong>
+        </p>
+        <ul>
+          <li><strong>Cryptographic Standards:</strong> National Standard DSTU 4145-2002 (elliptic curves over GF(2<sup>m</sup>)), GOST 34.311-95, DSTU 7564:2014 (Kupyna), ETSI EN 319 142-1 (<strong>PAdES-B-LTA</strong> archival LTV for 25+ years with embedded ISO 32000-2 <code class="inline">/DSS</code> dictionary), ETSI EN 319 122-1 (<strong>CAdES-X-Long</strong>), ETSI EN 319 162-1 (<strong>ASiC-E</strong>), and IETF RFC 3161 TSP / OCSP via accredited Ukrainian QTSPs (CA Diia / KNEDP CZO).</li>
+          <li><strong>Core Capabilities:</strong> Stamped &amp; unstamped PDF signing, official bilingual PDF Verification &amp; Certificate Trust Chain Protocol generator (<code class="inline">UA</code> / <code class="inline">EN</code> with QR verification), court-ready OCR &amp; PDF/A optimization (<code class="inline">ocrmypdf</code> + <code class="inline">qpdf</code>), GOST file encryption/decryption, hardware USB token support (<em>DepositSign</em>, <em>IIT Almaz-1K</em>, <em>Crystal-1K</em>, <em>Author SecureToken-337</em>), browser Native Messaging Host (<code class="inline">euscpnmh</code>), and local Web Sign Agent (<code class="inline">HTTP:8081</code> / <code class="inline">HTTPS:8083</code>).</li>
+          <li><strong>CLI &amp; Desktop Integration:</strong> Provides <code class="inline">qes-tool</code>, <code class="inline">qes-sign</code>, <code class="inline">qes-verify</code>, <code class="inline">qes-cert</code>, <code class="inline">qes-ocr</code>, <code class="inline">qes-pdf-court</code>, <code class="inline">qes-encrypt</code>, <code class="inline">qes-decrypt</code>, <code class="inline">qes-agent</code>, <code class="inline">qes-config</code>, plus 18 GNOME Files (Nautilus) right-click actions across 5 HIG categories.</li>
+        </ul>
+        <div class="pkg-links">
+          📖 <a href="https://github.com/YaroslavBaienko/legaltech/blob/main/packages/qes-tools/README.md">qes-tools Documentation</a> ·
+          💻 <a href="https://github.com/YaroslavBaienko/legaltech/tree/main/packages/qes-tools">Source Code</a>
+        </div>
+      </div>
+
+      <div class="pkg-card">
+        <div class="pkg-header">
+          <span class="pkg-title">🔱 marma-crypto-watermark</span>
+          <span class="pkg-meta">v1.3.0-1 · Architecture: all · Suite: stable/main</span>
+        </div>
+        <p style="margin: 0.3rem 0;">
+          <strong>Sri Yantra Cryptographic Geometric Watermarking, 256-Bit Bijective Sealing &amp; Canary Leak-Tracing Suite.</strong>
+        </p>
+        <ul>
+          <li><strong>Mathematical &amp; Cryptographic Specification:</strong> Implements the <em>Marma-Crypto Protocol v1.3.0</em> (<a href="https://doi.org/10.5281/zenodo.23436152">CERN Zenodo DOI: 10.5281/zenodo.23436152</a>), combining a Parallel Multi-Hash Combiner <code class="inline">SHA-256(GOST 34.311-95 || "::" || Kupyna-256 || "::" || SHA-256)</code> with a full <strong>256-bit bijective integer-nanometer lattice</strong> across 26 symmetric coordinates (&delta;(w) = (18w &minus; 9207) &times; 10<sup>&minus;9</sup>) and 24 symmetric Marma pairs of the 9-triangle Sri Yantra (&Delta;E &approx; 6.13 &times; 10<sup>&minus;11</sup> rad &lt; &varepsilon;<sub>float64</sub>).</li>
+          <li><strong>Core Capabilities:</strong> Dual-layer visual &amp; structural watermarking for <strong>PDF</strong>, <strong>DOCX</strong>, and <strong>SVG</strong> documents (<code class="inline">--mode both | watermark | seal</code>), <strong>Canary Leak-Tracing</strong> (<code class="inline">--recipient-id</code> &amp; <code class="inline">trace --suspects</code> via 27th symmetric coordinate <code class="inline">D5.ay</code>), Golden Bindu cryptographic seal, zero-tolerance tamper detection across all 36 triangle coordinates, official Vector PDF Verification Protocol generator, deterministic DSTU 4145-2002 (RFC 6979 over GF(2<sup>257</sup>)) bridge, GTK4 / Libadwaita key-selection dialog (<code class="inline">~/.secure_keys/</code> &amp; USB tokens), and 15-minute RAM session cache.</li>
+          <li><strong>CLI &amp; Desktop Integration:</strong> Provides <code class="inline">marma-watermark</code> (<code class="inline">sign</code>, <code class="inline">verify</code>, <code class="inline">trace</code>, <code class="inline">protocol</code>, <code class="inline">keygen</code>, <code class="inline">selftest</code>), <code class="inline">marma-dialog</code>, <code class="inline">marma-config</code>, and GNOME Files (Nautilus) right-click scripts (<em>"🔱 Sri Yantra &middot; Marma-Crypto"</em> in EN/UA).</li>
+        </ul>
+        <div class="pkg-links">
+          🛡️ <a href="https://yaroslavbaienko.github.io/marma-crypto-protocol/">Live Interactive Browser Verifier</a> ·
+          📄 <a href="https://doi.org/10.5281/zenodo.23436152">CERN Zenodo Whitepaper (v1.3.0)</a> ·
+          💻 <a href="https://github.com/YaroslavBaienko/marma-crypto-protocol">Upstream Repository</a>
+        </div>
+      </div>
+    </div>
+
+    <h2>🚀 Quick 1-Step Repository Setup &amp; Installation</h2>
+    <p>Run the following commands in your terminal to add the GPG key, register the APT repository, and install both suites:</p>
+    <pre><code># 1. Download and install the repository's public GPG key
+curl -fsSL https://yaroslavbaienko.github.io/legaltech/public.gpg | sudo gpg --dearmor -o /etc/apt/keyrings/legaltech.gpg
+
+# 2. Add the LegalTech APT repository to system sources
+echo "deb [signed-by=/etc/apt/keyrings/legaltech.gpg] https://yaroslavbaienko.github.io/legaltech stable main" | sudo tee /etc/apt/sources.list.d/legaltech.list
+
+# 3. Update package indices and install both tools (or either package individually)
+sudo apt update
+sudo apt install qes-tools marma-crypto-watermark</code></pre>
+
+    <h2>🔄 Automated System Upgrades</h2>
+    <p>Once the repository is configured, all future releases are verified via GPG and installed automatically through standard Debian/Ubuntu system updates:</p>
+    <pre><code>sudo apt update &amp;&amp; sudo apt upgrade</code></pre>
+
+    <h2>🏛️ Enterprise Integration &amp; Forensic Legal Advisory</h2>
+    <p>
+      While the core <strong>qes-tools</strong> and <strong>marma-crypto-watermark</strong> suites are open-source (Apache 2.0),
+      we provide turnkey enterprise engineering, custom institutional seals, and court-admissible forensic opinions for banks, law firms, M&amp;A data rooms, and RWA/Web3 platforms:
+    </p>
+    <div class="pkg-grid" style="grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));">
+      <div class="pkg-card" style="border-color: rgba(245, 158, 11, 0.4);">
+        <div class="pkg-meta" style="color: #fcd34d; margin-bottom: 0.35rem;">PACKAGE 01 · CI/CD &amp; API</div>
+        <div class="pkg-title" style="font-size: 1.05rem; margin-bottom: 0.5rem;">Enterprise Document Sealing CI/CD</div>
+        <p style="margin: 0; font-size: 0.9rem;">
+          Turnkey integration of Marma-Crypto + Qualified Electronic Signatures (DSTU 4145-2002 / eIDAS PAdES-B-LTA + RFC 3161 TSP) into automated banking, legal, M&amp;A, and RWA/Web3 document pipelines via headless Linux CLI, Docker, or on-premise microservice.
+        </p>
+      </div>
+      <div class="pkg-card" style="border-color: rgba(245, 158, 11, 0.4);">
+        <div class="pkg-meta" style="color: #fcd34d; margin-bottom: 0.35rem;">PACKAGE 02 · INSTITUTIONAL IDENTITY</div>
+        <div class="pkg-title" style="font-size: 1.05rem; margin-bottom: 0.5rem;">Custom Corporate Geometric Seal</div>
+        <p style="margin: 0; font-size: 0.9rem;">
+          Dedicated organizational geometric-cryptographic seal bound to your corporate HSM / PKCS#11 / QES certificate, custom white-label verification portal, and brand-aligned vector templates for high-value contracts, share certificates, and board resolutions.
+        </p>
+      </div>
+      <div class="pkg-card" style="border-color: rgba(245, 158, 11, 0.4);">
+        <div class="pkg-meta" style="color: #fcd34d; margin-bottom: 0.35rem;">PACKAGE 03 · LITIGATION &amp; ARBITRATION</div>
+        <div class="pkg-title" style="font-size: 1.05rem; margin-bottom: 0.5rem;">Forensic Document Authenticity &amp; Expert Opinion</div>
+        <p style="margin: 0; font-size: 0.9rem;">
+          Independent cryptographic and geometric forensic examination of disputed electronic evidence (.pdf, .docx, .svg, .p7s), sub-micron tamper localization across all 36 triangle coordinates, and formal legal/technical expert reports for courts and international arbitration.
+        </p>
+      </div>
+    </div>
+    <div style="margin-top: 1.15rem; display: flex; flex-wrap: wrap; gap: 0.75rem;">
+      <a class="tag gold" style="padding: 0.55rem 1rem; font-size: 0.85rem; text-transform: none;" href="mailto:zerhug@gmail.com?subject=LegalTech%20%2F%20Marma-Crypto%20Enterprise%20Inquiry">✉️ Request Enterprise / Forensic Consultation</a>
+      <a class="tag" style="padding: 0.55rem 1rem; font-size: 0.85rem; text-transform: none; background: #1e293b; border: 1px solid #334155;" href="https://x.com/baienko" target="_blank" rel="noopener">𝕏 Direct Message (@baienko)</a>
+      <a class="tag" style="padding: 0.55rem 1rem; font-size: 0.85rem; text-transform: none; background: #1e293b; border: 1px solid #334155;" href="https://www.producthunt.com/products/marma-crypto-protocol" target="_blank" rel="noopener">🚀 Product Hunt</a>
+      <a class="tag" style="padding: 0.55rem 1rem; font-size: 0.85rem; text-transform: none; background: #1e293b; border: 1px solid #334155;" href="https://yaroslavbaienko.github.io/marma-crypto-protocol/" target="_blank" rel="noopener">🛡️ Live Marma-Crypto Verifier</a>
+    </div>
+
+    <div class="footer">
+      <span>
+        Maintainer: <strong>Yaroslav Baienko</strong> ·
+        <a href="https://github.com/YaroslavBaienko/legaltech">GitHub: YaroslavBaienko/legaltech</a>
+      </span>
+      <span>
+        APT Endpoints:
+        <a href="public.gpg">public.gpg</a> ·
+        <a href="dists/stable/InRelease">InRelease</a> ·
+        <a href="dists/stable/main/binary-amd64/Packages">Packages</a>
+      </span>
+    </div>
+  </div>
+</body>
+</html>
